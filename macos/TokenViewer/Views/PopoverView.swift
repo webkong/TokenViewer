@@ -4,6 +4,7 @@ struct PopoverView: View {
     @ObservedObject private var viewModel = UsageViewModel.shared
     @ObservedObject private var limitsVM = LimitsViewModel.shared
     @ObservedObject private var currency = CurrencyStore.shared
+    @ObservedObject private var l10n = L10n.shared
     var onOpenMainWindow: (() -> Void)?
     var onClose: (() -> Void)?
 
@@ -61,7 +62,7 @@ struct PopoverView: View {
                     .animation(viewModel.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading)
                     .foregroundColor(.secondary)
             }
-            .buttonStyle(.plain).help("Sync")
+            .buttonStyle(.plain).help(l10n.syncNow)
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
     }
@@ -69,11 +70,11 @@ struct PopoverView: View {
     private var footer: some View {
         HStack(spacing: 12) {
             Button(action: { onOpenMainWindow?() }) {
-                Label("Dashboard", systemImage: "macwindow").font(.system(size: 11, weight: .medium))
+                Label(l10n.dashboard, systemImage: "macwindow").font(.system(size: 11, weight: .medium))
             }.buttonStyle(.plain).foregroundColor(TVColor.brand)
             Spacer()
             Button(action: { NSApplication.shared.terminate(nil) }) {
-                Label("Quit", systemImage: "power").font(.system(size: 11)).foregroundColor(.secondary)
+                Label(l10n.quit, systemImage: "power").font(.system(size: 11)).foregroundColor(.secondary)
             }.buttonStyle(.plain)
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
@@ -118,7 +119,7 @@ struct PopoverView: View {
         return Group {
             if !active.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    sectionHeader("Limits")
+                    sectionHeader(l10n.limits)
                     ForEach(active) { p in
                         if let w = p.windows.first {
                             HStack(spacing: 6) {
@@ -148,7 +149,7 @@ struct PopoverView: View {
     private var trendSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                sectionHeader("Trend")
+                sectionHeader(l10n.trend)
                 Spacer()
                 Picker("", selection: $viewModel.selectedRange) {
                     ForEach(UsageViewModel.TimeRange.allCases, id: \.self) { Text($0.rawValue).tag($0) }
@@ -181,7 +182,7 @@ struct PopoverView: View {
         // Popover is 420pt wide, padding 14*2 = 28, effective grid width ≈ 392.
         let gridWidth: CGFloat = 392
         return VStack(alignment: .leading, spacing: 4) {
-            sectionHeader("Activity")
+            sectionHeader(l10n.activity)
             let numWeeks = max(4, Int((gridWidth - labelW - gap) / (cellSize + gap)))
             let start = cal.date(byAdding: .day, value: -(numWeeks - 1) * 7, to: thisSunday)!
             HStack(alignment: .top, spacing: 0) {
@@ -221,7 +222,7 @@ struct PopoverView: View {
 
     private var modelsSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            sectionHeader("Top Models")
+            sectionHeader(l10n.topModels)
             ForEach(Array(viewModel.modelBreakdown.prefix(4).enumerated()), id: \.offset) { _, m in
                 HStack(spacing: 6) {
                     ProviderIcon(source: m.source, modelName: m.model, size: 13)

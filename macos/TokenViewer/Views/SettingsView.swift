@@ -15,6 +15,7 @@ struct SettingsView: View {
     @ObservedObject private var theme = ThemeManager.shared
     @ObservedObject private var currency = CurrencyStore.shared
     @ObservedObject private var updater = UpdateChecker.shared
+    @ObservedObject private var l10n = L10n.shared
 
     private let dataDir: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -28,7 +29,7 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Settings")
+                Text(l10n.settingsTitle)
                     .font(.system(size: 24, weight: .bold))
 
                 appearanceSection
@@ -54,21 +55,21 @@ struct SettingsView: View {
     // MARK: Appearance
 
     private var appearanceSection: some View {
-        SettingsCard(title: "Appearance") {
+        SettingsCard(title: l10n.appearance) {
             HStack {
-                Text("Theme").font(.system(size: 13))
+                Text(l10n.theme).font(.system(size: 13))
                 Spacer()
                 Picker("", selection: $theme.theme) {
-                    Text("Light").tag(AppTheme.light.rawValue)
-                    Text("Dark").tag(AppTheme.dark.rawValue)
-                    Text("System").tag(AppTheme.system.rawValue)
+                    Text(l10n.themeLight).tag(AppTheme.light.rawValue)
+                    Text(l10n.themeDark).tag(AppTheme.dark.rawValue)
+                    Text(l10n.themeSystem).tag(AppTheme.system.rawValue)
                 }
                 .pickerStyle(.segmented).labelsHidden().frame(width: 200)
             }
             Divider()
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Currency").font(.system(size: 13))
+                    Text(l10n.currency).font(.system(size: 13))
                     if currency.currency != "USD" {
                         Text("1 USD = \(String(format: "%.4f", currency.rate)) \(currency.currency)")
                             .font(.system(size: 10)).foregroundStyle(.secondary)
@@ -82,28 +83,39 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.menu).labelsHidden().frame(width: 120)
             }
+            Divider()
+            HStack {
+                Text(l10n.languageLabel).font(.system(size: 13))
+                Spacer()
+                Picker("", selection: $l10n.language) {
+                    ForEach(AppLanguage.allCases, id: \.self) { lang in
+                        Text(lang.displayName).tag(lang)
+                    }
+                }
+                .pickerStyle(.menu).labelsHidden().frame(width: 120)
+            }
         }
     }
 
     // MARK: Menu Bar Panel
 
     private var panelSection: some View {
-        SettingsCard(title: "Menu Bar Panel") {
-            Text("Choose which sections appear in the menu-bar popover.")
+        SettingsCard(title: l10n.menuBarPanel) {
+            Text(l10n.menuBarPanelDesc)
                 .font(.system(size: 11)).foregroundStyle(.secondary)
             Divider()
-            Toggle("Summary cards", isOn: $panelShowSummary)
-            Toggle("Limits", isOn: $panelShowLimits)
-            Toggle("Trend chart", isOn: $panelShowTrend)
-            Toggle("Activity heatmap", isOn: $panelShowHeatmap)
-            Toggle("Top models", isOn: $panelShowModels)
+            Toggle(l10n.summary, isOn: $panelShowSummary)
+            Toggle(l10n.limits, isOn: $panelShowLimits)
+            Toggle(l10n.trend, isOn: $panelShowTrend)
+            Toggle(l10n.heatmap, isOn: $panelShowHeatmap)
+            Toggle(l10n.topModels, isOn: $panelShowModels)
         }
     }
 
     // MARK: Updates
 
     private var updatesSection: some View {
-        SettingsCard(title: "Updates") {
+        SettingsCard(title: l10n.updates) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Software Update").font(.system(size: 13))
@@ -141,8 +153,8 @@ struct SettingsView: View {
     // MARK: General
 
     private var generalSection: some View {
-        SettingsCard(title: "General") {
-            Toggle("Launch at Login", isOn: $launchAtLogin)
+        SettingsCard(title: l10n.general) {
+            Toggle(l10n.launchAtLogin, isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) {
                     if #available(macOS 13.0, *) {
                         if launchAtLogin {
@@ -153,13 +165,13 @@ struct SettingsView: View {
                     }
                 }
             Divider()
-            Picker("Sync Frequency", selection: $syncFrequency) {
+            Picker(l10n.syncFrequency, selection: $syncFrequency) {
                 Text("2 min").tag(2)
                 Text("5 min").tag(5)
                 Text("15 min").tag(15)
                 Text("30 min").tag(30)
                 Text("1 hour").tag(60)
-                Text("Manual only").tag(0)
+                Text(l10n.manual).tag(0)
             }
             .pickerStyle(.menu)
             .onChange(of: syncFrequency) { UsageViewModel.shared.startAutoSync() }
@@ -177,10 +189,10 @@ struct SettingsView: View {
     // MARK: Providers
 
     private var providersSection: some View {
-        SettingsCard(title: "Providers") {
+        SettingsCard(title: l10n.providers) {
             let active = providers.filter { $0.record_count > 0 }
             if active.isEmpty {
-                Text("No provider data yet. Use any supported AI tool, then Sync.")
+                Text(l10n.noProviderData)
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             } else {
                 ForEach(active) { p in
@@ -188,14 +200,14 @@ struct SettingsView: View {
                         ProviderIcon(source: p.name, size: 14)
                         Text(p.name.capitalized).font(.system(size: 13, weight: .medium))
                         Spacer()
-                        Text("\(p.record_count) records")
+                        Text(l10n.recordsCount(Int(p.record_count)))
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
                     if p.id != active.last?.id { Divider() }
                 }
             }
-            Text("\(active.count) of 22 supported tools active")
+            Text(l10n.activeCount(active.count))
                 .font(.system(size: 11)).foregroundStyle(.tertiary)
                 .padding(.top, 2)
         }
@@ -204,7 +216,7 @@ struct SettingsView: View {
     // MARK: Data
 
     private var dataSection: some View {
-        SettingsCard(title: "Data") {
+        SettingsCard(title: l10n.data) {
             HStack {
                 Text("Directory").font(.system(size: 13))
                 Spacer()
@@ -223,13 +235,13 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
                 Button("Reset", role: .destructive) { resetData() }
             } message: {
-                Text("Deletes all local token data. This cannot be undone.")
+                Text(l10n.resetDataDesc)
             }
             .alert("Data Reset", isPresented: $showRestartNote) {
                 Button("Quit Now") { NSApplication.shared.terminate(nil) }
                 Button("Later", role: .cancel) {}
             } message: {
-                Text("Please relaunch TokenViewer to finish resetting.")
+                Text(l10n.resetDone)
             }
         }
     }
@@ -237,7 +249,7 @@ struct SettingsView: View {
     // MARK: About
 
     private var aboutSection: some View {
-        SettingsCard(title: "About") {
+        SettingsCard(title: l10n.about) {
             row("Version", version)
             Divider()
             row("Engine", "tokenviewer-core (Rust)")
