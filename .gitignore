@@ -1,0 +1,12 @@
+# Rust
+core/target/
+
+# macOS
+macos/*.xcodeproj
+macos/build/
+macos/DerivedData/
+*.xcuserdata
+*.xcworkspace
+
+# General
+.DS_Store

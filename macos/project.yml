@@ -1,0 +1,36 @@
+name: TokenViewer
+options:
+  bundleIdPrefix: com.tokenviewer
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: 1
+    SWIFT_VERSION: "5.9"
+
+targets:
+  TokenViewer:
+    type: application
+    platform: macOS
+    sources:
+      - path: TokenViewer
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tokenviewer.app
+        INFOPLIST_FILE: TokenViewer/Resources/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        LIBRARY_SEARCH_PATHS:
+          - "$(PROJECT_DIR)/../core/target/aarch64-apple-darwin/release"
+        OTHER_LDFLAGS:
+          - "-force_load"
+          - "$(PROJECT_DIR)/../core/target/aarch64-apple-darwin/release/libtokenviewer_core.a"
+          - "-framework"
+          - "Security"
+          - "-framework"
+          - "SystemConfiguration"
+        SWIFT_OBJC_BRIDGING_HEADER: "TokenViewer/Bridge/TokenViewer-Bridging-Header.h"
+    entitlements:
+      path: TokenViewer/Resources/TokenViewer.entitlements

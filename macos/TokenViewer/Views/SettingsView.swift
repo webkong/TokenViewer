@@ -1,0 +1,273 @@
+import SwiftUI
+import ServiceManagement
+
+struct SettingsView: View {
+    @AppStorage("syncFrequencyMinutes") private var syncFrequency: Int = 30
+    @State private var launchAtLogin = false
+    @State private var showResetAlert = false
+    @State private var showRestartNote = false
+    @State private var providers: [ProviderStatus] = []
+    @ObservedObject private var theme = ThemeManager.shared
+    @ObservedObject private var currency = CurrencyStore.shared
+    @ObservedObject private var updater = UpdateChecker.shared
+
+    private let dataDir: String = {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return "\(home)/.tokenviewer"
+    }()
+
+    private let version: String = {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
+    }()
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Settings")
+                    .font(.system(size: 24, weight: .bold))
+
+                appearanceSection
+                generalSection
+                updatesSection
+                providersSection
+                dataSection
+                aboutSection
+                footer
+            }
+            .padding(20)
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
+        .onAppear {
+            if #available(macOS 13.0, *) {
+                launchAtLogin = SMAppService.mainApp.status == .enabled
+            }
+            loadProviders()
+        }
+    }
+
+    // MARK: Appearance
+
+    private var appearanceSection: some View {
+        SettingsCard(title: "Appearance") {
+            HStack {
+                Text("Theme").font(.system(size: 13))
+                Spacer()
+                Picker("", selection: $theme.theme) {
+                    Text("Light").tag(AppTheme.light.rawValue)
+                    Text("Dark").tag(AppTheme.dark.rawValue)
+                    Text("System").tag(AppTheme.system.rawValue)
+                }
+                .pickerStyle(.segmented).labelsHidden().frame(width: 200)
+            }
+            Divider()
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Currency").font(.system(size: 13))
+                    if currency.currency != "USD" {
+                        Text("1 USD = \(String(format: "%.4f", currency.rate)) \(currency.currency)")
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                Picker("", selection: $currency.currency) {
+                    ForEach(CurrencyStore.supported, id: \.code) { c in
+                        Text("\(c.code) \(c.symbol)").tag(c.code)
+                    }
+                }
+                .pickerStyle(.menu).labelsHidden().frame(width: 120)
+            }
+        }
+    }
+
+    // MARK: Updates
+
+    private var updatesSection: some View {
+        SettingsCard(title: "Updates") {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Software Update").font(.system(size: 13))
+                    if !updater.status.isEmpty {
+                        Text(updater.status).font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                if updater.latestURL != nil {
+                    Button("Download") { if let u = updater.latestURL { NSWorkspace.shared.open(u) } }
+                }
+                Button(action: { updater.check() }) {
+                    Text(updater.busy ? "Checking…" : "Check for Updates")
+                }.disabled(updater.busy)
+            }
+        }
+    }
+
+    // MARK: Footer
+
+    private var footer: some View {
+        HStack(spacing: 8) {
+            Spacer()
+            Text("TokenViewer v\(version)").font(.system(size: 11)).foregroundStyle(.secondary)
+            Text("·").foregroundStyle(.tertiary)
+            Button("GitHub") {
+                if let u = URL(string: "https://github.com/\(UpdateChecker.repo)") { NSWorkspace.shared.open(u) }
+            }
+            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(TVColor.brand)
+            Spacer()
+        }
+        .padding(.top, 4)
+    }
+
+    // MARK: General
+
+    private var generalSection: some View {
+        SettingsCard(title: "General") {
+            Toggle("Launch at Login", isOn: $launchAtLogin)
+                .onChange(of: launchAtLogin) {
+                    if #available(macOS 13.0, *) {
+                        if launchAtLogin {
+                            try? SMAppService.mainApp.register()
+                        } else {
+                            SMAppService.mainApp.unregister { _ in }
+                        }
+                    }
+                }
+            Divider()
+            Picker("Sync Frequency", selection: $syncFrequency) {
+                Text("2 min").tag(2)
+                Text("5 min").tag(5)
+                Text("15 min").tag(15)
+                Text("30 min").tag(30)
+                Text("1 hour").tag(60)
+                Text("Manual only").tag(0)
+            }
+            .pickerStyle(.menu)
+            .onChange(of: syncFrequency) { UsageViewModel.shared.startAutoSync() }
+            Divider()
+            HStack {
+                Text("Sync Now").font(.system(size: 13))
+                Spacer()
+                Button(action: { UsageViewModel.shared.sync() }) {
+                    Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+                }
+            }
+        }
+    }
+
+    // MARK: Providers
+
+    private var providersSection: some View {
+        SettingsCard(title: "Providers") {
+            let active = providers.filter { $0.record_count > 0 }
+            if active.isEmpty {
+                Text("No provider data yet. Use any supported AI tool, then Sync.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            } else {
+                ForEach(active) { p in
+                    HStack(spacing: 8) {
+                        ProviderIcon(source: p.name, size: 14)
+                        Text(p.name.capitalized).font(.system(size: 13, weight: .medium))
+                        Spacer()
+                        Text("\(p.record_count) records")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                    if p.id != active.last?.id { Divider() }
+                }
+            }
+            Text("\(active.count) of 22 supported tools active")
+                .font(.system(size: 11)).foregroundStyle(.tertiary)
+                .padding(.top, 2)
+        }
+    }
+
+    // MARK: Data
+
+    private var dataSection: some View {
+        SettingsCard(title: "Data") {
+            HStack {
+                Text("Directory").font(.system(size: 13))
+                Spacer()
+                Text(dataDir).font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
+            }
+            Divider()
+            HStack {
+                Button("Open in Finder") {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: dataDir))
+                }
+                Spacer()
+                Button("Reset All Data", role: .destructive) { showResetAlert = true }
+            }
+            .alert("Reset All Data?", isPresented: $showResetAlert) {
+                Button("Cancel", role: .cancel) {}
+                Button("Reset", role: .destructive) { resetData() }
+            } message: {
+                Text("Deletes all local token data. This cannot be undone.")
+            }
+            .alert("Data Reset", isPresented: $showRestartNote) {
+                Button("Quit Now") { NSApplication.shared.terminate(nil) }
+                Button("Later", role: .cancel) {}
+            } message: {
+                Text("Please relaunch TokenViewer to finish resetting.")
+            }
+        }
+    }
+
+    // MARK: About
+
+    private var aboutSection: some View {
+        SettingsCard(title: "About") {
+            row("Version", version)
+            Divider()
+            row("Engine", "tokenviewer-core (Rust)")
+            Divider()
+            row("Storage", "SQLite · local-only")
+        }
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).font(.system(size: 13))
+            Spacer()
+            Text(value).font(.system(size: 12)).foregroundStyle(.secondary)
+        }
+    }
+
+    private func loadProviders() {
+        Task.detached {
+            let data = CoreBridge.shared.getProviderStatus()
+            let decoded = data.flatMap { try? JSONDecoder().decode([ProviderStatus].self, from: $0) } ?? []
+            await MainActor.run { providers = decoded }
+        }
+    }
+
+    private func resetData() {
+        // Tear down the handle first so SQLite releases the file (H8).
+        CoreBridge.shared.shutdown()
+        for suffix in ["", "-shm", "-wal"] {
+            try? FileManager.default.removeItem(atPath: "\(dataDir)/data.db\(suffix)")
+        }
+        showRestartNote = true
+    }
+}
+
+/// Rounded card container matching the dashboard's Card primitive.
+private struct SettingsCard<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            VStack(alignment: .leading, spacing: 10) { content }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 0.5))
+                )
+        }
+    }
+}
