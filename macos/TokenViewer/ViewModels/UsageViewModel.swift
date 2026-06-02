@@ -85,10 +85,15 @@ class UsageViewModel: ObservableObject {
 
     private static let dayFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
         f.timeZone = TimeZone(identifier: "UTC")
         return f
     }()
+
+    /// Convert a local calendar date to its UTC ISO start string (e.g. local 06-03 00:00 CST → 2026-06-02T16:00:00Z)
+    private static func utcISO(for date: Date) -> String {
+        dayFormatter.string(from: date)
+    }
 
     init() {
         // Auto-sync on first load
@@ -137,14 +142,16 @@ class UsageViewModel: ObservableObject {
 
     /// Build the 4 period summary cards (Today / 7D / 30D / Total) for the menu-bar panel.
     nonisolated private static func fetchPanelCards() -> [PanelCard] {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        f.timeZone = TimeZone(identifier: "UTC")
-        let today = Date()
         let cal = Calendar.current
-        let tomorrow = f.string(from: cal.date(byAdding: .day, value: 1, to: today)!) + "T00:00:00Z"
+        let now = Date()
+        let todayStart = cal.startOfDay(for: now)
+        let tomorrowStart = cal.date(byAdding: .day, value: 1, to: todayStart)!
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
+        f.timeZone = TimeZone(identifier: "UTC")
+        let tomorrow = f.string(from: tomorrowStart)
         func from(daysAgo: Int) -> String {
-            f.string(from: cal.date(byAdding: .day, value: -daysAgo, to: today)!) + "T00:00:00Z"
+            f.string(from: cal.date(byAdding: .day, value: -daysAgo, to: todayStart)!)
         }
         func summary(_ fromStr: String) -> UsageSummary? {
             CoreBridge.shared.querySummary(from: fromStr, to: tomorrow)
@@ -181,20 +188,19 @@ class UsageViewModel: ObservableObject {
     }
 
     private func dateRange(for range: TimeRange) -> (String, String) {
-        let f = Self.dayFormatter
-        let today = Date()
-        // 'to' must be tomorrow to include today's data (ISO comparison)
-        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)!
-        let to = f.string(from: tomorrow) + "T00:00:00Z"
+        let cal = Calendar.current
+        let todayStart = cal.startOfDay(for: Date())
+        let tomorrowStart = cal.date(byAdding: .day, value: 1, to: todayStart)!
+        let to = Self.utcISO(for: tomorrowStart)
 
         let from: String
         switch range {
         case .today:
-            from = f.string(from: today) + "T00:00:00Z"
+            from = Self.utcISO(for: todayStart)
         case .week:
-            from = f.string(from: Calendar.current.date(byAdding: .day, value: -7, to: today)!) + "T00:00:00Z"
+            from = Self.utcISO(for: cal.date(byAdding: .day, value: -7, to: todayStart)!)
         case .month:
-            from = f.string(from: Calendar.current.date(byAdding: .month, value: -1, to: today)!) + "T00:00:00Z"
+            from = Self.utcISO(for: cal.date(byAdding: .month, value: -1, to: todayStart)!)
         case .all:
             from = "2020-01-01T00:00:00Z"
         }
