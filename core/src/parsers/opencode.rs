@@ -17,6 +17,10 @@ pub fn parse_opencode_db(db_path: &Path, cursor_data: Option<&str>, source: &str
     }
 
     let mut cursor = FileCursor::from_json(cursor_data);
+    let db_key = db_path.to_string_lossy().to_string();
+    if !cursor.file_changed(&db_key) {
+        return Ok((vec![], cursor.to_json()));
+    }
     let conn = Connection::open(db_path)?;
 
     let mut stmt = conn.prepare(

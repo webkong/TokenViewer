@@ -75,6 +75,16 @@ pub fn file_mtime_bucket(path: &Path) -> String {
     now_bucket()
 }
 
+/// File modification time as epoch seconds.
+pub fn file_mtime_secs(path: &Path) -> u64 {
+    fs::metadata(path)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 /// Cursor state for tracking file offsets.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct FileCursor {
@@ -88,6 +98,15 @@ pub struct FileCursor {
     /// Per-key seen IDs for dedup (capped).
     #[serde(default)]
     pub seen_ids: Vec<String>,
+    /// Per-file last mtime (epoch secs) for skip-if-unchanged optimization.
+    #[serde(default)]
+    pub mtimes: HashMap<String, u64>,
+    /// Per-directory mtime (epoch secs) — skip re-glob if dir unchanged.
+    #[serde(default)]
+    pub dir_mtimes: HashMap<String, u64>,
+    /// Cached file lists per directory pattern.
+    #[serde(default)]
+    pub dir_files: HashMap<String, Vec<String>>,
 }
 
 impl FileCursor {
@@ -132,6 +151,43 @@ impl FileCursor {
             self.seen_ids.drain(0..drop);
         }
         true
+    }
+
+    /// Returns true if the file has been modified since last recorded mtime.
+    /// Also updates the stored mtime. If file cannot be stat'd, returns true (assume changed).
+    pub fn file_changed(&mut self, path: &str) -> bool {
+        let mtime = file_mtime_secs(Path::new(path));
+        let last = self.mtimes.get(path).copied().unwrap_or(0);
+        if mtime > last {
+            self.mtimes.insert(path.to_string(), mtime);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Glob files with directory-level caching. If the parent directory mtime
+    /// hasn't changed, return the cached file list instead of re-globbing.
+    pub fn glob_cached(&mut self, pattern: &str, dir: &Path) -> Vec<std::path::PathBuf> {
+        let dir_key = dir.to_string_lossy().to_string();
+        let dir_mtime = file_mtime_secs(dir);
+        let cached_mtime = self.dir_mtimes.get(&dir_key).copied().unwrap_or(0);
+
+        if dir_mtime <= cached_mtime {
+            // Dir unchanged — return cached list
+            if let Some(cached) = self.dir_files.get(pattern) {
+                return cached.iter().map(std::path::PathBuf::from).collect();
+            }
+        }
+
+        // Re-glob
+        let files = glob_files(pattern);
+        self.dir_mtimes.insert(dir_key, dir_mtime);
+        self.dir_files.insert(
+            pattern.to_string(),
+            files.iter().map(|p| p.to_string_lossy().to_string()).collect(),
+        );
+        files
     }
 }
 

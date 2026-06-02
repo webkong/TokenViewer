@@ -17,9 +17,11 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
     let dirs = ["antigravity", "antigravity-ide", "antigravity-cli"];
     for dir in &dirs {
         let pattern = format!("{}/{}/brain/**/transcript.jsonl", gemini_dir.display(), dir);
-        let files = glob_files(&pattern);
+        let base = gemini_dir.join(dir);
+        let files = cursor.glob_cached(&pattern, &base);
         for file in files {
             let key = file.to_string_lossy().to_string();
+            if !cursor.file_changed(&key) { continue; }
             let offset = cursor.get_offset(&key);
             let bucket = file_mtime_bucket(&file);
             let (mut records, new_offset) = parse_jsonl_file(&file, offset, "antigravity", |v, src| {

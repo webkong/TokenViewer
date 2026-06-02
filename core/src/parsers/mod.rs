@@ -25,6 +25,8 @@ pub mod codebuddy;
 use std::collections::HashMap;
 use std::path::Path;
 
+use rayon::prelude::*;
+
 use crate::models::UsageRecord;
 
 pub struct ParseResult {
@@ -63,11 +65,10 @@ fn all_parsers() -> Vec<(&'static str, ParserFn)> {
     ]
 }
 
-/// Parse all providers. `cursors` maps source name -> cursor JSON string.
-/// Returns a list of ParseResult for each provider that produced data.
+/// Parse all providers in parallel. `cursors` maps source name -> cursor JSON string.
 pub fn parse_all(home_dir: &Path, cursors: &HashMap<String, String>) -> Vec<ParseResult> {
     all_parsers()
-        .into_iter()
+        .into_par_iter()
         .map(|(source, parser_fn)| {
             let cursor_data = cursors.get(source).map(|s| s.as_str());
             match parser_fn(home_dir, cursor_data) {

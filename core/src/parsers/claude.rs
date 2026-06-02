@@ -70,12 +70,15 @@ pub fn parse_claude_format(
         return Ok((vec![], cursor_data.unwrap_or("{}").to_string()));
     }
     let pattern = format!("{}/**/*.jsonl", base.display());
-    let files = glob_files(&pattern);
     let mut cursor = FileCursor::from_json(cursor_data);
+    let files = cursor.glob_cached(&pattern, &base);
     let mut all_records = Vec::new();
 
     for file in files {
         let key = file.to_string_lossy().to_string();
+        if !cursor.file_changed(&key) {
+            continue;
+        }
         let offset = cursor.get_offset(&key);
         let (records, new_offset) = parse_jsonl_file(&file, offset, source, |v, src| {
             // Quick filter: only parse lines that contain usage data

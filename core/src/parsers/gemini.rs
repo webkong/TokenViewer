@@ -11,12 +11,13 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
         return Ok((vec![], cursor_data.unwrap_or("{}").to_string()));
     }
     let pattern = format!("{}/*/chats/session-*.json", base.display());
-    let files = glob_files(&pattern);
     let mut cursor = FileCursor::from_json(cursor_data);
+    let files = cursor.glob_cached(&pattern, &base);
     let mut all_records = Vec::new();
 
     for file in files {
         let key = file.to_string_lossy().to_string();
+        if !cursor.file_changed(&key) { continue; }
         let prev_offset = cursor.get_offset(&key);
         let file_len = fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
         if prev_offset >= file_len && prev_offset > 0 {

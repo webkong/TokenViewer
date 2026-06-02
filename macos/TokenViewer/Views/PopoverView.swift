@@ -5,6 +5,7 @@ struct PopoverView: View {
     @ObservedObject private var limitsVM = LimitsViewModel.shared
     @ObservedObject private var currency = CurrencyStore.shared
     var onOpenMainWindow: (() -> Void)?
+    var onClose: (() -> Void)?
 
     // Section visibility (user-configurable in Settings → Menu Bar Panel)
     @AppStorage("panelShowSummary") private var showSummary = true
@@ -29,13 +30,17 @@ struct PopoverView: View {
                         if showModels && !viewModel.modelBreakdown.isEmpty { modelsSection }
                     }
                 }
+                .frame(width: 392)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
             }
+            .frame(width: 420, alignment: .center)
+            .clipped()
             Divider()
             footer
         }
-        .frame(width: 340, height: 540)
+        .frame(width: 420, height: 620)
+        .onKeyPress(.escape) { onClose?(); return .handled }
         .onAppear {
             viewModel.refresh()
             if showLimits { limitsVM.refreshIfStale() }
@@ -173,13 +178,13 @@ struct PopoverView: View {
         let wdLabels = ["日","一","二","三","四","五","六"]
         let totalH: CGFloat = 10 + gap + 7 * cellSize + 6 * gap   // 82pt
 
-        // Popover is 340pt wide, padding 14*2 = 28, effective grid width ≈ 312.
-        let gridWidth: CGFloat = 312
+        // Popover is 420pt wide, padding 14*2 = 28, effective grid width ≈ 392.
+        let gridWidth: CGFloat = 392
         return VStack(alignment: .leading, spacing: 4) {
             sectionHeader("Activity")
             let numWeeks = max(4, Int((gridWidth - labelW - gap) / (cellSize + gap)))
             let start = cal.date(byAdding: .day, value: -(numWeeks - 1) * 7, to: thisSunday)!
-            HStack(alignment: .top, spacing: gap) {
+            HStack(alignment: .top, spacing: 0) {
                     // Y-axis
                     VStack(spacing: gap) {
                         Color.clear.frame(width: labelW, height: 10)
@@ -189,6 +194,7 @@ struct PopoverView: View {
                                 .frame(width: labelW, height: cellSize, alignment: .leading)
                         }
                     }
+                    .frame(width: labelW)
                     ForEach(0..<numWeeks, id: \.self) { w in
                         VStack(spacing: gap) {
                             let d0 = cal.date(byAdding: .day, value: w * 7, to: start)!
@@ -196,14 +202,15 @@ struct PopoverView: View {
                             let prevM = w > 0 ? cal.component(.month, from: cal.date(byAdding: .day, value: (w-1)*7, to: start)!) : -1
                             Text(m != prevM ? mf.string(from: d0) : "")
                                 .font(.system(size: 7)).foregroundStyle(.secondary)
-                                .fixedSize()
-                                .frame(height: 10, alignment: .leading)
+                                .frame(width: cellSize + gap, height: 10, alignment: .leading)
+                                .clipped()
                             ForEach(0..<7, id: \.self) { r in
                                 let d = cal.date(byAdding: .day, value: w * 7 + r, to: start)!
                                 RoundedRectangle(cornerRadius: 2).fill(heatColor(byDate[d]?.level ?? 0))
                                     .frame(width: cellSize, height: cellSize)
                             }
                         }
+                        .frame(width: cellSize + gap)
                     }
                 }
             .frame(height: totalH)
@@ -215,7 +222,7 @@ struct PopoverView: View {
     private var modelsSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             sectionHeader("Top Models")
-            ForEach(viewModel.modelBreakdown.prefix(4)) { m in
+            ForEach(Array(viewModel.modelBreakdown.prefix(4).enumerated()), id: \.offset) { _, m in
                 HStack(spacing: 6) {
                     ProviderIcon(source: m.source, modelName: m.model, size: 13)
                     Text(m.model).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
