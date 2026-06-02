@@ -17,6 +17,7 @@ pub static PRICING_DATA: &[PricingEntry] = &[
     PricingEntry { model: "gemini-2.5-pro", pricing: ModelPricing { input: 1.25, output: 10.0, cache_read: 0.31, cache_write: 0.0 } },
     PricingEntry { model: "gemini-2.5-flash", pricing: ModelPricing { input: 0.15, output: 0.6, cache_read: 0.0375, cache_write: 0.0 } },
     PricingEntry { model: "kiro-agent", pricing: ModelPricing { input: 3.0, output: 15.0, cache_read: 0.3, cache_write: 3.75 } },
+    PricingEntry { model: "kiro-cli-agent", pricing: ModelPricing { input: 3.0, output: 15.0, cache_read: 0.3, cache_write: 3.75 } },
     PricingEntry { model: "deepseek-chat", pricing: ModelPricing { input: 0.14, output: 0.28, cache_read: 0.0028, cache_write: 0.14 } },
     PricingEntry { model: "deepseek-reasoner", pricing: ModelPricing { input: 0.14, output: 0.28, cache_read: 0.0028, cache_write: 0.14 } },
     PricingEntry { model: "grok-4", pricing: ModelPricing { input: 3.0, output: 15.0, cache_read: 0.75, cache_write: 0.0 } },

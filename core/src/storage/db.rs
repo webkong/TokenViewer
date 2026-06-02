@@ -69,13 +69,13 @@ impl Database {
                 total_tokens, conversation_count)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT(source, model, hour_start) DO UPDATE SET
-                input_tokens = MAX(usage.input_tokens, excluded.input_tokens),
-                output_tokens = MAX(usage.output_tokens, excluded.output_tokens),
-                cached_input_tokens = MAX(usage.cached_input_tokens, excluded.cached_input_tokens),
-                cache_creation_input_tokens = MAX(usage.cache_creation_input_tokens, excluded.cache_creation_input_tokens),
-                reasoning_output_tokens = MAX(usage.reasoning_output_tokens, excluded.reasoning_output_tokens),
-                total_tokens = MAX(usage.total_tokens, excluded.total_tokens),
-                conversation_count = MAX(usage.conversation_count, excluded.conversation_count)",
+                input_tokens = usage.input_tokens + excluded.input_tokens,
+                output_tokens = usage.output_tokens + excluded.output_tokens,
+                cached_input_tokens = usage.cached_input_tokens + excluded.cached_input_tokens,
+                cache_creation_input_tokens = usage.cache_creation_input_tokens + excluded.cache_creation_input_tokens,
+                reasoning_output_tokens = usage.reasoning_output_tokens + excluded.reasoning_output_tokens,
+                total_tokens = usage.total_tokens + excluded.total_tokens,
+                conversation_count = usage.conversation_count + excluded.conversation_count",
             params![
                 record.hour_start, record.source, record.model,
                 record.input_tokens, record.output_tokens,

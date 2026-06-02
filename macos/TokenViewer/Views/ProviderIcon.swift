@@ -18,7 +18,23 @@ extension View { func tvCard() -> some View { modifier(CardBackground()) } }
 /// Renders a provider/agent brand logo (bundled SVG) with a colored-circle fallback.
 struct ProviderIcon: View {
     let source: String
+    var modelName: String? = nil
     var size: CGFloat = 16
+
+    /// Derive the icon source from model name first (overrides the source field
+    /// when a model clearly belongs to a different provider, e.g. claude-* used
+    /// via Codex CLI should still show the Claude logo).
+    private var resolvedSource: String {
+        let m = (modelName ?? "").lowercased()
+        if m.hasPrefix("claude") { return "claude" }
+        if m.hasPrefix("gpt-") || m.hasPrefix("o3") || m.hasPrefix("o4") || m.hasPrefix("codex") { return "codex" }
+        if m.hasPrefix("gemini") { return "gemini" }
+        if m.hasPrefix("grok") { return "grok" }
+        if m.hasPrefix("deepseek") { return "opencode" }  // no dedicated logo, opencode closest
+        if m.hasPrefix("kimi") || m.hasPrefix("moonshot") { return "kimi" }
+        if m.hasPrefix("qwen") || m.hasPrefix("glm") || m.hasPrefix("minimax") || m.hasPrefix("mimo") { return "opencode" }
+        return source
+    }
 
     /// Map a source/model provider to its bundled logo file name (without extension).
     private static let logoMap: [String: String] = [
@@ -34,7 +50,7 @@ struct ProviderIcon: View {
 
     var body: some View {
         if let img = logoImage() {
-            let mono = Self.logoMap[source.lowercased()].map(Self.monoLogos.contains) ?? false
+            let mono = Self.logoMap[resolvedSource.lowercased()].map(Self.monoLogos.contains) ?? false
             Image(nsImage: img)
                 .resizable()
                 .interpolation(.high)
@@ -46,7 +62,7 @@ struct ProviderIcon: View {
             // Fallback: colored circle with first letter.
             ZStack {
                 Circle().fill(TVColor.provider(source))
-                Text(source.prefix(1).uppercased())
+                Text(resolvedSource.prefix(1).uppercased())
                     .font(.system(size: size * 0.55, weight: .bold))
                     .foregroundStyle(.white)
             }
@@ -55,8 +71,8 @@ struct ProviderIcon: View {
     }
 
     private func logoImage() -> NSImage? {
-        guard let name = Self.logoMap[source.lowercased()],
-              let url = Bundle.main.url(forResource: name, withExtension: "svg", subdirectory: "brand-logos"),
+        guard let name = Self.logoMap[resolvedSource.lowercased()],
+              let url = Bundle.main.url(forResource: name, withExtension: "svg"),
               let img = NSImage(contentsOf: url) else { return nil }
         // SVGs load with a 1x1 intrinsic size; give the vector a real size so
         // it rasterizes crisply at Retina scale.
