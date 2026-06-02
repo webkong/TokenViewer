@@ -13,12 +13,13 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
     }
 
     let pattern = format!("{}/**/sessions/**/session.jsonl", base.display());
-    let files = glob_files(&pattern);
     let mut cursor = FileCursor::from_json(cursor_data);
+    let files = cursor.glob_cached(&pattern, &base);
     let mut all_records = Vec::new();
 
     for file in files {
         let key = file.to_string_lossy().to_string();
+        if !cursor.file_changed(&key) { continue; }
 
         // Read only the first line (header)
         let f = match File::open(&file) {

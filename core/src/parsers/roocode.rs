@@ -21,12 +21,13 @@ pub fn parse_ui_messages(
     }
 
     let pattern = format!("{}/tasks/*/ui_messages.json", storage.display());
-    let files = glob_files(&pattern);
     let mut cursor = FileCursor::from_json(cursor_data);
+    let files = cursor.glob_cached(&pattern, &storage);
     let mut all_records = Vec::new();
 
     for file in files {
         let key = file.to_string_lossy().to_string();
+        if !cursor.file_changed(&key) { continue; }
         let prev = cursor.get_offset(&key);
         let file_len = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
         if prev >= file_len && prev > 0 { continue; }

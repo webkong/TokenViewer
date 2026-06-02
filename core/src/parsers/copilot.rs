@@ -6,32 +6,33 @@ use crate::models::UsageRecord;
 use super::utils::*;
 
 pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
-    let mut files = Vec::new();
+    let mut cursor = FileCursor::from_json(cursor_data);
+    let mut files_vec = Vec::new();
 
     // Default directory
     let otel_dir = home_dir.join(".copilot/otel");
     if otel_dir.exists() {
         let pattern = format!("{}/*.jsonl", otel_dir.display());
-        files.extend(glob_files(&pattern));
+        files_vec.extend(cursor.glob_cached(&pattern, &otel_dir));
     }
 
     // Environment variable (single file)
     if let Ok(path_str) = env::var("COPILOT_OTEL_FILE_EXPORTER_PATH") {
         let p = std::path::PathBuf::from(&path_str);
-        if p.exists() && !files.contains(&p) {
-            files.push(p);
+        if p.exists() && !files_vec.contains(&p) {
+            files_vec.push(p);
         }
     }
 
-    if files.is_empty() {
-        return Ok((vec![], cursor_data.unwrap_or("{}").to_string()));
+    if files_vec.is_empty() {
+        return Ok((vec![], cursor.to_json()));
     }
 
-    let mut cursor = FileCursor::from_json(cursor_data);
     let mut all_records = Vec::new();
 
-    for file in files {
+    for file in files_vec {
         let key = file.to_string_lossy().to_string();
+        if !cursor.file_changed(&key) { continue; }
         let offset = cursor.get_offset(&key);
         let (lines, new_offset) = match read_lines_from_offset(&file, offset) {
             Ok(r) => r,

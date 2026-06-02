@@ -19,12 +19,15 @@ pub fn parse_codex_format(
         return Ok((vec![], cursor_data.unwrap_or("{}").to_string()));
     }
     let pattern = format!("{}/**/rollout-*.jsonl", base.display());
-    let files = glob_files(&pattern);
     let mut cursor = FileCursor::from_json(cursor_data);
+    let files = cursor.glob_cached(&pattern, &base);
     let mut all_records = Vec::new();
 
     for file in files {
         let key = file.to_string_lossy().to_string();
+        if !cursor.file_changed(&key) {
+            continue;
+        }
         let offset = cursor.get_offset(&key);
         let (lines, new_offset) = match read_lines_from_offset(&file, offset) {
             Ok(r) => r,

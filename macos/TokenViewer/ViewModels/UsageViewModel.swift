@@ -163,6 +163,9 @@ class UsageViewModel: ObservableObject {
     }
 
     func sync() {
+        guard ProcessInfo.processInfo.environment["TV_SKIP_SYNC"] == nil else {
+            refresh(); return
+        }
         isLoading = true
         Task.detached { [weak self] in
             let result = CoreBridge.shared.syncAll()

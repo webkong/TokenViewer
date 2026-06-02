@@ -18,6 +18,10 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
     }
 
     let mut cursor = FileCursor::from_json(cursor_data);
+    let usage_key = usage_path.to_string_lossy().to_string();
+    if !cursor.file_changed(&usage_key) {
+        return Ok((vec![], cursor.to_json()));
+    }
     let content = match read_to_string_capped(&usage_path) {
         Some(c) => c,
         None => return Ok((vec![], cursor.to_json())),

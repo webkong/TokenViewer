@@ -15,12 +15,13 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
     }
 
     let pattern = format!("{}/**/sessions/*.jsonl", agents_dir.display());
-    let files = glob_files(&pattern);
     let mut cursor = FileCursor::from_json(cursor_data);
+    let files = cursor.glob_cached(&pattern, &agents_dir);
     let mut all_records = Vec::new();
 
     for file in files {
         let key = file.to_string_lossy().to_string();
+        if !cursor.file_changed(&key) { continue; }
         let offset = cursor.get_offset(&key);
         let (records, new_offset) = parse_jsonl_file(&file, offset, "openclaw", parse_line);
         all_records.extend(records);

@@ -19,10 +19,11 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
     let mut all_records = Vec::new();
 
     let pattern = format!("{}/**/updates.jsonl", sessions_dir.display());
-    let files = glob_files(&pattern);
+    let files = cursor.glob_cached(&pattern, &sessions_dir);
 
     for file in files {
         let key = file.to_string_lossy().to_string();
+        if !cursor.file_changed(&key) { continue; }
         let offset = cursor.get_offset(&key);
         let (lines, new_offset) = match read_lines_from_offset(&file, offset) {
             Ok(r) => r,

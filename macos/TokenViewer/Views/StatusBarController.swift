@@ -15,13 +15,16 @@ final class StatusBarController {
         }
 
         let popover = NSPopover()
-        popover.contentSize = NSSize(width: 340, height: 540)
-        popover.behavior = .transient
-        popover.contentViewController = NSHostingController(
-            rootView: PopoverView(onOpenMainWindow: { [weak self] in
-                self?.openMainWindow()
-            })
+        popover.contentSize = NSSize(width: 420, height: 620)
+        popover.behavior = .applicationDefined
+        let hostingController = NSHostingController(
+            rootView: PopoverView(
+                onOpenMainWindow: { [weak self] in self?.openMainWindow() },
+                onClose: { [weak self] in self?.popover?.performClose(nil) }
+            )
         )
+        hostingController.preferredContentSize = NSSize(width: 420, height: 620)
+        popover.contentViewController = hostingController
         self.popover = popover
     }
 
@@ -31,6 +34,9 @@ final class StatusBarController {
             popover.performClose(nil)
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            NSApp.activate(ignoringOtherApps: true)
+            // Raise the popover window above all other windows.
+            popover.contentViewController?.view.window?.level = .floating
         }
     }
 

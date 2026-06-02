@@ -18,6 +18,10 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
     }
 
     let mut cursor = FileCursor::from_json(cursor_data);
+    let db_key = db_path.to_string_lossy().to_string();
+    if !cursor.file_changed(&db_key) {
+        return Ok((vec![], cursor.to_json()));
+    }
     let conn = Connection::open(&db_path)?;
 
     let mut stmt = conn.prepare(
