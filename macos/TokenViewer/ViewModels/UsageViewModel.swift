@@ -18,6 +18,14 @@ struct HeatmapPoint: Codable, Identifiable {
     let level: UInt8   // 0-4
 }
 
+/// A summary card for the menu-bar panel (Today / 7D / 30D / Total).
+struct PanelCard: Identifiable {
+    let id = UUID()
+    let title: String
+    let value: String
+    let subtitle: String
+}
+
 struct DailyPoint: Codable, Identifiable {
     var id: String { date }
     let date: String
@@ -62,6 +70,7 @@ class UsageViewModel: ObservableObject {
     @Published var dailyUsage: [DailyPoint] = []
     @Published var modelBreakdown: [ModelEntry] = []
     @Published var heatmap: [HeatmapPoint] = []
+    @Published var panelCards: [PanelCard] = []
     @Published var isLoading = false
     @Published var selectedRange: TimeRange = .week
 
@@ -113,15 +122,44 @@ class UsageViewModel: ObservableObject {
                 : CoreBridge.shared.queryDaily(from: from, to: to)
             let modelData = CoreBridge.shared.queryModelBreakdown(from: from, to: to)
             let heatmapData = CoreBridge.shared.queryHeatmap(weeks: 53)
+            let cards = Self.fetchPanelCards()
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 if let d = summaryData { self.summary = try? self.decoder.decode(UsageSummary.self, from: d) }
                 if let d = dailyData { self.dailyUsage = (try? self.decoder.decode([DailyPoint].self, from: d)) ?? [] }
                 if let d = modelData { self.modelBreakdown = (try? self.decoder.decode([ModelEntry].self, from: d)) ?? [] }
                 if let d = heatmapData { self.heatmap = (try? self.decoder.decode([HeatmapPoint].self, from: d)) ?? [] }
+                self.panelCards = cards
                 self.isLoading = false
             }
         }
+    }
+
+    /// Build the 4 period summary cards (Today / 7D / 30D / Total) for the menu-bar panel.
+    nonisolated private static func fetchPanelCards() -> [PanelCard] {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone(identifier: "UTC")
+        let today = Date()
+        let cal = Calendar.current
+        let tomorrow = f.string(from: cal.date(byAdding: .day, value: 1, to: today)!) + "T00:00:00Z"
+        func from(daysAgo: Int) -> String {
+            f.string(from: cal.date(byAdding: .day, value: -daysAgo, to: today)!) + "T00:00:00Z"
+        }
+        func summary(_ fromStr: String) -> UsageSummary? {
+            CoreBridge.shared.querySummary(from: fromStr, to: tomorrow)
+                .flatMap { try? JSONDecoder().decode(UsageSummary.self, from: $0) }
+        }
+        let todayS = summary(from(daysAgo: 0))
+        let d7 = summary(from(daysAgo: 7))
+        let d30 = summary(from(daysAgo: 29))
+        let total = summary("2020-01-01T00:00:00Z")
+        return [
+            PanelCard(title: "Today", value: tvFormatTokens(todayS?.total_tokens ?? 0), subtitle: tvFormatCost(todayS?.total_cost_usd ?? 0)),
+            PanelCard(title: "7 Days", value: tvFormatTokens(d7?.total_tokens ?? 0), subtitle: "\(d7?.active_days ?? 0) active"),
+            PanelCard(title: "30 Days", value: tvFormatTokens(d30?.total_tokens ?? 0), subtitle: "~\(tvFormatTokens((d30?.total_tokens ?? 0) / 30))/day"),
+            PanelCard(title: "Total", value: tvFormatTokens(total?.total_tokens ?? 0), subtitle: tvFormatCost(total?.total_cost_usd ?? 0)),
+        ]
     }
 
     func sync() {

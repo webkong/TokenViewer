@@ -3,6 +3,11 @@ import ServiceManagement
 
 struct SettingsView: View {
     @AppStorage("syncFrequencyMinutes") private var syncFrequency: Int = 30
+    @AppStorage("panelShowSummary") private var panelShowSummary = true
+    @AppStorage("panelShowLimits") private var panelShowLimits = true
+    @AppStorage("panelShowHeatmap") private var panelShowHeatmap = true
+    @AppStorage("panelShowTrend") private var panelShowTrend = true
+    @AppStorage("panelShowModels") private var panelShowModels = true
     @State private var launchAtLogin = false
     @State private var showResetAlert = false
     @State private var showRestartNote = false
@@ -27,6 +32,7 @@ struct SettingsView: View {
                     .font(.system(size: 24, weight: .bold))
 
                 appearanceSection
+                panelSection
                 generalSection
                 updatesSection
                 providersSection
@@ -76,6 +82,21 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.menu).labelsHidden().frame(width: 120)
             }
+        }
+    }
+
+    // MARK: Menu Bar Panel
+
+    private var panelSection: some View {
+        SettingsCard(title: "Menu Bar Panel") {
+            Text("Choose which sections appear in the menu-bar popover.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+            Divider()
+            Toggle("Summary cards", isOn: $panelShowSummary)
+            Toggle("Limits", isOn: $panelShowLimits)
+            Toggle("Trend chart", isOn: $panelShowTrend)
+            Toggle("Activity heatmap", isOn: $panelShowHeatmap)
+            Toggle("Top models", isOn: $panelShowModels)
         }
     }
 

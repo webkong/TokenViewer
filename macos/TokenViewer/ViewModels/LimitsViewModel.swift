@@ -16,12 +16,17 @@ final class LimitsViewModel: ObservableObject {
     /// Called when the page appears: show cache, refresh if stale, then poll
     /// every 10 min while the page stays visible (network-frugal).
     func startAutoRefresh() {
-        let stale = lastFetched.map { Date().timeIntervalSince($0) > 30 } ?? true
-        if stale { refresh() }
+        refreshIfStale()
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 600, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
+    }
+
+    /// Refresh only if cached data is older than 30s (used by panel + page entry).
+    func refreshIfStale() {
+        let stale = lastFetched.map { Date().timeIntervalSince($0) > 30 } ?? true
+        if stale { refresh() }
     }
 
     func stopAutoRefresh() {

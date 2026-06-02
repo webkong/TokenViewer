@@ -228,7 +228,7 @@ private struct ModelBreakdownView: View {
             ForEach(models.prefix(8)) { entry in
                 VStack(spacing: 5) {
                     HStack(spacing: 8) {
-                        ProviderIcon(source: entry.source, size: 14)
+                        ProviderIcon(source: entry.source, modelName: entry.model, size: 14)
                         Text(entry.model).font(.system(size: 13, weight: .medium)).lineLimit(1)
                         Spacer()
                         Text(tvFormatCost(entry.total_cost_usd))
