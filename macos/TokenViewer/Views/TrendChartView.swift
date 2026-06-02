@@ -7,19 +7,20 @@ struct TrendChartView: View {
     let data: [DailyPoint]
     let hourly: Bool
     @State private var hoverIndex: Int?
+    @ObservedObject private var l10n = L10n.shared
 
     private struct Series { let name: String; let color: Color; let values: [Double]; let dashed: Bool; let cost: Bool }
 
     private var tokenSeries: [Series] {
         [
-            Series(name: "Input", color: .blue, values: data.map { Double($0.input_tokens) }, dashed: false, cost: false),
-            Series(name: "Output", color: .green, values: data.map { Double($0.output_tokens) }, dashed: false, cost: false),
+            Series(name: l10n.input, color: .blue, values: data.map { Double($0.input_tokens) }, dashed: false, cost: false),
+            Series(name: l10n.output, color: .green, values: data.map { Double($0.output_tokens) }, dashed: false, cost: false),
             Series(name: "Cache Write", color: .orange, values: data.map { Double($0.cache_creation_input_tokens) }, dashed: false, cost: false),
-            Series(name: "Cache Read", color: .purple, values: data.map { Double($0.cached_input_tokens) }, dashed: false, cost: false),
+            Series(name: l10n.cacheRead, color: .purple, values: data.map { Double($0.cached_input_tokens) }, dashed: false, cost: false),
         ].filter { $0.values.contains { $0 > 0 } }
     }
     private var costSeries: Series {
-        Series(name: "Cost", color: .red, values: data.map { $0.total_cost_usd }, dashed: true, cost: true)
+        Series(name: l10n.cost, color: .red, values: data.map { $0.total_cost_usd }, dashed: true, cost: true)
     }
 
     private var tokenMax: Double { max(tokenSeries.flatMap { $0.values }.max() ?? 1, 1) }
@@ -28,9 +29,9 @@ struct TrendChartView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Usage Trend").font(.system(size: 15, weight: .semibold))
+                Text(l10n.usageTrend).font(.system(size: 15, weight: .semibold))
                 Spacer()
-                Text(hourly ? "by hour" : "by day").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(hourly ? l10n.byHour : l10n.byDay).font(.system(size: 11)).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 6) {
@@ -89,17 +90,17 @@ struct TrendChartView: View {
         let hit = denom > 0 ? Double(d.cached_input_tokens) / Double(denom) * 100 : 0
         return VStack(alignment: .leading, spacing: 2) {
             Text(formatTick(d.date)).font(.system(size: 10, weight: .bold))
-            row("Input", d.input_tokens, .blue)
-            row("Output", d.output_tokens, .green)
+            row(l10n.input, d.input_tokens, .blue)
+            row(l10n.output, d.output_tokens, .green)
             row("Cache", cache, .orange)
             if d.reasoning_output_tokens > 0 { row("Reason", d.reasoning_output_tokens, .purple) }
             HStack(spacing: 6) {
                 Circle().fill(.red).frame(width: 6, height: 6)
-                Text("Cost").font(.system(size: 9)).foregroundStyle(.secondary)
+                Text(l10n.cost).font(.system(size: 9)).foregroundStyle(.secondary)
                 Text(tvFormatCost(d.total_cost_usd)).font(.system(size: 9, design: .monospaced))
             }
             HStack(spacing: 6) {
-                Text("Cache hit").font(.system(size: 9)).foregroundStyle(.secondary)
+                Text(l10n.cacheHit).font(.system(size: 9)).foregroundStyle(.secondary)
                 Text(String(format: "%.1f%%", hit)).font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(.orange)
             }
         }

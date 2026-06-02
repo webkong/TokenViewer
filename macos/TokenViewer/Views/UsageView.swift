@@ -51,6 +51,7 @@ private extension Double {
 
 struct UsageView: View {
     @ObservedObject var viewModel: UsageViewModel
+    @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var currency = CurrencyStore.shared
 
     var body: some View {
@@ -121,9 +122,9 @@ struct UsageView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Usage")
+                Text(l10n.usageTitle)
                     .font(.system(size: 24, weight: .bold))
-                Text("Token consumption across all AI tools")
+                Text(l10n.usageSubtitle)
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
@@ -135,7 +136,7 @@ struct UsageView: View {
                     .animation(viewModel.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading)
             }
             .buttonStyle(.borderless)
-            .help("Sync now")
+            .help(l10n.syncNow)
         }
     }
 }

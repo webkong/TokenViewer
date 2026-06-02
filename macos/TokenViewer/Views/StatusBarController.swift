@@ -5,6 +5,8 @@ final class StatusBarController {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var mainWindow: NSWindow?
+    private var eventMonitor: Any?
+    private var localMonitor: Any?
 
     init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -16,11 +18,11 @@ final class StatusBarController {
 
         let popover = NSPopover()
         popover.contentSize = NSSize(width: 420, height: 620)
-        popover.behavior = .applicationDefined
+        popover.behavior = .transient
         let hostingController = NSHostingController(
             rootView: PopoverView(
                 onOpenMainWindow: { [weak self] in self?.openMainWindow() },
-                onClose: { [weak self] in self?.popover?.performClose(nil) }
+                onClose: { [weak self] in self?.close() }
             )
         )
         hostingController.preferredContentSize = NSSize(width: 420, height: 620)
@@ -31,12 +33,42 @@ final class StatusBarController {
     @objc private func togglePopover() {
         guard let button = statusItem?.button, let popover else { return }
         if popover.isShown {
-            popover.performClose(nil)
+            close()
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
-            // Raise the popover window above all other windows.
             popover.contentViewController?.view.window?.level = .floating
+            startEventMonitor()
+        }
+    }
+
+    private func close() {
+        popover?.performClose(nil)
+        stopEventMonitor()
+    }
+
+    private func startEventMonitor() {
+        stopEventMonitor()
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            self?.close()
+        }
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.keyCode == 53 { // ESC
+                self?.close()
+                return nil
+            }
+            return event
+        }
+    }
+
+    private func stopEventMonitor() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
+        if let monitor = localMonitor {
+            NSEvent.removeMonitor(monitor)
+            localMonitor = nil
         }
     }
 

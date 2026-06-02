@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LimitsView: View {
     @ObservedObject var viewModel: LimitsViewModel
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         ScrollView {
@@ -21,7 +22,7 @@ struct LimitsView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Limits").font(.system(size: 24, weight: .bold))
+                Text(l10n.limitsTitle).font(.system(size: 24, weight: .bold))
                 Text("Per-agent quota windows with reset countdowns")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             }
