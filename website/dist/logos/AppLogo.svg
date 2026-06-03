@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Emerald tech background gradient (app brand #059669) -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#064E3B"/>
+      <stop offset="0.55" stop-color="#059669"/>
+      <stop offset="1" stop-color="#10B981"/>
+    </linearGradient>
+    <!-- Stem segments: bright mint → white (token "level meter") -->
+    <linearGradient id="stem" x1="512" y1="744" x2="512" y2="392" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6EE7B7"/>
+      <stop offset="1" stop-color="#ECFDF5"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.32" cy="0.18" r="0.95">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#022C22" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- App-icon rounded square -->
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+  <rect width="1024" height="1024" rx="232" fill="url(#glow)"/>
+
+  <!-- Faint circuit accents -->
+  <g stroke="#ECFDF5" stroke-opacity="0.16" stroke-width="6" fill="#ECFDF5" fill-opacity="0.20">
+    <path d="M150 172 H296" stroke-linecap="round"/>
+    <circle cx="308" cy="172" r="13"/>
+    <path d="M874 852 H728" stroke-linecap="round"/>
+    <circle cx="716" cy="852" r="13"/>
+    <circle cx="858" cy="300" r="9"/>
+    <circle cx="166" cy="724" r="9"/>
+  </g>
+
+  <g filter="url(#soft)">
+    <!-- Crossbar (capsule) -->
+    <rect x="236" y="280" width="552" height="104" rx="52" fill="#ffffff"/>
+    <!-- Stem built from 4 stacked rounded segments — token "level meter" -->
+    <g fill="url(#stem)">
+      <rect x="464" y="392" width="96" height="74" rx="24"/>
+      <rect x="464" y="484" width="96" height="74" rx="24"/>
+      <rect x="464" y="576" width="96" height="74" rx="24"/>
+      <rect x="464" y="668" width="96" height="80" rx="26"/>
+    </g>
+  </g>
+
+  <!-- Tech accent: pulse node on the crossbar tip -->
+  <g>
+    <circle cx="752" cy="332" r="30" fill="#10B981"/>
+    <circle cx="752" cy="332" r="14" fill="#ECFDF5"/>
+  </g>
+</svg>
