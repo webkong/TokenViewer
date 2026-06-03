@@ -55,10 +55,11 @@ struct SyncResult: Codable {
 }
 
 struct ProviderStatus: Codable, Identifiable {
-    var id: String { name }
-    let name: String
+    var id: String { source }
+    let source: String
     let record_count: Int64
-    let status: String
+    let installed: Bool
+    let last_sync: String?
 }
 
 @MainActor

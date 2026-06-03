@@ -306,12 +306,28 @@ fn count_content_chars(data: &Value) -> usize {
 fn normalize_kiro_model(raw: &str) -> String {
     let lower = raw.to_lowercase();
     if lower == "agent" { return "kiro-agent".to_string(); }
-    // Convert CLAUDE_SONNET_4_20250514_V1_0 → claude-sonnet-4
+
+    // Already a clean model name like "claude-opus-4.6", "claude-sonnet-4.5" — keep as-is
+    let version_re = ["claude-opus-4", "claude-sonnet-4", "claude-haiku-4",
+                      "claude-3-5-sonnet", "claude-3-5-haiku",
+                      "gpt-4", "gpt-4o", "gpt-5", "gemini"];
+    for prefix in &version_re {
+        if lower.starts_with(prefix) { return lower; }
+    }
+
+    // Convert internal IDs like CLAUDE_SONNET_4_20250514_V1_0 → family name
     let slug = lower.replace('_', "-");
-    for prefix in &["claude-opus-4", "claude-sonnet-4", "claude-haiku-4",
+    // Try specific versioned matches first (longer prefix wins)
+    for prefix in &["claude-opus-4-5", "claude-opus-4-6", "claude-opus-4-7", "claude-opus-4-8",
+                     "claude-sonnet-4-5", "claude-sonnet-4-6",
+                     "claude-haiku-4", "claude-opus-4", "claude-sonnet-4",
                      "claude-3-5-sonnet", "claude-3-5-haiku",
-                     "gpt-4", "gpt-5", "gemini"] {
-        if slug.contains(prefix) { return prefix.to_string(); }
+                     "gpt-4o", "gpt-4", "gpt-5", "gemini"] {
+        if slug.contains(prefix) {
+            // Convert dashes back to dots for version: claude-opus-4-6 → claude-opus-4.6
+            let model = prefix.replace("-4-", "-4.").replace("-3-5-", "-3.5-");
+            return model;
+        }
     }
     if slug.contains("claude") { return "claude-sonnet-4".to_string(); }
     raw.to_string()

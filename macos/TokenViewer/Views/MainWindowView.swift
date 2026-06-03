@@ -14,6 +14,9 @@ struct MainWindowView: View {
 
             SettingsView()
                 .tabItem { Label(l10n.settings, systemImage: "gear") }
+
+            AboutView()
+                .tabItem { Label(l10n.about, systemImage: "info.circle") }
         }
         .frame(minWidth: 600, minHeight: 480)
     }
