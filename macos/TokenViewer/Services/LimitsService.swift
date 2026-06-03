@@ -138,15 +138,17 @@ enum LimitsService {
         if lower.contains("not logged in") || lower.contains("login required") || lower.contains("kiro-cli login") {
             return ProviderLimit(name: name, planLabel: nil, configured: false, error: "Not logged in", windows: [])
         }
-        // "KIRO PRO+" / "KIRO POWER" / "KIRO PRO" / "KIRO FREE" — match plan including '+' 
-        let plan = planLabel(firstMatch(out, #"\|\s*(KIRO\s+[\w\+]+)"#) ?? firstMatch(out, #"Plan:\s*(.+)"#), "Kiro")
+        // Strip ANSI escape codes before parsing (kiro-cli colorizes output)
+        let clean = out.replacingOccurrences(of: #"\u{1B}\[[0-9;]*[mGKHF]"#, with: "", options: .regularExpression)
+        // "KIRO PRO+\" / "KIRO POWER" / "KIRO PRO" / "KIRO FREE" — match plan including '+'
+        let plan = planLabel(firstMatch(clean, #"\|\s*(KIRO\s+[\w\+]+)"#) ?? firstMatch(clean, #"Plan:\s*(.+)"#), "Kiro")
         var windows: [LimitWindow] = []
         // "1850.54 of 2000 covered" or "1850 of 2000 covered"
-        if let used = firstMatch(out, #"(\d+(?:\.\d+)?)\s+of\s+(\d+(?:\.\d+)?)\s+covered"#, group: 1).flatMap(Double.init),
-           let total = firstMatch(out, #"(\d+(?:\.\d+)?)\s+of\s+(\d+(?:\.\d+)?)\s+covered"#, group: 2).flatMap(Double.init), total > 0 {
-            windows.append(LimitWindow(label: "Credits", usedPercent: used / total * 100, resetAt: kiroResetDate(out)))
-        } else if let pct = firstMatch(out, #"█+\s*(\d+)%"#).flatMap({ Double($0) }) {
-            windows.append(LimitWindow(label: "Credits", usedPercent: pct, resetAt: kiroResetDate(out)))
+        if let used = firstMatch(clean, #"(\d+(?:\.\d+)?)\s+of\s+(\d+(?:\.\d+)?)\s+covered"#, group: 1).flatMap(Double.init),
+           let total = firstMatch(clean, #"(\d+(?:\.\d+)?)\s+of\s+(\d+(?:\.\d+)?)\s+covered"#, group: 2).flatMap(Double.init), total > 0 {
+            windows.append(LimitWindow(label: "Credits", usedPercent: used / total * 100, resetAt: kiroResetDate(clean)))
+        } else if let pct = firstMatch(clean, #"█+\s*(\d+)%"#).flatMap({ Double($0) }) {
+            windows.append(LimitWindow(label: "Credits", usedPercent: pct, resetAt: kiroResetDate(clean)))
         }
         return ProviderLimit(name: name, planLabel: plan, configured: !windows.isEmpty, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
     }
