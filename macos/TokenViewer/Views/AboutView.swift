@@ -54,6 +54,12 @@ struct AboutView: View {
                 }
             }
             .padding(20)
+
+            Text("© \(Calendar.current.component(.year, from: Date())) webkong. All rights reserved.")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.bottom, 20)
         }
         .background(Color(nsColor: .windowBackgroundColor))
     }
