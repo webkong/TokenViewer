@@ -377,11 +377,11 @@ private struct HeatmapView: View {
     @ObservedObject private var l10n = L10n.shared
 
     private static let parser: DateFormatter = {
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "UTC")
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone.current
         f.locale = Locale(identifier: "en_US_POSIX"); return f
     }()
     private static var cal: Calendar {
-        var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC")!; return c
+        var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone.current; return c
     }
 
     private func color(_ level: UInt8) -> Color {

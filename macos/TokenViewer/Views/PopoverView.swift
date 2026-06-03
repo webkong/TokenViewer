@@ -174,12 +174,12 @@ struct PopoverView: View {
         let cellSize: CGFloat = 8
         let gap: CGFloat = 2
         let labelW: CGFloat = 10
-        let cal = { var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC")!; return c }()
+        let cal = { var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone.current; return c }()
         let today = cal.startOfDay(for: Date())
         let weekday = cal.component(.weekday, from: today)
         let thisSunday = cal.date(byAdding: .day, value: -(weekday - 1), to: today)!
-        let pf = DateFormatter(); pf.dateFormat = "yyyy-MM-dd"; pf.timeZone = TimeZone(identifier: "UTC")!; pf.locale = Locale(identifier: "en_US_POSIX")
-        let mf = DateFormatter(); mf.dateFormat = "M月"; mf.timeZone = TimeZone(identifier: "UTC")!
+        let pf = DateFormatter(); pf.dateFormat = "yyyy-MM-dd"; pf.timeZone = TimeZone.current; pf.locale = Locale(identifier: "en_US_POSIX")
+        let mf = DateFormatter(); mf.dateFormat = "M月"; mf.timeZone = TimeZone.current
         let byDate = Dictionary(uniqueKeysWithValues: viewModel.heatmap.compactMap { p -> (Date, HeatmapPoint)? in
             pf.date(from: p.date).map { (cal.startOfDay(for: $0), p) }
         })

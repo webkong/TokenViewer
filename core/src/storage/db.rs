@@ -254,8 +254,11 @@ impl Database {
     }
 
     fn aggregate_by_bucket_model(&self, from: &str, to: &str, len: usize) -> SqlResult<Vec<UsageRecord>> {
+        // hour_start is stored in UTC; group by LOCAL-time bucket so day/hour
+        // dimensions match the user's wall clock. len 10 = day, 13 = hour.
+        let fmt = if len <= 10 { "%Y-%m-%d" } else { "%Y-%m-%dT%H" };
         let sql = format!(
-            "SELECT substr(hour_start,1,{len}) as bucket, source, model,
+            "SELECT strftime('{fmt}', hour_start, 'localtime') as bucket, source, model,
                 SUM(input_tokens), SUM(output_tokens), SUM(cached_input_tokens),
                 SUM(cache_creation_input_tokens), SUM(reasoning_output_tokens),
                 SUM(total_tokens), SUM(conversation_count)
@@ -282,7 +285,7 @@ impl Database {
     pub fn query_heatmap(&self, weeks: i32) -> SqlResult<Vec<HeatmapPoint>> {
         let days = weeks * 7;
         let mut stmt = self.conn.prepare(
-            "SELECT substr(hour_start, 1, 10) as date, SUM(total_tokens)
+            "SELECT strftime('%Y-%m-%d', hour_start, 'localtime') as date, SUM(total_tokens)
              FROM usage
              WHERE hour_start >= date('now', ?1)
              GROUP BY date ORDER BY date"
