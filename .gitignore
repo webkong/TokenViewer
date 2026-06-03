@@ -1,2 +1,33 @@
+# Build outputs
 dist/
 .build*/
+
+# Xcode
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcworkspace/contents.xcworkspacedata
+DerivedData/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xccheckout
+*.moved-aside
+
+# Rust
+core/target/
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+
+# Node / website
+website/node_modules/
+website/.npm-cache/
+
+# Secrets / signing
+signing/
+*.p12
+*.env
+config/countly.env
