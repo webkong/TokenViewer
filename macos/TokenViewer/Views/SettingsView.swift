@@ -16,6 +16,7 @@ struct SettingsView: View {
     @ObservedObject private var currency = CurrencyStore.shared
     @ObservedObject private var updater = UpdateChecker.shared
     @ObservedObject private var l10n = L10n.shared
+    @ObservedObject private var viewModel = UsageViewModel.shared
 
     private let dataDir: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -162,23 +163,30 @@ struct SettingsView: View {
                     }
                 }
             Divider()
-            Picker(l10n.syncFrequency, selection: $syncFrequency) {
-                Text("2 min").tag(2)
-                Text("5 min").tag(5)
-                Text("15 min").tag(15)
-                Text("30 min").tag(30)
-                Text("1 hour").tag(60)
-                Text(l10n.manual).tag(0)
-            }
-            .pickerStyle(.menu)
-            .onChange(of: syncFrequency) { UsageViewModel.shared.startAutoSync() }
-            Divider()
             HStack {
-                Text("Sync Now").font(.system(size: 13))
+                Text(l10n.syncFrequency).font(.system(size: 13))
+                Picker("", selection: $syncFrequency) {
+                    Text("2 min").tag(2)
+                    Text("5 min").tag(5)
+                    Text("15 min").tag(15)
+                    Text("30 min").tag(30)
+                    Text("1 hour").tag(60)
+                    Text(l10n.manual).tag(0)
+                }
+                .pickerStyle(.menu).labelsHidden().frame(width: 100)
+                .onChange(of: syncFrequency) { UsageViewModel.shared.startAutoSync() }
                 Spacer()
                 Button(action: { UsageViewModel.shared.sync() }) {
-                    Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 13))
+                        .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
+                        .animation(viewModel.isLoading
+                            ? .linear(duration: 1).repeatForever(autoreverses: false)
+                            : .default, value: viewModel.isLoading)
                 }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isLoading)
+                .help(l10n.syncNow)
             }
         }
     }
