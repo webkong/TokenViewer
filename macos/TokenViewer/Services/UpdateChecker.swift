@@ -5,7 +5,7 @@ final class UpdateChecker: ObservableObject {
     static let shared = UpdateChecker()
 
     /// GitHub repo to check releases against.
-    static let repo = "mm7894215/TokenViewer"
+    static let repo = "webkong/TokenViewer"
 
     @Published var status: String = ""
     @Published var busy = false
