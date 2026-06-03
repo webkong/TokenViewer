@@ -23,7 +23,7 @@ struct LimitsView: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(l10n.limitsTitle).font(.system(size: 24, weight: .bold))
-                Text("Per-agent quota windows with reset countdowns")
+                Text(l10n.limitsSubtitle)
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             }
             Spacer()

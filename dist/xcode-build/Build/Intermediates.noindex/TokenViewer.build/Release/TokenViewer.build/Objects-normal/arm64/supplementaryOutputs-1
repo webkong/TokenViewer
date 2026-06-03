@@ -1,0 +1,12 @@
+{
+  "/Users/wangsw/webkong/TokenViewer/TokenViewerNew/macos/TokenViewer/Views/AboutView.swift" : {
+    "abi-baseline-json" : "/Users/wangsw/webkong/TokenViewer/TokenViewerNew/dist/xcode-build/Build/Intermediates.noindex/TokenViewer.build/Release/TokenViewer.build/Objects-normal/arm64/TokenViewer.abi.json",
+    "const-values" : "/Users/wangsw/webkong/TokenViewer/TokenViewerNew/dist/xcode-build/Build/Intermediates.noindex/TokenViewer.build/Release/TokenViewer.build/Objects-normal/arm64/TokenViewer-primary.swiftconstvalues",
+    "dependencies" : "/Users/wangsw/webkong/TokenViewer/TokenViewerNew/dist/xcode-build/Build/Intermediates.noindex/TokenViewer.build/Release/TokenViewer.build/Objects-normal/arm64/TokenViewer-primary.d",
+    "diagnostics" : "/Users/wangsw/webkong/TokenViewer/TokenViewerNew/dist/xcode-build/Build/Intermediates.noindex/TokenViewer.build/Release/TokenViewer.build/Objects-normal/arm64/TokenViewer-primary.dia",
+    "objc-header" : "/Users/wangsw/webkong/TokenViewer/TokenViewerNew/dist/xcode-build/Build/Intermediates.noindex/TokenViewer.build/Release/TokenViewer.build/Objects-normal/arm64/TokenViewer-Swift.h",
+    "swiftdoc" : "/Users/wangsw/webkong/TokenViewer/TokenViewerNew/dist/xcode-build/Build/Intermediates.noindex/TokenViewer.build/Release/TokenViewer.build/Objects-normal/arm64/TokenViewer.swiftdoc",
+    "swiftmodule" : "/Users/wangsw/webkong/TokenViewer/TokenViewerNew/dist/xcode-build/Build/Intermediates.noindex/TokenViewer.build/Release/TokenViewer.build/Objects-normal/arm64/TokenViewer.swiftmodule",
+    "swiftsourceinfo" : "/Users/wangsw/webkong/TokenViewer/TokenViewerNew/dist/xcode-build/Build/Intermediates.noindex/TokenViewer.build/Release/TokenViewer.build/Objects-normal/arm64/TokenViewer.swiftsourceinfo"
+  }
+}
