@@ -283,7 +283,6 @@ TokenViewer converts "today" to UTC using your local timezone. If you're in UTC+
 
 - [ ] **Windows support** — system-tray app with native Win32 UI (planned)
 - [ ] Homebrew Cask formula
-- [ ] App Store distribution
 
 ---
 

@@ -283,7 +283,6 @@ TokenViewer 使用本地时区将「今天」转换为 UTC 范围。如果你在
 
 - [ ] **Windows 支持** — 系统托盘应用，原生 Win32 界面（计划中）
 - [ ] Homebrew Cask 公式
-- [ ] App Store 上架
 
 ---
 
