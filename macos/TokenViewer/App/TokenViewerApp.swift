@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = CoreBridge.shared
         ThemeManager.shared.apply()
         statusBarController = StatusBarController()
+        UpdateChecker.shared.startAutoCheck()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

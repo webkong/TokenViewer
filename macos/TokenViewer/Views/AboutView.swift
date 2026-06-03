@@ -43,10 +43,8 @@ struct AboutView: View {
                             }
                         }
                         Spacer()
-                        if updater.latestURL != nil {
-                            Button(l10n.download) {
-                                if let u = updater.latestURL { NSWorkspace.shared.open(u) }
-                            }
+                        if case .available = updater.state {
+                            Button(l10n.download) { updater.install() }
                         }
                         Button(updater.busy ? "Checking…" : l10n.checkNow) { updater.check() }
                             .disabled(updater.busy)
