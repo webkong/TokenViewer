@@ -42,7 +42,7 @@ final class UpdateChecker: ObservableObject {
     struct ReleaseInfo: Equatable {
         let version: String
         let releaseURL: URL
-        let dmgURL: URL?
+        let pkgURL: URL?
         let notes: String
     }
 
@@ -98,10 +98,10 @@ final class UpdateChecker: ObservableObject {
 
         do {
             let installURL: URL
-            if let dmgURL = release.dmgURL {
-                let (tmp, _) = try await URLSession.shared.download(for: URLRequest(url: dmgURL))
+            if let pkgURL = release.pkgURL {
+                let (tmp, _) = try await URLSession.shared.download(for: URLRequest(url: pkgURL))
                 let dest = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
-                    .appendingPathComponent("TokenViewer-\(release.version).dmg")
+                    .appendingPathComponent("TokenViewer-\(release.version)-Installer.pkg")
                 try? FileManager.default.removeItem(at: dest)
                 try FileManager.default.moveItem(at: tmp, to: dest)
                 installURL = dest
@@ -166,9 +166,10 @@ final class UpdateChecker: ObservableObject {
             .replacingOccurrences(of: #"^[vV]"#, with: "", options: .regularExpression)
         guard !version.isEmpty else { throw URLError(.cannotParseResponse) }
         let releaseURL = json.htmlURL ?? URL(string: "https://github.com/\(Self.repo)/releases/latest")!
-        let dmgURL = json.assets.first { $0.browserDownloadURL.pathExtension.lowercased() == "dmg" }?.browserDownloadURL
+        let pkgURL = json.assets.first { $0.browserDownloadURL.pathExtension.lowercased() == "pkg" }?.browserDownloadURL
+            ?? json.assets.first { $0.browserDownloadURL.pathExtension.lowercased() == "dmg" }?.browserDownloadURL
         let notes = json.body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return ReleaseInfo(version: version, releaseURL: releaseURL, dmgURL: dmgURL, notes: notes)
+        return ReleaseInfo(version: version, releaseURL: releaseURL, pkgURL: pkgURL, notes: notes)
     }
 
     private func isNewer(_ a: String, than b: String) -> Bool {
