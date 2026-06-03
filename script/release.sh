@@ -149,7 +149,7 @@ build_dmg() {
 
   create-dmg \
     --volname "$APP_DISPLAY_NAME" \
-    "${bg_args[@]}" \
+    ${bg_args[@]+"${bg_args[@]}"} \
     --window-pos 200 120 \
     --window-size 660 400 \
     --icon-size 128 \
