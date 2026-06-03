@@ -249,13 +249,17 @@ enum LimitsService {
             return ProviderLimit(name: name, planLabel: nil, configured: true, error: "Request failed", windows: [])
         }
         var windows: [LimitWindow] = []
+        // Plan: body.subType or body.user.membership.level
+        let subType = json["subType"] as? String
+            ?? (json["user"] as? [String: Any]).flatMap { ($0["membership"] as? [String: Any])?["level"] as? String }
+        let plan = planLabel(subType, "Kimi")
         if let usage = json["usage"] as? [String: Any] {
             let limit = numeric(usage["limit"]) ?? 0
             let used = numeric(usage["used"]) ?? 0
             let pct = limit > 0 ? used / limit * 100 : 0
             windows.append(LimitWindow(label: "Usage", usedPercent: pct, resetAt: parseDate(usage["resetTime"] ?? usage["reset_at"])))
         }
-        return ProviderLimit(name: name, planLabel: nil, configured: true, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
+        return ProviderLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
     }
 
     // MARK: Antigravity (Gemini IDE extension — check install via data dir)
