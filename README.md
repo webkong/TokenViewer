@@ -46,4 +46,4 @@ All data stored locally at `~/.tokenviewer/data.db` (SQLite).
 - **Settings page** — launch at login, sync frequency, data directory
 - **22 provider parsers** — auto-detect and parse logs from all supported tools
 - **Pricing engine** — built-in model pricing for accurate cost calculation
-- **~6MB app bundle** (vs ~100MB with embedded Node.js)
+- **~6MB app bundle**
