@@ -11,7 +11,7 @@ final class StatusBarController {
     init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "chart.bar.fill", accessibilityDescription: "TokenViewer")
+            button.image = makeMenuBarIcon()
             button.action = #selector(togglePopover)
             button.target = self
         }
@@ -42,8 +42,26 @@ final class StatusBarController {
         }
     }
 
+    private func makeMenuBarIcon() -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        let img = NSImage(size: size, flipped: false) { rect in
+            NSColor.black.setFill()
+            // Crossbar
+            let bar = NSBezierPath(roundedRect: NSRect(x: 1, y: 13, width: 16, height: 3.5), xRadius: 1.5, yRadius: 1.5)
+            bar.fill()
+            // Stem: 3 stacked segments
+            for (i, h): (Int, CGFloat) in [(0, 3.0), (1, 3.0), (2, 2.5)] {
+                let y = 8.5 - CGFloat(i) * 4.0
+                let seg = NSBezierPath(roundedRect: NSRect(x: 7, y: y, width: 4, height: h), xRadius: 1, yRadius: 1)
+                seg.fill()
+            }
+            return true
+        }
+        img.isTemplate = true
+        return img
+    }
+
     private func close() {
-        popover?.performClose(nil)
         stopEventMonitor()
     }
 
