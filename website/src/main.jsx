@@ -5,6 +5,7 @@ import "./styles.css";
 
 const SITE_URL = "https://tokenviewer.webkong.top";
 const GITHUB_REPO_URL = "https://github.com/webkong/TokenViewer";
+const PKG_DOWNLOAD_URL = "https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer-0.1.0-Installer.pkg"
 const DMG_DOWNLOAD_URL = "https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer.dmg";
 const LANGUAGE_STORAGE_KEY = "tokenviewer-site-language";
 
@@ -208,7 +209,7 @@ function Navigation({ t, onToggleLanguage }) {
           <button className="language-toggle" type="button" onClick={onToggleLanguage} aria-label={t.nav.languageLabel}>
             {t.nav.language}
           </button>
-          <a className="nav-cta" href={DMG_DOWNLOAD_URL}>{t.nav.download}</a>
+          <a className="nav-cta" href={PKG_DOWNLOAD_URL}>{t.nav.download}</a>
         </div>
       </nav>
     </header>
@@ -222,7 +223,7 @@ function Hero({ t }) {
         <h1>{t.hero.title}</h1>
         <p>{t.hero.description}</p>
         <div className="hero-actions" id="download">
-          <a className="primary-button" href={DMG_DOWNLOAD_URL}>
+          <a className="primary-button" href={PKG_DOWNLOAD_URL}>
             <Apple size={19} />
             {t.hero.primary}
           </a>
@@ -392,7 +393,7 @@ function Footer({ t }) {
         </div>
         <div className="footer-links">
           <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">GitHub</a>
-          <a href={DMG_DOWNLOAD_URL}>{t.footer.download}</a>
+          <a href={PKG_DOWNLOAD_URL}>{t.footer.download}</a>
         </div>
       </div>
       <p className="footer-copyright">{t.footer.copyright}</p>

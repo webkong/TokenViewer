@@ -20,9 +20,27 @@ GITHUB_RELEASE_REPO="${GITHUB_RELEASE_REPO:-webkong/TokenViewer}"
 RELEASE_TAG="${RELEASE_TAG:-v$VERSION}"
 RELEASE_NOTES_FILE="${RELEASE_NOTES_FILE:-$ROOT_DIR/docs/releases/$RELEASE_TAG.md}"
 
+SELF_SIGNED_ENV_FILE="${SELF_SIGNED_ENV_FILE:-$ROOT_DIR/signing/tokenviewer-internal-codesign.env}"
+CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
+KEYCHAIN_ARGS=()
+
+load_self_signed_env() {
+  [[ -f "$SELF_SIGNED_ENV_FILE" ]] && source "$SELF_SIGNED_ENV_FILE" || true
+}
+
+# If no explicit CODE_SIGN_IDENTITY set, try to use self-signed
+if [[ "$CODE_SIGN_IDENTITY" == "-" ]]; then
+  load_self_signed_env
+  if [[ -n "${SELF_SIGNED_COMMON_NAME:-}" ]]; then
+    CODE_SIGN_IDENTITY="$SELF_SIGNED_COMMON_NAME"
+    KEYCHAIN_ARGS=(--keychain "${SELF_SIGNED_KEYCHAIN_PATH}")
+  fi
+fi
+
 DMG_PATH="$RELEASE_DIR/$APP_DISPLAY_NAME.dmg"
 ZIP_PATH="$RELEASE_DIR/$APP_DISPLAY_NAME-$VERSION.zip"
-CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
+
+PKG_PATH="$RELEASE_DIR/$APP_DISPLAY_NAME-$VERSION-Installer.pkg"
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -34,6 +52,7 @@ Commands:
   build-rust      Build Rust core (aarch64-apple-darwin release)
   build-app       Build Xcode release .app
   build-zip       Build .app and create zip
+  build-pkg       Build .app and create PKG installer (auto-removes quarantine)
   build-dmg       Build .app and create DMG
   build-website   Build website/dist
   push-website    Push built website to GitHub Pages branch
@@ -130,6 +149,78 @@ build_zip() {
   rm -f "$ZIP_PATH"
   zip -qr "$ZIP_PATH" "$APP_DISPLAY_NAME.app"
   echo "✓ ZIP: $ZIP_PATH"
+}
+
+# ─── PKG ──────────────────────────────────────────────────────────────────────
+
+build_pkg() {
+  require_command pkgbuild
+
+  build_app
+  # Re-sign with self-signed identity (codesign_app was called by build_app via build_zip path)
+  codesign --force --deep --sign "$CODE_SIGN_IDENTITY" \
+    ${KEYCHAIN_ARGS[@]+"${KEYCHAIN_ARGS[@]}"} \
+    "$RELEASE_DIR/$APP_DISPLAY_NAME.app" >/dev/null 2>&1 || true
+
+  local work_dir; work_dir="$(mktemp -d)"
+  local root_dir="$work_dir/root"
+  local scripts_dir="$work_dir/scripts"
+  mkdir -p "$root_dir/Applications" "$scripts_dir"
+  cp -R "$RELEASE_DIR/$APP_DISPLAY_NAME.app" "$root_dir/Applications/"
+
+  # preinstall: quit running app
+  cat >"$scripts_dir/preinstall" <<PREINSTALL
+#!/bin/bash
+APP_PROCESS="$APP_DISPLAY_NAME"
+if /usr/bin/pgrep -x "\$APP_PROCESS" >/dev/null 2>&1; then
+  /usr/bin/pkill -x "\$APP_PROCESS" 2>/dev/null || true
+  /bin/sleep 0.5
+fi
+exit 0
+PREINSTALL
+
+  # postinstall: remove quarantine + relaunch
+  cat >"$scripts_dir/postinstall" <<POSTINSTALL
+#!/bin/bash
+set -euo pipefail
+APP_PATH="/Applications/$APP_DISPLAY_NAME.app"
+MARKER="/tmp/com.tokenviewer.app.was-running"
+
+console_user() { /usr/bin/stat -f "%Su" /dev/console 2>/dev/null || true; }
+run_as_user() {
+  local user uid
+  user="\$(console_user)"
+  [[ -n "\$user" && "\$user" != "root" ]] || return 1
+  uid="\$(/usr/bin/id -u "\$user")" || return 1
+  /bin/launchctl asuser "\$uid" /usr/bin/sudo -u "\$user" "\$@"
+}
+
+# Remove quarantine so Gatekeeper doesn't block the app
+if [[ -d "\$APP_PATH" ]]; then
+  /usr/bin/xattr -dr com.apple.quarantine "\$APP_PATH" 2>/dev/null || true
+fi
+
+# Relaunch if it was running before install
+if [[ -f "\$MARKER" ]]; then
+  /bin/rm -f "\$MARKER"
+  [[ -d "\$APP_PATH" ]] && run_as_user /usr/bin/open "\$APP_PATH" >/dev/null 2>&1 || true
+fi
+exit 0
+POSTINSTALL
+
+  chmod 755 "$scripts_dir/preinstall" "$scripts_dir/postinstall"
+  rm -f "$PKG_PATH"
+
+  pkgbuild \
+    --root "$root_dir" \
+    --scripts "$scripts_dir" \
+    --identifier "com.tokenviewer.app.pkg" \
+    --version "$VERSION" \
+    --install-location "/" \
+    "$PKG_PATH"
+
+  rm -rf "$work_dir"
+  echo "✓ PKG: $PKG_PATH"
 }
 
 # ─── DMG ──────────────────────────────────────────────────────────────────────
@@ -231,10 +322,14 @@ push_release() {
     if gh release view "$RELEASE_TAG" --repo "$GITHUB_RELEASE_REPO" >/dev/null 2>&1; then
       gh release edit "$RELEASE_TAG" --repo "$GITHUB_RELEASE_REPO" \
         --title "$APP_DISPLAY_NAME $VERSION" --notes-file "$notes_file"
-      gh release upload "$RELEASE_TAG" "$DMG_PATH" "$ZIP_PATH" \
+      local assets=("$DMG_PATH" "$ZIP_PATH")
+      [[ -f "$PKG_PATH" ]] && assets+=("$PKG_PATH")
+      gh release upload "$RELEASE_TAG" "${assets[@]}" \
         --repo "$GITHUB_RELEASE_REPO" --clobber
     else
-      gh release create "$RELEASE_TAG" "$DMG_PATH" "$ZIP_PATH" \
+      local assets=("$DMG_PATH" "$ZIP_PATH")
+      [[ -f "$PKG_PATH" ]] && assets+=("$PKG_PATH")
+      gh release create "$RELEASE_TAG" "${assets[@]}" \
         --repo "$GITHUB_RELEASE_REPO" \
         --title "$APP_DISPLAY_NAME $VERSION" --notes-file "$notes_file"
     fi
@@ -258,6 +353,7 @@ case "${1:-}" in
   build-rust)    build_rust ;;
   build-app)     build_app ;;
   build-zip)     build_zip ;;
+  build-pkg)     build_pkg ;;
   build-dmg)     build_dmg ;;
   build-website) build_website ;;
   push-website)  push_website ;;
