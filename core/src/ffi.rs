@@ -75,7 +75,7 @@ pub extern "C" fn tt_get_provider_status(handle: *mut CoreHandle) -> *mut c_char
         None => return std::ptr::null_mut(),
     };
     let sources = [
-        "claude", "codex", "cursor", "gemini", "kiro", "kiro-ide", "opencode", "openclaw",
+        "claude", "codex", "cursor", "gemini", "kiro", "opencode", "openclaw",
         "everycode", "hermes", "copilot", "kimi", "grok", "antigravity",
         "roocode", "kilocode", "kilocli", "zed", "goose", "ohmypi", "pi",
         "craft", "codebuddy",

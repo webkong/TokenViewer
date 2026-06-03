@@ -191,6 +191,7 @@ impl Database {
             "SELECT model, source, SUM(total_tokens)
              FROM usage
              WHERE hour_start >= ?1 AND hour_start < ?2
+               AND model != 'kiro-agent'
              GROUP BY model, source
              ORDER BY SUM(total_tokens) DESC"
         )?;

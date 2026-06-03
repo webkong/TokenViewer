@@ -75,14 +75,14 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
         }
     }
 
-    // Kiro IDE prompt log: tokens_generated.jsonl — use separate source "kiro-ide"
-    // so it doesn't inflate kiro CLI model breakdown (no timestamps, model always "kiro-agent")
+    // Kiro IDE prompt log: tokens_generated.jsonl
+    // Use model "kiro-agent" only — will be filtered from model breakdown
     let jsonl = dev_data.join("tokens_generated.jsonl");
     if jsonl.exists() {
         let key = jsonl.to_string_lossy().to_string();
         let offset = cursor.get_offset(&key);
         let bucket = file_mtime_bucket(&jsonl);
-        let (mut records, new_offset) = parse_jsonl_file(&jsonl, offset, "kiro-ide", parse_kiro_token_line);
+        let (mut records, new_offset) = parse_jsonl_file(&jsonl, offset, "kiro", parse_kiro_token_line);
         for r in &mut records { if r.hour_start.is_empty() { r.hour_start = bucket.clone(); } }
         all_records.extend(records);
         cursor.set_offset(&key, new_offset);
