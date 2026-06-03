@@ -43,7 +43,7 @@ struct PopoverView: View {
         .frame(width: 420, height: 620)
         .onKeyPress(.escape) { onClose?(); return .handled }
         .onAppear {
-            viewModel.refresh()
+            viewModel.sync()
             if showLimits { limitsVM.refreshIfStale() }
         }
     }
@@ -98,8 +98,15 @@ struct PopoverView: View {
                 let tint = cardColors[i % cardColors.count]
                 VStack(alignment: .leading, spacing: 3) {
                     Text(c.title).font(.system(size: 10, weight: .medium)).foregroundStyle(tint.opacity(0.9))
-                    Text(c.value).font(.system(size: 17, weight: .bold, design: .monospaced)).lineLimit(1).minimumScaleFactor(0.6)
-                    Text(c.subtitle).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+                    Text(c.value)
+                        .font(.system(size: 17, weight: .bold, design: .monospaced))
+                        .lineLimit(1).minimumScaleFactor(0.6)
+                        .contentTransition(.numericText())
+                        .animation(.spring(duration: 0.4), value: c.value)
+                    Text(c.subtitle)
+                        .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+                        .contentTransition(.numericText())
+                        .animation(.spring(duration: 0.4), value: c.subtitle)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
