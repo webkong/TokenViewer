@@ -59,7 +59,14 @@ struct AboutView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.bottom, 20)
+            Button("tokenviewer.webkong.top") {
+                NSWorkspace.shared.open(URL(string: "https://tokenviewer.webkong.top")!)
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 11))
+            .foregroundStyle(TVColor.brand)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.bottom, 20)
         }
         .background(Color(nsColor: .windowBackgroundColor))
     }
