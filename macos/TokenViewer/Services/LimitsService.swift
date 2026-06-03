@@ -138,8 +138,9 @@ enum LimitsService {
         if lower.contains("not logged in") || lower.contains("login required") || lower.contains("kiro-cli login") {
             return ProviderLimit(name: name, planLabel: nil, configured: false, error: "Not logged in", windows: [])
         }
-        // Strip ANSI escape codes before parsing (kiro-cli colorizes output)
-        let clean = out.replacingOccurrences(of: #"\u{1B}\[[0-9;]*[mGKHF]"#, with: "", options: .regularExpression)
+        // Strip ANSI escape codes (ESC [ ... m) before parsing
+        let esc = "\u{1B}"
+        let clean = out.replacingOccurrences(of: "\(esc)\\[[0-9;]*[a-zA-Z]", with: "", options: .regularExpression)
         // "KIRO PRO+\" / "KIRO POWER" / "KIRO PRO" / "KIRO FREE" — match plan including '+'
         let plan = planLabel(firstMatch(clean, #"\|\s*(KIRO\s+[\w\+]+)"#) ?? firstMatch(clean, #"Plan:\s*(.+)"#), "Kiro")
         var windows: [LimitWindow] = []
