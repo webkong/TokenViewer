@@ -40,13 +40,13 @@ struct ProviderIcon: View {
     private static let logoMap: [String: String] = [
         "claude": "claude-code", "codebuddy": "codebuddy", "codex": "codex",
         "every-code": "codex", "everycode": "codex", "gemini": "gemini",
-        "antigravity": "antigravity", "kiro": "kiro", "opencode": "opencode",
+        "antigravity": "antigravity", "kiro": "kiro", "kiro-ide": "kiro", "opencode": "opencode",
         "openclaw": "openclaw", "cursor": "cursor", "grok": "grok", "kimi": "kimi",
         "copilot": "copilot", "hermes": "hermes", "kilocli": "kilo", "kilocode": "kilo",
     ]
 
     /// Logos drawn with `currentColor` (monochrome) — tint to adapt to light/dark.
-    private static let monoLogos: Set<String> = ["copilot", "cursor", "grok", "kimi", "kiro"]
+    private static let monoLogos: Set<String> = ["copilot", "cursor", "grok", "kimi", "kiro", "kiro-ide"]
 
     var body: some View {
         if let img = logoImage() {
