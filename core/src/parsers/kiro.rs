@@ -75,13 +75,14 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
         }
     }
 
-    // Fallback: tokens_generated.jsonl (if SQLite unavailable or for older data)
+    // Kiro IDE prompt log: tokens_generated.jsonl — use separate source "kiro-ide"
+    // so it doesn't inflate kiro CLI model breakdown (no timestamps, model always "kiro-agent")
     let jsonl = dev_data.join("tokens_generated.jsonl");
-    if jsonl.exists() && all_records.is_empty() {
+    if jsonl.exists() {
         let key = jsonl.to_string_lossy().to_string();
         let offset = cursor.get_offset(&key);
         let bucket = file_mtime_bucket(&jsonl);
-        let (mut records, new_offset) = parse_jsonl_file(&jsonl, offset, "kiro", parse_kiro_token_line);
+        let (mut records, new_offset) = parse_jsonl_file(&jsonl, offset, "kiro-ide", parse_kiro_token_line);
         for r in &mut records { if r.hour_start.is_empty() { r.hour_start = bucket.clone(); } }
         all_records.extend(records);
         cursor.set_offset(&key, new_offset);

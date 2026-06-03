@@ -5,7 +5,7 @@ use crate::parsers;
 use crate::storage::Database;
 
 const SOURCES: &[&str] = &[
-    "claude", "codex", "cursor", "gemini", "kiro", "opencode", "openclaw",
+    "claude", "codex", "cursor", "gemini", "kiro", "kiro-ide", "opencode", "openclaw",
     "everycode", "hermes", "copilot", "kimi", "grok", "antigravity",
     "roocode", "kilocode", "kilocli", "zed", "goose", "ohmypi", "pi",
     "craft", "codebuddy",
