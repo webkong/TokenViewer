@@ -134,13 +134,15 @@ enum LimitsService {
         if lower.contains("not logged in") || lower.contains("login required") || lower.contains("kiro-cli login") {
             return ProviderLimit(name: name, planLabel: nil, configured: false, error: "Not logged in", windows: [])
         }
-        let plan = planLabel(firstMatch(out, #"Plan:\s*(.+)"#) ?? firstMatch(out, #"\|\s*(KIRO\s+\w+)"#), "Kiro")
+        // "KIRO PRO+" — match plan name including '+'
+        let plan = planLabel(firstMatch(out, #"\|\s*(KIRO\s+[\w\+]+)"#) ?? firstMatch(out, #"Plan:\s*(.+)"#), "Kiro")
         var windows: [LimitWindow] = []
-        if let pct = firstMatch(out, #"█+\s*(\d+)%"#).flatMap({ Double($0) }) {
-            windows.append(LimitWindow(label: "Credits", usedPercent: pct, resetAt: kiroResetDate(out)))
-        } else if let used = firstMatch(out, #"\((\d+(?:\.\d+)?)\s+of\s+(\d+(?:\.\d+)?)\s+covered"#, group: 1).flatMap({ Double($0) }),
-                  let total = firstMatch(out, #"\((\d+(?:\.\d+)?)\s+of\s+(\d+(?:\.\d+)?)\s+covered"#, group: 2).flatMap({ Double($0) }), total > 0 {
+        // "1850.54 of 2000 covered" or "1850 of 2000 covered"
+        if let used = firstMatch(out, #"(\d+(?:\.\d+)?)\s+of\s+(\d+(?:\.\d+)?)\s+covered"#, group: 1).flatMap(Double.init),
+           let total = firstMatch(out, #"(\d+(?:\.\d+)?)\s+of\s+(\d+(?:\.\d+)?)\s+covered"#, group: 2).flatMap(Double.init), total > 0 {
             windows.append(LimitWindow(label: "Credits", usedPercent: used / total * 100, resetAt: kiroResetDate(out)))
+        } else if let pct = firstMatch(out, #"█+\s*(\d+)%"#).flatMap({ Double($0) }) {
+            windows.append(LimitWindow(label: "Credits", usedPercent: pct, resetAt: kiroResetDate(out)))
         }
         return ProviderLimit(name: name, planLabel: plan, configured: !windows.isEmpty, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
     }
@@ -270,6 +272,11 @@ enum LimitsService {
     }
 
     private static func kiroResetDate(_ out: String) -> Date? {
+        // "resets on 2026-07-01" (ISO) or "resets on 07/01" (MM/DD)
+        if let iso = firstMatch(out, #"resets on (\d{4}-\d{2}-\d{2})"#) {
+            let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "UTC")
+            return f.date(from: iso)
+        }
         guard let md = firstMatch(out, #"resets on (\d{2}/\d{2})"#) else { return nil }
         let parts = md.split(separator: "/")
         guard parts.count == 2, let mm = Int(parts[0]), let dd = Int(parts[1]) else { return nil }
