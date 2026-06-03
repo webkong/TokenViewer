@@ -102,6 +102,22 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
         }
     }
 
+    // kiro-cli historical database: ~/Library/Application Support/kiro-cli/data.sqlite3
+    // conversations_v2 table: key=cwd, conversation_id, value=JSON with history[].request_metadata
+    #[cfg(target_os = "macos")]
+    let kiro_cli_db = home_dir.join("Library/Application Support/kiro-cli/data.sqlite3");
+    #[cfg(not(target_os = "macos"))]
+    let kiro_cli_db = home_dir.join(".local/share/kiro-cli/data.sqlite3");
+
+    if kiro_cli_db.exists() {
+        let db_key = kiro_cli_db.to_string_lossy().to_string();
+        if cursor.file_changed(&db_key) {
+            if let Some(records) = parse_kiro_cli_db(&kiro_cli_db, &mut cursor) {
+                all_records.extend(records);
+            }
+        }
+    }
+
     Ok((aggregate_records(all_records), cursor.to_json()))
 }
 
@@ -376,4 +392,83 @@ fn read_kiro_settings_model(home_dir: &std::path::Path) -> Option<String> {
     let model = v.get("kiroAgent.modelSelection").and_then(|m| m.as_str())?;
     if model.is_empty() || model == "auto" { return None; }
     Some(normalize_kiro_model(model))
+}
+
+/// Parse kiro-cli historical database (conversations_v2 table).
+/// Each row has a JSON `value` field containing history[].request_metadata with
+/// user_prompt_length, response_size, model_id, request_start_timestamp_ms.
+/// Tokens are estimated at 4 chars/token (same as reference project).
+fn parse_kiro_cli_db(db_path: &Path, cursor: &mut FileCursor) -> Option<Vec<UsageRecord>> {
+    let conn = Connection::open(db_path).ok()?;
+    let db_key = db_path.to_string_lossy().to_string();
+    // Use seen_ids to deduplicate by request_id
+    let mut stmt = conn.prepare(
+        "SELECT conversation_id, value FROM conversations_v2"
+    ).ok()?;
+
+    let mut records = Vec::new();
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+        ))
+    }).ok()?;
+
+    for row in rows.flatten() {
+        let (_conv_id, value_str) = row;
+        let val: Value = match serde_json::from_str(&value_str) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let history = match val.get("history").and_then(|h| h.as_array()) {
+            Some(h) => h,
+            None => continue,
+        };
+        for turn in history {
+            // user turn
+            let user = match turn.get("user") { Some(u) => u, None => continue };
+            // assistant has request_metadata
+            let meta = match turn.get("assistant")
+                .and_then(|a| a.get("request_metadata"))
+                .or_else(|| turn.get("request_metadata")) {
+                Some(m) => m,
+                None => continue,
+            };
+            let request_id = meta.get("request_id").and_then(|r| r.as_str()).unwrap_or("").to_string();
+            if request_id.is_empty() { continue; }
+            if !cursor.mark_seen(&request_id) { continue; } // dedup
+
+            let model_id = meta.get("model_id").and_then(|m| m.as_str()).unwrap_or("auto");
+            let model = normalize_kiro_model(model_id);
+
+            let ts_ms = meta.get("request_start_timestamp_ms").and_then(|t| t.as_i64()).unwrap_or(0);
+            let hour_start = if ts_ms > 0 {
+                epoch_millis_to_bucket(ts_ms).unwrap_or_else(now_bucket)
+            } else {
+                // fallback: user timestamp
+                user.get("timestamp").and_then(|t| t.as_str())
+                    .map(iso_to_bucket).unwrap_or_else(now_bucket)
+            };
+
+            let prompt_chars = meta.get("user_prompt_length").and_then(|x| x.as_u64()).unwrap_or(0);
+            let resp_chars = meta.get("response_size").and_then(|x| x.as_u64()).unwrap_or(0);
+            let input = prompt_chars / 4;
+            let output = resp_chars / 4;
+            let total = input + output;
+            if total == 0 { continue; }
+
+            records.push(UsageRecord {
+                id: None, hour_start,
+                source: "kiro".to_string(),
+                model,
+                input_tokens: input, output_tokens: output,
+                cached_input_tokens: 0, cache_creation_input_tokens: 0,
+                reasoning_output_tokens: 0, total_tokens: total,
+                conversation_count: 1,
+            });
+        }
+    }
+    // persist updated seen_ids back (file_changed already updated mtime)
+    let _ = db_key; // already tracked via file_changed
+    Some(records)
 }
