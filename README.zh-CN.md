@@ -271,6 +271,22 @@ TokenViewer 使用本地时区将「今天」转换为 UTC 范围。如果你在
 
 ---
 
+## ⭐ Star History
+
+<a href="https://star-history.com/#webkong/TokenViewer&Date">
+  <img src="https://api.star-history.com/svg?repos=webkong/TokenViewer&type=Date" alt="Star History Chart" width="600" />
+</a>
+
+---
+
+## 🗺️ 路线图
+
+- [ ] **Windows 支持** — 系统托盘应用，原生 Win32 界面（计划中）
+- [ ] Homebrew Cask 公式
+- [ ] App Store 上架
+
+---
+
 ## 🙏 致谢
 
 由 [webkong](https://github.com/webkong) 构建。  

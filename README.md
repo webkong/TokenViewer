@@ -271,6 +271,22 @@ TokenViewer converts "today" to UTC using your local timezone. If you're in UTC+
 
 ---
 
+## ⭐ Star History
+
+<a href="https://star-history.com/#webkong/TokenViewer&Date">
+  <img src="https://api.star-history.com/svg?repos=webkong/TokenViewer&type=Date" alt="Star History Chart" width="600" />
+</a>
+
+---
+
+## 🗺️ Roadmap
+
+- [ ] **Windows support** — system-tray app with native Win32 UI (planned)
+- [ ] Homebrew Cask formula
+- [ ] App Store distribution
+
+---
+
 ## 🙏 Credits
 
 Built by [webkong](https://github.com/webkong).  
