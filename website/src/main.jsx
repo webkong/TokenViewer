@@ -184,6 +184,7 @@ function App() {
       <Hero t={t} />
       <FeatureBand t={t} />
       <ProductStory t={t} />
+      <ScreenshotRow />
       <ProvidersSection t={t} />
       <Footer t={t} />
     </main>
@@ -339,6 +340,16 @@ const PROVIDER_LOGOS = {
   "KiloCLI": "kilo",
   "EveryCode": "codex",
 };
+
+function ScreenshotRow() {
+  return (
+    <section className="screenshots-row">
+      {["t1.png", "t2.png", "t3.png"].map(f => (
+        <img key={f} src={`/screenshot/${f}`} alt="TokenViewer screenshot" className="screenshot-img" />
+      ))}
+    </section>
+  );
+}
 
 function ProvidersSection({ t }) {
   return (
