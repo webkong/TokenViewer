@@ -374,6 +374,7 @@ private struct ProviderBreakdownView: View {
 private struct HeatmapView: View {
     let points: [HeatmapPoint]
     @State private var gridWidth: CGFloat = 600
+    @ObservedObject private var l10n = L10n.shared
 
     private static let parser: DateFormatter = {
         let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "UTC")
@@ -492,11 +493,11 @@ private struct HeatmapView: View {
             // Legend (centered at bottom)
             HStack(spacing: 4) {
                 Spacer()
-                Text("少").font(.system(size: 9)).foregroundStyle(.tertiary)
+                Text(l10n.heatmapLess).font(.system(size: 9)).foregroundStyle(.tertiary)
                 ForEach(0..<5, id: \.self) { l in
                     RoundedRectangle(cornerRadius: 2).fill(color(UInt8(l))).frame(width: 10, height: 10)
                 }
-                Text("多").font(.system(size: 9)).foregroundStyle(.tertiary)
+                Text(l10n.heatmapMore).font(.system(size: 9)).foregroundStyle(.tertiary)
                 Spacer()
             }
             .frame(maxWidth: .infinity)

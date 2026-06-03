@@ -64,6 +64,8 @@ final class L10n: ObservableObject {
     // MARK: - Limits
     var limitsTitle: String { isZh ? "限额" : "Limits" }
     var limitsSubtitle: String { isZh ? "各工具配额窗口及重置倒计时" : "Per-agent quota windows with reset countdowns" }
+    var heatmapLess: String { isZh ? "少" : "Less" }
+    var heatmapMore: String { isZh ? "多" : "More" }
 
     // MARK: - Settings
     var settingsTitle: String { isZh ? "设置" : "Settings" }

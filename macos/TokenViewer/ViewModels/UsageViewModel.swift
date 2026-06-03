@@ -162,11 +162,14 @@ class UsageViewModel: ObservableObject {
         let d7 = summary(from(daysAgo: 7))
         let d30 = summary(from(daysAgo: 29))
         let total = summary("2020-01-01T00:00:00Z")
+        let isZh = Locale.current.language.languageCode?.identifier.hasPrefix("zh") ?? false
+        let langCode = UserDefaults.standard.string(forKey: "appLanguage") ?? "system"
+        let zh = langCode == "zh" || (langCode == "system" && isZh)
         return [
-            PanelCard(title: "Today", value: tvFormatTokens(todayS?.total_tokens ?? 0), subtitle: tvFormatCost(todayS?.total_cost_usd ?? 0)),
-            PanelCard(title: "7 Days", value: tvFormatTokens(d7?.total_tokens ?? 0), subtitle: "\(d7?.active_days ?? 0) active"),
-            PanelCard(title: "30 Days", value: tvFormatTokens(d30?.total_tokens ?? 0), subtitle: "~\(tvFormatTokens((d30?.total_tokens ?? 0) / 30))/day"),
-            PanelCard(title: "Total", value: tvFormatTokens(total?.total_tokens ?? 0), subtitle: tvFormatCost(total?.total_cost_usd ?? 0)),
+            PanelCard(title: zh ? "今天" : "Today", value: tvFormatTokens(todayS?.total_tokens ?? 0), subtitle: tvFormatCost(todayS?.total_cost_usd ?? 0)),
+            PanelCard(title: zh ? "7 天" : "7 Days", value: tvFormatTokens(d7?.total_tokens ?? 0), subtitle: "\(d7?.active_days ?? 0) \(zh ? "天活跃" : "active")"),
+            PanelCard(title: zh ? "30 天" : "30 Days", value: tvFormatTokens(d30?.total_tokens ?? 0), subtitle: "~\(tvFormatTokens((d30?.total_tokens ?? 0) / 30))\(zh ? "/天" : "/day")"),
+            PanelCard(title: zh ? "总计" : "Total", value: tvFormatTokens(total?.total_tokens ?? 0), subtitle: tvFormatCost(total?.total_cost_usd ?? 0)),
         ]
     }
 
