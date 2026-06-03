@@ -5,7 +5,7 @@ struct LimitsView: View {
     @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 ForEach(viewModel.providers) { provider in

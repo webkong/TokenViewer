@@ -27,19 +27,16 @@ struct SettingsView: View {
     }()
 
     var body: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
                 Text(l10n.settingsTitle)
                     .font(.system(size: 24, weight: .bold))
 
+                generalSection
                 appearanceSection
                 panelSection
-                generalSection
-                updatesSection
                 providersSection
                 dataSection
-                aboutSection
-                footer
             }
             .padding(20)
         }
@@ -197,8 +194,8 @@ struct SettingsView: View {
             } else {
                 ForEach(active) { p in
                     HStack(spacing: 8) {
-                        ProviderIcon(source: p.name, size: 14)
-                        Text(p.name.capitalized).font(.system(size: 13, weight: .medium))
+                        ProviderIcon(source: p.source, size: 14)
+                        Text(p.source.capitalized).font(.system(size: 13, weight: .medium))
                         Spacer()
                         Text(l10n.recordsCount(Int(p.record_count)))
                             .font(.system(size: 11, design: .monospaced))
@@ -285,7 +282,7 @@ struct SettingsView: View {
 }
 
 /// Rounded card container matching the dashboard's Card primitive.
-private struct SettingsCard<Content: View>: View {
+struct SettingsCard<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
 
