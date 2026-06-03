@@ -345,7 +345,7 @@ function ScreenshotRow() {
   return (
     <section className="screenshots-row">
       {["t1.png", "t2.png", "t3.png"].map(f => (
-        <img key={f} src={`/screenshot/${f}`} alt="TokenViewer screenshot" className="screenshot-img" />
+        <img height="100%" key={f} src={`/screenshot/${f}`} alt="TokenViewer screenshot" className="screenshot-img" />
       ))}
     </section>
   );
