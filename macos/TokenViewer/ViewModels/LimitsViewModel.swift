@@ -41,7 +41,7 @@ final class LimitsViewModel: ObservableObject {
             let result = await LimitsService.fetchAll()
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                self.providers = result   // replace only when new data arrives
+                self.providers = result.sorted { $0.configured && !$1.configured }
                 self.lastFetched = Date()
                 self.isLoading = false
                 self.saveCache()
