@@ -170,19 +170,23 @@ class UsageViewModel: ObservableObject {
     }
 
     func sync() {
-        guard ProcessInfo.processInfo.environment["TV_SKIP_SYNC"] == nil else {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["TV_SKIP_SYNC"] != nil {
             refresh(); return
         }
+        #endif
         isLoading = true
+        let startTime = Date()
         Task.detached { [weak self] in
-            let result = CoreBridge.shared.syncAll()
+            _ = CoreBridge.shared.syncAll()
+            // Ensure at least 1s spinner so user perceives the sync
+            let elapsed = Date().timeIntervalSince(startTime)
+            if elapsed < 1.0 {
+                try? await Task.sleep(nanoseconds: UInt64((1.0 - elapsed) * 1_000_000_000))
+            }
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                if result != nil {
-                    self.refresh()
-                } else {
-                    self.isLoading = false
-                }
+                self.refresh()
             }
         }
     }
@@ -205,5 +209,6 @@ class UsageViewModel: ObservableObject {
             from = "2020-01-01T00:00:00Z"
         }
         return (from, to)
+        // Debug: print("dateRange(\(range)): from=\(from) to=\(to)")
     }
 }
