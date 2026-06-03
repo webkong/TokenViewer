@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Apple, ArrowDown, BarChart2, Check, Clock, DollarSign, Layers, Shield, Zap } from "lucide-react";
+import { Apple, ArrowDown, BarChart2, Check, Clock, Layers, Shield, Zap } from "lucide-react";
 import "./styles.css";
 
 const SITE_URL = "https://tokenviewer.webkong.top";
@@ -39,17 +39,17 @@ const copy = {
       {
         icon: BarChart2,
         title: "Real-time usage dashboard",
-        text: "Live token counts, cost estimates, and daily trends across all your AI tools in a single panel.",
-      },
-      {
-        icon: DollarSign,
-        title: "Cost tracking",
-        text: "Know exactly how much you're spending on AI per day, week, or month. Supports multi-currency display.",
+        text: "Live token counts, cost estimates, and daily trends across all your AI tools in a single native panel.",
       },
       {
         icon: Shield,
-        title: "Private by design",
-        text: "All data stays local in a SQLite database. No cloud sync, no account, no telemetry.",
+        title: "100% local & private",
+        text: "All data stays in a local SQLite file. No cloud, no account, no telemetry. Your AI usage is your business.",
+      },
+      {
+        icon: Zap,
+        title: "Native macOS performance",
+        text: "Built with Rust core and SwiftUI — tiny binary, instant sync, zero browser overhead.",
       },
     ],
     story: {
@@ -109,17 +109,17 @@ const copy = {
       {
         icon: BarChart2,
         title: "实时用量仪表盘",
-        text: "在一个面板里看到所有 AI 工具的实时 Token 数量、费用估算和每日趋势。",
-      },
-      {
-        icon: DollarSign,
-        title: "费用追踪",
-        text: "清楚知道每天、每周、每月在 AI 上花了多少钱，支持多币种显示。",
+        text: "在原生菜单栏面板中查看所有 AI 工具的实时 Token 数量、费用估算和每日趋势。",
       },
       {
         icon: Shield,
-        title: "隐私优先",
-        text: "所有数据保存在本地 SQLite 数据库。没有云同步、没有账号、没有遥测。",
+        title: "100% 本地存储",
+        text: "所有数据保存在本地 SQLite 文件中。没有云端、没有账号、没有遥测。你的 AI 用量只属于你。",
+      },
+      {
+        icon: Zap,
+        title: "原生 macOS 极致体验",
+        text: "Rust 内核 + SwiftUI 界面，极小体积，即时同步，零浏览器开销。",
       },
     ],
     story: {
@@ -314,6 +314,32 @@ function ProductStory({ t }) {
   );
 }
 
+// Provider logo mapping
+const PROVIDER_LOGOS = {
+  "Claude Code": "claude-code",
+  "Codex": "codex",
+  "Kiro": "kiro",
+  "Cursor": "cursor",
+  "GitHub Copilot": "copilot",
+  "Gemini CLI": "gemini",
+  "Opencode": "opencode",
+  "Roocode": null,
+  "Kilo Code": "kilo",
+  "Zed": null,
+  "Goose": null,
+  "Grok": "grok",
+  "Kimi": "kimi",
+  "Craft": null,
+  "OpenClaw": "openclaw",
+  "Hermes": "hermes",
+  "Antigravity": "antigravity",
+  "CodeBuddy": "codebuddy",
+  "OhMyPi": null,
+  "Pi": null,
+  "KiloCLI": "kilo",
+  "EveryCode": "codex",
+};
+
 function ProvidersSection({ t }) {
   return (
     <section className="providers-section" id="providers">
@@ -323,9 +349,23 @@ function ProvidersSection({ t }) {
         <p>{t.providers.description}</p>
       </div>
       <div className="providers-grid">
-        {t.providers.list.map(name => (
-          <div className="provider-chip" key={name}>{name}</div>
-        ))}
+        {t.providers.list.map(name => {
+          const logoKey = PROVIDER_LOGOS[name];
+          return (
+            <div className="provider-chip" key={name}>
+              {logoKey && (
+                <img
+                  src={`/logos/${logoKey}.svg`}
+                  alt=""
+                  width={16} height={16}
+                  style={{ display: "inline-block", verticalAlign: "middle", marginRight: 5 }}
+                  onError={e => { e.currentTarget.style.display = "none"; }}
+                />
+              )}
+              {name}
+            </div>
+          );
+        })}
       </div>
     </section>
   );
