@@ -177,6 +177,8 @@ private struct MetricCard: View {
                 .monospacedDigit()
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
+                .contentTransition(.numericText())
+                .animation(.spring(duration: 0.4), value: value)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
