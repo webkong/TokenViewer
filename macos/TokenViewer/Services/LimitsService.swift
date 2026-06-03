@@ -28,7 +28,11 @@ enum LimitsService {
         async let copilot = fetchCopilot()
         async let claude = fetchClaude()
         async let kiro = fetchKiro()
-        return await [claude, codex, copilot, kiro]
+        async let cursor = fetchCursor()
+        async let gemini = fetchGemini()
+        async let kimi = fetchKimi()
+        async let antigravity = fetchAntigravity()
+        return await [claude, codex, copilot, kiro, cursor, gemini, kimi, antigravity]
     }
 
     // MARK: Claude (Keychain → Anthropic OAuth usage API)
@@ -134,7 +138,7 @@ enum LimitsService {
         if lower.contains("not logged in") || lower.contains("login required") || lower.contains("kiro-cli login") {
             return ProviderLimit(name: name, planLabel: nil, configured: false, error: "Not logged in", windows: [])
         }
-        // "KIRO PRO+" — match plan name including '+'
+        // "KIRO PRO+" / "KIRO POWER" / "KIRO PRO" / "KIRO FREE" — match plan including '+' 
         let plan = planLabel(firstMatch(out, #"\|\s*(KIRO\s+[\w\+]+)"#) ?? firstMatch(out, #"Plan:\s*(.+)"#), "Kiro")
         var windows: [LimitWindow] = []
         // "1850.54 of 2000 covered" or "1850 of 2000 covered"
@@ -147,7 +151,132 @@ enum LimitsService {
         return ProviderLimit(name: name, planLabel: plan, configured: !windows.isEmpty, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
     }
 
-    // MARK: - Helpers
+    // MARK: Cursor (state.vscdb SQLite → cursor.com/api/usage-summary)
+
+    static func fetchCursor() async -> ProviderLimit {
+        let name = "cursor"
+        #if os(macOS)
+        let stateDb = "\(NSHomeDirectory())/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+        let cliCfg  = "\(NSHomeDirectory())/.cursor/cli-config.json"
+        #else
+        let stateDb = "\(NSHomeDirectory())/.config/Cursor/User/globalStorage/state.vscdb"
+        let cliCfg  = "\(NSHomeDirectory())/.cursor/cli-config.json"
+        #endif
+        guard FileManager.default.fileExists(atPath: stateDb) else {
+            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        }
+        guard let jwt = readSqliteValue(stateDb, sql: "SELECT value FROM ItemTable WHERE key='cursorAuth/accessToken' LIMIT 1"),
+              jwt.count > 10 else {
+            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        }
+        let userId: String
+        if let cfg = readJSON(cliCfg), let authId = (cfg["authInfo"] as? [String: Any])?["authId"] as? String, !authId.isEmpty {
+            userId = authId
+        } else {
+            userId = jwtClaim(jwt, "sub") ?? ""
+        }
+        guard !userId.isEmpty else {
+            return ProviderLimit(name: name, planLabel: nil, configured: false, error: "No userId", windows: [])
+        }
+        let cookie = "WorkosCursorSessionToken=\(userId)%3A%3A\(jwt)"
+        var req = URLRequest(url: URL(string: "https://cursor.com/api/usage-summary")!)
+        req.setValue(cookie, forHTTPHeaderField: "Cookie")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
+        req.setValue("https://www.cursor.com/settings", forHTTPHeaderField: "Referer")
+        guard let json = await getJSON(req) else {
+            return ProviderLimit(name: name, planLabel: nil, configured: true, error: "Request failed", windows: [])
+        }
+        let membership = json["membershipType"] as? String
+        let plan = planLabel(membership, "Cursor")
+        let billing = (json["billingCycleEnd"] as? String)
+        let ind = json["individualUsage"] as? [String: Any]
+        let planData = ind?["plan"] as? [String: Any]
+        var pct: Double? = (planData?["totalPercentUsed"] as? Double)
+            ?? (planData?["autoPercentUsed"] as? Double)
+        if pct == nil, let used = numeric(planData?["used"]), let lim = numeric(planData?["limit"]), lim > 0 {
+            pct = used / lim * 100
+        }
+        var windows: [LimitWindow] = []
+        if let p = pct { windows.append(LimitWindow(label: "Plan", usedPercent: p, resetAt: parseDate(billing))) }
+        return ProviderLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
+    }
+
+    // MARK: Gemini (oauth_creds.json → cloudcode-pa.googleapis.com)
+
+    static func fetchGemini() async -> ProviderLimit {
+        let name = "gemini"
+        let credsPath = "\(NSHomeDirectory())/.gemini/oauth_creds.json"
+        guard let creds = readJSON(credsPath), let accessToken = creds["access_token"] as? String, !accessToken.isEmpty else {
+            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        }
+        var req = URLRequest(url: URL(string: "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota")!)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: [:])
+        guard let json = await getJSON(req),
+              let buckets = json["buckets"] as? [[String: Any]] else {
+            return ProviderLimit(name: name, planLabel: nil, configured: true, error: "Request failed", windows: [])
+        }
+        var lowestFrac: Double = 1.0
+        var resetAt: Date? = nil
+        for bucket in buckets {
+            if let frac = bucket["remainingFraction"] as? Double { lowestFrac = min(lowestFrac, frac) }
+            if resetAt == nil { resetAt = parseDate(bucket["resetTime"]) }
+        }
+        let used = (1.0 - lowestFrac) * 100
+        let windows = buckets.isEmpty ? [] : [LimitWindow(label: "Quota", usedPercent: used, resetAt: resetAt)]
+        return ProviderLimit(name: name, planLabel: nil, configured: true, error: nil, windows: windows)
+    }
+
+    // MARK: Kimi (~/.kimi/credentials/kimi-code.json → api.kimi.com)
+
+    static func fetchKimi() async -> ProviderLimit {
+        let name = "kimi"
+        let kimiHome = ProcessInfo.processInfo.environment["KIMI_HOME"] ?? "\(NSHomeDirectory())/.kimi"
+        let credsPath = "\(kimiHome)/credentials/kimi-code.json"
+        guard let creds = readJSON(credsPath), let accessToken = creds["access_token"] as? String, !accessToken.isEmpty else {
+            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        }
+        var req = URLRequest(url: URL(string: "https://api.kimi.com/coding/v1/usages")!)
+        req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        guard let json = await getJSON(req) else {
+            return ProviderLimit(name: name, planLabel: nil, configured: true, error: "Request failed", windows: [])
+        }
+        var windows: [LimitWindow] = []
+        if let usage = json["usage"] as? [String: Any] {
+            let limit = numeric(usage["limit"]) ?? 0
+            let used = numeric(usage["used"]) ?? 0
+            let pct = limit > 0 ? used / limit * 100 : 0
+            windows.append(LimitWindow(label: "Usage", usedPercent: pct, resetAt: parseDate(usage["resetTime"] ?? usage["reset_at"])))
+        }
+        return ProviderLimit(name: name, planLabel: nil, configured: true, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
+    }
+
+    // MARK: Antigravity (Gemini IDE extension — check install via data dir)
+
+    static func fetchAntigravity() async -> ProviderLimit {
+        let name = "antigravity"
+        // Antigravity writes to ~/.gemini/antigravity* directories
+        let geminiDir = "\(NSHomeDirectory())/.gemini"
+        let hasAntigravity = ["antigravity", "antigravity-ide", "antigravity-cli"].contains {
+            FileManager.default.fileExists(atPath: "\(geminiDir)/\($0)")
+        }
+        guard hasAntigravity else {
+            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        }
+        // Antigravity quota is shared with Gemini — no separate API available
+        return ProviderLimit(name: name, planLabel: nil, configured: true, error: "Uses Gemini quota", windows: [])
+    }
+
+    // MARK: - Helpers (additional)
+
+    private static func readSqliteValue(_ path: String, sql: String) -> String? {
+        runProcess("/usr/bin/sqlite3", [path, sql])?.trimmingCharacters(in: .whitespacesAndNewlines)
+            .nonEmpty
+    }
 
     private static func getJSON(_ req: URLRequest) async -> [String: Any]? {
         var r = req
@@ -288,4 +417,8 @@ enum LimitsService {
         if date < now { comps.year! += 1; date = cal.date(from: comps) ?? date }
         return date
     }
+}
+
+private extension String {
+    var nonEmpty: String? { isEmpty ? nil : self }
 }
