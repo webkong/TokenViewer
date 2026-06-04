@@ -14,6 +14,8 @@ struct PopoverView: View {
     @AppStorage("panelShowHeatmap") private var showHeatmap = true
     @AppStorage("panelShowTrend") private var showTrend = true
     @AppStorage("panelShowModels") private var showModels = true
+    @AppStorage("limitsVisibleSources") private var limitsVisibleSources = LimitsVisibilityStore.defaultsValue
+    @AppStorage("mainWindowTab") private var mainWindowTab = "usage"
 
     private let maxPopoverHeight: CGFloat = 620
     var onHeightChange: ((CGFloat) -> Void)?
@@ -75,6 +77,16 @@ struct PopoverView: View {
                     .foregroundColor(.secondary)
             }
             .buttonStyle(.plain).help(l10n.syncNow)
+            Button(action: {
+                mainWindowTab = "settings"
+                onOpenMainWindow?()
+            }) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help(l10n.settings)
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
     }
@@ -134,7 +146,10 @@ struct PopoverView: View {
     // MARK: Limits (compact)
 
     private var limitsSection: some View {
-        let active = limitsVM.providers.filter { $0.configured && !$0.windows.isEmpty }
+        let visibleSet = LimitsVisibilityStore.visibleSet(from: limitsVisibleSources)
+        let active = limitsVM.providers.filter {
+            $0.configured && !$0.windows.isEmpty && visibleSet.contains($0.name)
+        }
         return Group {
             if !active.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {

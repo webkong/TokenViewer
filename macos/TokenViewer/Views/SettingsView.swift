@@ -8,6 +8,7 @@ struct SettingsView: View {
     @AppStorage("panelShowHeatmap") private var panelShowHeatmap = true
     @AppStorage("panelShowTrend") private var panelShowTrend = true
     @AppStorage("panelShowModels") private var panelShowModels = true
+    @AppStorage("limitsVisibleSources") private var limitsVisibleSources = LimitsVisibilityStore.defaultsValue
     @State private var launchAtLogin = false
     @State private var showRebuildAlert = false
     @State private var providers: [ProviderStatus] = []
@@ -30,6 +31,7 @@ struct SettingsView: View {
                 generalSection
                 appearanceSection
                 panelSection
+                limitsSection
                 providersSection
                 dataSection
             }
@@ -109,6 +111,29 @@ struct SettingsView: View {
                 }
                 panelChip(title: l10n.topModels, isSelected: panelShowModels) {
                     panelShowModels.toggle()
+                }
+            }
+        }
+    }
+
+    // MARK: Limits
+
+    private var limitsSection: some View {
+        let visible = LimitsVisibilityStore.visibleSet(from: limitsVisibleSources)
+
+        return SettingsCard(title: l10n.menuBarLimitsCards) {
+            Text(l10n.limitsVisibilityDesc)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Divider()
+            FlowLayout(itemSpacing: 8, rowSpacing: 8) {
+                ForEach(LimitsVisibilityStore.allSources, id: \.self) { source in
+                    panelChip(
+                        title: LimitsVisibilityStore.displayName(for: source),
+                        isSelected: visible.contains(source)
+                    ) {
+                        toggleLimitsVisibility(source)
+                    }
                 }
             }
         }
@@ -235,6 +260,16 @@ struct SettingsView: View {
         }
     }
 
+    private func toggleLimitsVisibility(_ source: String) {
+        var visible = LimitsVisibilityStore.visibleSet(from: limitsVisibleSources)
+        if visible.contains(source) {
+            visible.remove(source)
+        } else {
+            visible.insert(source)
+        }
+        limitsVisibleSources = LimitsVisibilityStore.rawValue(from: visible)
+    }
+
     private func panelChip(title: String, isSelected: Bool, isLocked: Bool = false, action: @escaping () -> Void) -> some View {
         let fillColor = isSelected ? TVColor.brand : Color(nsColor: .controlBackgroundColor)
         let borderColor: Color = isSelected
@@ -249,13 +284,13 @@ struct SettingsView: View {
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(isSelected ? Color.white : .primary)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .fixedSize(horizontal: true, vertical: true)
-                .background(
-                    Capsule()
-                        .fill(fillColor)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .fixedSize(horizontal: true, vertical: true)
+            .background(
+                Capsule()
+                    .fill(fillColor)
                     .overlay(
                         Capsule().strokeBorder(
                             borderColor,
@@ -263,7 +298,7 @@ struct SettingsView: View {
                         )
                     )
                     .shadow(color: isSelected ? TVColor.brand.opacity(0.14) : .clear, radius: 1.5, x: 0, y: 1)
-                )
+            )
         }
         .buttonStyle(.plain)
         .disabled(isLocked)
@@ -272,6 +307,66 @@ struct SettingsView: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
+}
+
+private struct FlowLayout: Layout {
+    var itemSpacing: CGFloat
+    var rowSpacing: CGFloat
+
+    struct Cache {
+        var sizes: [CGSize] = []
+    }
+
+    func makeCache(subviews: Subviews) -> Cache {
+        Cache(sizes: subviews.map { $0.sizeThatFits(.unspecified) })
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
+        let sizes = cache.sizes.count == subviews.count ? cache.sizes : subviews.map { $0.sizeThatFits(.unspecified) }
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var totalWidth: CGFloat = 0
+
+        for size in sizes {
+            if x > 0, x + size.width > maxWidth {
+                totalWidth = max(totalWidth, x - itemSpacing)
+                x = 0
+                y += rowHeight + rowSpacing
+                rowHeight = 0
+            }
+            x += size.width + itemSpacing
+            rowHeight = max(rowHeight, size.height)
+        }
+
+        totalWidth = max(totalWidth, x > 0 ? x - itemSpacing : 0)
+        return CGSize(width: min(totalWidth, maxWidth), height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
+        let sizes = cache.sizes.count == subviews.count ? cache.sizes : subviews.map { $0.sizeThatFits(.unspecified) }
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for (index, subview) in subviews.enumerated() {
+            let size = sizes[index]
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + rowSpacing
+                rowHeight = 0
+            }
+
+            subview.place(
+                at: CGPoint(x: x, y: y),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: size.width, height: size.height)
+            )
+            x += size.width + itemSpacing
+            rowHeight = max(rowHeight, size.height)
+        }
+    }
 }
 
 /// Rounded card container matching the dashboard's Card primitive.

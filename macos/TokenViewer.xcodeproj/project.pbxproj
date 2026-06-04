@@ -14,6 +14,7 @@
 		1CBF7C85F3FB372DBE9FBCFC /* StatusBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4129E968EF3C5D9FD95437C6 /* StatusBarController.swift */; };
 		2C6AC7DAAA159E8732B59FB2 /* copilot.svg in Resources */ = {isa = PBXBuildFile; fileRef = CCA7AD173CD5F720CAAFC580 /* copilot.svg */; };
 		347A46B387C70D49DC91DAA1 /* kilo.svg in Resources */ = {isa = PBXBuildFile; fileRef = 5085801F155A829C95375778 /* kilo.svg */; };
+		3F3AA6C6B6C882FEEC1628A5 /* LimitsVisibilityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39EB5D762689CD00096F0785 /* LimitsVisibilityStore.swift */; };
 		553E165F7889BCE2D0568430 /* PopoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 734F7DE6DCDA5B2405BD8F14 /* PopoverView.swift */; };
 		563509D89AB9BF876DD5F6CE /* hermes.svg in Resources */ = {isa = PBXBuildFile; fileRef = B92F1EDF8973582C61B3DC55 /* hermes.svg */; };
 		591F15C6E853CC4623779432 /* CoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78CE8EAD3B139DBEB8EB4B5A /* CoreBridge.swift */; };
@@ -39,6 +40,7 @@
 		ED3B7F19A37D4A28CEDA8622 /* AppLogo.svg in Resources */ = {isa = PBXBuildFile; fileRef = 84BE470DCBCD6A12C98E60D6 /* AppLogo.svg */; };
 		F68C7E360D4621D052429EFB /* LimitsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95B0617E9C570C731BB0961A /* LimitsViewModel.swift */; };
 		F82C683EBDC37477E8A45228 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21D91FBC31BF8A6F1CBFA202 /* AboutView.swift */; };
+		FD3805921AFF88053B64AEDD /* MenuBarIcon.svg in Resources */ = {isa = PBXBuildFile; fileRef = F1DDAFB4FBCF9DDDF0B9B8A3 /* MenuBarIcon.svg */; };
 		FD93F43BB910DAAD2E8571B3 /* grok.svg in Resources */ = {isa = PBXBuildFile; fileRef = A9F3FB73CDED44D7115FB025 /* grok.svg */; };
 /* End PBXBuildFile section */
 
@@ -47,6 +49,7 @@
 		1DCD82F79AAD3F077EAA8A17 /* ProviderIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderIcon.swift; sourceTree = "<group>"; };
 		21D91FBC31BF8A6F1CBFA202 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		2CDA4DFDC1A93996F495C246 /* claude-code.svg */ = {isa = PBXFileReference; path = "claude-code.svg"; sourceTree = "<group>"; };
+		39EB5D762689CD00096F0785 /* LimitsVisibilityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitsVisibilityStore.swift; sourceTree = "<group>"; };
 		4129E968EF3C5D9FD95437C6 /* StatusBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarController.swift; sourceTree = "<group>"; };
 		4965F633CE47DB93FDA573C0 /* TokenViewerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenViewerApp.swift; sourceTree = "<group>"; };
 		49D0C81B5FF6EBFF4F66A51D /* opencode.svg */ = {isa = PBXFileReference; path = opencode.svg; sourceTree = "<group>"; };
@@ -78,6 +81,7 @@
 		E9F2DD464AF49DBA8E6A6E86 /* gemini.svg */ = {isa = PBXFileReference; path = gemini.svg; sourceTree = "<group>"; };
 		EBE72CF07CC99195B52D4715 /* LimitsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitsService.swift; sourceTree = "<group>"; };
 		F13B30FF8F49D9B8D59A4CEA /* kimi.svg */ = {isa = PBXFileReference; path = kimi.svg; sourceTree = "<group>"; };
+		F1DDAFB4FBCF9DDDF0B9B8A3 /* MenuBarIcon.svg */ = {isa = PBXFileReference; path = MenuBarIcon.svg; sourceTree = "<group>"; };
 		F69660CE5393741209A39863 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		FFC3E2ED727D536445673A50 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -106,6 +110,7 @@
 				6DC1D012B29037EB42DA1429 /* AppIcon.icns */,
 				84BE470DCBCD6A12C98E60D6 /* AppLogo.svg */,
 				59A2E3357CCDB083777BF426 /* Info.plist */,
+				F1DDAFB4FBCF9DDDF0B9B8A3 /* MenuBarIcon.svg */,
 				D9E69FCF0E721C554A2CA895 /* TokenViewer.entitlements */,
 				ED89A8809122F17B14ACFB1F /* brand-logos */,
 			);
@@ -161,6 +166,7 @@
 			isa = PBXGroup;
 			children = (
 				EBE72CF07CC99195B52D4715 /* LimitsService.swift */,
+				39EB5D762689CD00096F0785 /* LimitsVisibilityStore.swift */,
 				034652C5EE019A959887EFA2 /* Localization.swift */,
 				C54A6C43A31CA1B59412B121 /* Preferences.swift */,
 				F69660CE5393741209A39863 /* UpdateChecker.swift */,
@@ -260,6 +266,7 @@
 			files = (
 				0990F9AF3227ECE947742A87 /* AppIcon.icns in Resources */,
 				ED3B7F19A37D4A28CEDA8622 /* AppLogo.svg in Resources */,
+				FD3805921AFF88053B64AEDD /* MenuBarIcon.svg in Resources */,
 				C9BFDB1C206AF7EEF99C44DE /* antigravity.svg in Resources */,
 				E2157A36CA184475536923C0 /* claude-code.svg in Resources */,
 				DC768A9ABEBD114D9E0FA787 /* codebuddy.svg in Resources */,
@@ -311,6 +318,7 @@
 				0E0B6D6D08106FA4CD3ECEE7 /* LimitsService.swift in Sources */,
 				C410EC5A0E53CD4A11C75B0C /* LimitsView.swift in Sources */,
 				F68C7E360D4621D052429EFB /* LimitsViewModel.swift in Sources */,
+				3F3AA6C6B6C882FEEC1628A5 /* LimitsVisibilityStore.swift in Sources */,
 				88038E2FBCB342196F263BFA /* Localization.swift in Sources */,
 				59C9CF298FD67A2731CDD576 /* MainWindowView.swift in Sources */,
 				553E165F7889BCE2D0568430 /* PopoverView.swift in Sources */,
@@ -411,7 +419,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.2;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -499,7 +507,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.2;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

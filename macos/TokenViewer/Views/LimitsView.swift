@@ -8,8 +8,20 @@ struct LimitsView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
                 header
-                ForEach(viewModel.providers) { provider in
-                    ProviderLimitCard(provider: provider)
+                let activeProviders = viewModel.providers.filter { $0.configured && !$0.windows.isEmpty }
+                let inactiveProviders = viewModel.providers.filter { !$0.configured || $0.windows.isEmpty }
+                if viewModel.providers.isEmpty {
+                    emptyState
+                } else {
+                    ForEach(activeProviders) { provider in
+                        ProviderLimitCard(provider: provider)
+                    }
+                    if !inactiveProviders.isEmpty {
+                        Divider().padding(.vertical, 2)
+                        ForEach(inactiveProviders) { provider in
+                            ProviderLimitCard(provider: provider)
+                        }
+                    }
                 }
             }
             .padding(20)
@@ -38,10 +50,28 @@ struct LimitsView: View {
             .help(viewModel.isLoading ? "Refreshing…" : "Refresh limits")
         }
     }
+
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(l10n.noLimitsData)
+                .font(.system(size: 13, weight: .medium))
+            Text(l10n.limitsNoDataDesc)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(nsColor: .controlBackgroundColor))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 0.5))
+        )
+    }
 }
 
 private struct ProviderLimitCard: View {
     let provider: ProviderLimit
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -60,6 +90,8 @@ private struct ProviderLimitCard: View {
                     Text("Not configured").font(.system(size: 11)).foregroundStyle(.tertiary)
                 } else if let err = provider.error {
                     Text(err).font(.system(size: 11)).foregroundStyle(.orange)
+                } else if provider.windows.isEmpty {
+                    Text(l10n.noUsageData).font(.system(size: 11)).foregroundStyle(.tertiary)
                 }
             }
 
@@ -76,7 +108,7 @@ private struct ProviderLimitCard: View {
                 .fill(Color(nsColor: .controlBackgroundColor))
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 0.5))
         )
-        .opacity(provider.configured ? 1 : 0.55)
+        .opacity(provider.configured && !provider.windows.isEmpty ? 1 : 0.55)
     }
 }
 

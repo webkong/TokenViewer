@@ -64,6 +64,11 @@ final class L10n: ObservableObject {
     // MARK: - Limits
     var limitsTitle: String { isZh ? "限额" : "Limits" }
     var limitsSubtitle: String { isZh ? "各工具配额窗口及重置倒计时" : "Per-agent quota windows with reset countdowns" }
+    var limitsVisibilityDesc: String { isZh ? "选择哪些 Agent 显示在菜单栏弹窗的限额卡片里。" : "Choose which agents appear in the menu-bar limits card." }
+    var noUsageData: String { isZh ? "暂无数据" : "No usage data" }
+    var noLimitsData: String { isZh ? "当前没有限额数据。" : "No limits data yet." }
+    var limitsNoDataDesc: String { isZh ? "使用任意支持的 Agent 后，再点击同步查看。或者前往设置勾选要显示的 Agent。" : "Use any supported agent, then sync to view data. You can also open Settings to choose which agents appear." }
+    var openSettings: String { isZh ? "打开设置" : "Open Settings" }
     var heatmapLess: String { isZh ? "少" : "Less" }
     var heatmapMore: String { isZh ? "多" : "More" }
 
@@ -78,6 +83,7 @@ final class L10n: ObservableObject {
     var languageLabel: String { isZh ? "语言" : "Language" }
     var menuBarPanel: String { isZh ? "菜单栏面板" : "Menu Bar Panel" }
     var menuBarPanelDesc: String { isZh ? "选择菜单栏弹窗中显示的板块。" : "Choose which sections appear in the menu-bar popover." }
+    var menuBarLimitsCards: String { isZh ? "菜单栏弹窗限额卡片" : "Menu Bar Popover Limits Cards" }
     var summary: String { isZh ? "摘要" : "Summary" }
     var models: String { isZh ? "模型" : "Models" }
     var heatmap: String { isZh ? "热力图" : "Heatmap" }
