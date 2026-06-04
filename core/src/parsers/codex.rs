@@ -39,6 +39,7 @@ pub fn parse_codex_format(
         }
 
         let mut last_model = String::from("unknown");
+        let mut last_provider = String::new();
         let bucket = file_mtime_bucket(&file);
 
         for line in &lines {
@@ -51,6 +52,14 @@ pub fn parse_codex_format(
             let payload = v.get("payload").unwrap_or(&Value::Null);
 
             // Track model from turn_context / session_meta
+            if event_type == "session_meta" {
+                if let Some(p) = payload.get("model_provider").and_then(|m| m.as_str()) {
+                    if !p.is_empty() {
+                        last_provider = p.to_string();
+                    }
+                }
+            }
+
             if event_type == "turn_context" || event_type == "session_meta" {
                 if let Some(m) = payload.get("model").and_then(|m| m.as_str()) {
                     if !m.is_empty() {
@@ -111,7 +120,15 @@ pub fn parse_codex_format(
                 id: None,
                 hour_start,
                 source: source.to_string(),
-                model: last_model.clone(),
+                model: {
+                    if !last_model.is_empty() && last_model != "unknown" {
+                        last_model.clone()
+                    } else if !last_provider.is_empty() {
+                        last_provider.clone()
+                    } else {
+                        last_model.clone()
+                    }
+                },
                 input_tokens: fi,
                 output_tokens: fo,
                 cached_input_tokens: fc_read,
