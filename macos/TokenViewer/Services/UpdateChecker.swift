@@ -40,6 +40,8 @@ final class UpdateChecker: ObservableObject {
     private var isChecking = false
     private var autoCheckTimer: Timer?
     private static let lastHandledKey = "tokenviewer.lastAutoHandledUpdateVersion"
+    private static let lastInstallPromptVersionKey = "tokenviewer.lastInstallPromptVersion"
+    private static let lastInstallPromptDayKey = "tokenviewer.lastInstallPromptDay"
 
     struct ReleaseInfo: Equatable {
         let version: String
@@ -62,9 +64,9 @@ final class UpdateChecker: ObservableObject {
         Task { await performCheck(auto: false) }
     }
 
-    func install() {
+    func install(autoTriggered: Bool = false) {
         guard let release = latestRelease else { return }
-        Task { await downloadAndInstall(release: release, rememberAuto: false) }
+        Task { await downloadAndInstall(release: release, rememberAuto: false, autoTriggered: autoTriggered) }
     }
 
     // MARK: - Private
@@ -86,7 +88,7 @@ final class UpdateChecker: ObservableObject {
             if isNewer(release.version, than: currentVersion) {
                 state = .available(version: release.version)
                 if auto, UserDefaults.standard.string(forKey: Self.lastHandledKey) != release.version {
-                    await downloadAndInstall(release: release, rememberAuto: true)
+                    await downloadAndInstall(release: release, rememberAuto: true, autoTriggered: true)
                 }
             } else {
                 state = .upToDate(version: currentVersion)
@@ -96,7 +98,11 @@ final class UpdateChecker: ObservableObject {
         }
     }
 
-    private func downloadAndInstall(release: ReleaseInfo, rememberAuto: Bool) async {
+    private func downloadAndInstall(release: ReleaseInfo, rememberAuto: Bool, autoTriggered: Bool) async {
+        if autoTriggered, shouldThrottleInstallPrompt(for: release.version) {
+            return
+        }
+
         state = .downloading(version: release.version)
 
         do {
@@ -111,6 +117,8 @@ final class UpdateChecker: ObservableObject {
             } else {
                 installURL = release.releaseURL
             }
+
+            recordInstallPrompt(for: release.version)
 
             guard presentConfirmation(for: release) else {
                 state = .available(version: release.version); return
@@ -131,6 +139,30 @@ final class UpdateChecker: ObservableObject {
             NSWorkspace.shared.open(release.releaseURL)
             state = .available(version: release.version)
         }
+    }
+
+    private func shouldThrottleInstallPrompt(for version: String) -> Bool {
+        let defaults = UserDefaults.standard
+        guard defaults.string(forKey: Self.lastInstallPromptVersionKey) == version,
+              let storedDay = defaults.string(forKey: Self.lastInstallPromptDayKey) else {
+            return false
+        }
+        return storedDay == todayStamp()
+    }
+
+    private func recordInstallPrompt(for version: String) {
+        let defaults = UserDefaults.standard
+        defaults.set(version, forKey: Self.lastInstallPromptVersionKey)
+        defaults.set(todayStamp(), forKey: Self.lastInstallPromptDayKey)
+    }
+
+    private func todayStamp() -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: Date())
     }
 
     private func presentConfirmation(for release: ReleaseInfo) -> Bool {

@@ -15,7 +15,17 @@ struct PopoverView: View {
     @AppStorage("panelShowTrend") private var showTrend = true
     @AppStorage("panelShowModels") private var showModels = true
 
+    private let maxPopoverHeight: CGFloat = 620
+    var onHeightChange: ((CGFloat) -> Void)?
+
     var body: some View {
+        let visibleSectionCount = 2
+            + (showTrend && !viewModel.dailyUsage.isEmpty ? 1 : 0)
+            + (showHeatmap && !viewModel.heatmap.isEmpty ? 1 : 0)
+            + (showModels && !viewModel.modelBreakdown.isEmpty ? 1 : 0)
+        let contentHeight = CGFloat(visibleSectionCount) * 88 + 132
+        let popoverHeight = min(maxPopoverHeight, max(360, contentHeight))
+
         VStack(spacing: 0) {
             header
             Divider()
@@ -40,7 +50,9 @@ struct PopoverView: View {
             Divider()
             footer
         }
-        .frame(width: 420, height: 620)
+        .frame(width: 420, height: popoverHeight)
+        .onAppear { onHeightChange?(popoverHeight) }
+        .onChange(of: popoverHeight) { onHeightChange?($0) }
         .onKeyPress(.escape) { onClose?(); return .handled }
         .onAppear {
             viewModel.sync()

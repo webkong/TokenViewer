@@ -84,7 +84,7 @@ struct AboutView: View {
             guard case .available(let availableVersion) = updater.state else { return }
             guard autoDownloadVersion != availableVersion else { return }
             autoDownloadVersion = availableVersion
-            updater.install()
+            updater.install(autoTriggered: true)
         }
     }
 

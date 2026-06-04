@@ -19,14 +19,19 @@ final class StatusBarController {
         let popover = NSPopover()
         popover.contentSize = NSSize(width: 420, height: 620)
         popover.behavior = .transient
-        let hostingController = NSHostingController(
+        var hostedController: NSHostingController<PopoverView>?
+        hostedController = NSHostingController(
             rootView: PopoverView(
                 onOpenMainWindow: { [weak self] in self?.openMainWindow() },
-                onClose: { [weak self] in self?.close() }
+                onClose: { [weak self] in self?.close() },
+                onHeightChange: { [weak popover] height in
+                    popover?.contentSize = NSSize(width: 420, height: height)
+                    hostedController?.preferredContentSize = NSSize(width: 420, height: height)
+                }
             )
         )
-        hostingController.preferredContentSize = NSSize(width: 420, height: 620)
-        popover.contentViewController = hostingController
+        hostedController?.preferredContentSize = NSSize(width: 420, height: 620)
+        popover.contentViewController = hostedController
         self.popover = popover
     }
 

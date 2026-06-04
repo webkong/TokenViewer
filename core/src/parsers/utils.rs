@@ -101,6 +101,14 @@ pub struct FileCursor {
     /// Per-file last mtime (epoch secs) for skip-if-unchanged optimization.
     #[serde(default)]
     pub mtimes: HashMap<String, u64>,
+    /// Per-file last known model context for parsers that need stateful
+    /// metadata across incremental reads.
+    #[serde(default)]
+    pub last_models: HashMap<String, String>,
+    /// Per-file last known provider context for parsers that need stateful
+    /// metadata across incremental reads.
+    #[serde(default)]
+    pub last_providers: HashMap<String, String>,
     /// Per-directory mtime (epoch secs) — skip re-glob if dir unchanged.
     #[serde(default)]
     pub dir_mtimes: HashMap<String, u64>,

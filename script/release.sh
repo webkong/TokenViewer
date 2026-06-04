@@ -41,6 +41,7 @@ DMG_PATH="$RELEASE_DIR/$APP_DISPLAY_NAME.dmg"
 ZIP_PATH="$RELEASE_DIR/$APP_DISPLAY_NAME-$VERSION.zip"
 
 PKG_PATH="$RELEASE_DIR/$APP_DISPLAY_NAME-$VERSION-Installer.pkg"
+PKG_ALIAS_PATH="$RELEASE_DIR/$APP_DISPLAY_NAME-Installer.pkg"
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -206,6 +207,7 @@ POSTINSTALL
 
   chmod 755 "$scripts_dir/preinstall" "$scripts_dir/postinstall"
   rm -f "$PKG_PATH"
+  rm -f "$PKG_ALIAS_PATH"
 
   pkgbuild \
     --root "$root_dir" \
@@ -215,8 +217,11 @@ POSTINSTALL
     --install-location "/" \
     "$PKG_PATH"
 
+  cp -f "$PKG_PATH" "$PKG_ALIAS_PATH"
+
   rm -rf "$work_dir"
   echo "✓ PKG: $PKG_PATH"
+  echo "✓ PKG alias: $PKG_ALIAS_PATH"
 }
 
 # ─── DMG ──────────────────────────────────────────────────────────────────────
@@ -320,11 +325,13 @@ push_release() {
         --title "$APP_DISPLAY_NAME $VERSION" --notes-file "$notes_file"
       local assets=("$DMG_PATH" "$ZIP_PATH")
       [[ -f "$PKG_PATH" ]] && assets+=("$PKG_PATH")
+      [[ -f "$PKG_ALIAS_PATH" ]] && assets+=("$PKG_ALIAS_PATH")
       gh release upload "$RELEASE_TAG" "${assets[@]}" \
         --repo "$GITHUB_RELEASE_REPO" --clobber
     else
       local assets=("$DMG_PATH" "$ZIP_PATH")
       [[ -f "$PKG_PATH" ]] && assets+=("$PKG_PATH")
+      [[ -f "$PKG_ALIAS_PATH" ]] && assets+=("$PKG_ALIAS_PATH")
       gh release create "$RELEASE_TAG" "${assets[@]}" \
         --repo "$GITHUB_RELEASE_REPO" \
         --title "$APP_DISPLAY_NAME $VERSION" --notes-file "$notes_file"
@@ -338,7 +345,7 @@ push_release() {
     python3 "$ROOT_DIR/script/upload_release.py" \
       "$GITHUB_RELEASE_REPO" "$RELEASE_TAG" \
       "$APP_DISPLAY_NAME $VERSION" "$RELEASE_NOTES_FILE" \
-      "$DMG_PATH" "$ZIP_PATH"
+      "$DMG_PATH" "$ZIP_PATH" "$PKG_ALIAS_PATH"
   fi
   echo "✓ Released $RELEASE_TAG"
 }

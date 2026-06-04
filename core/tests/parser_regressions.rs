@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::thread::sleep;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rusqlite::Connection;
-use tokenviewer_core::parsers::parse_all;
+use tokenviewer_core::parsers::{codex, parse_all};
 
 #[derive(Debug, Clone)]
 struct Expectation {
@@ -68,6 +69,40 @@ fn provider_parser_matrix_matches_reference_shapes() {
         assert_eq!(record.total_tokens, expected.total_tokens, "token mismatch for {source}");
         assert_eq!(record.conversation_count, 1, "conversation count mismatch for {source}");
     }
+}
+
+#[test]
+fn codex_incremental_sync_keeps_model_context() {
+    let home = temp_home();
+    let file = home.join(".codex/sessions/2026/01/01/rollout-1.jsonl");
+
+    write_text(
+        &file,
+        concat!(
+            "{\"timestamp\":\"2026-01-01T00:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"model_provider\":\"openai\",\"model\":\"gpt-4.1\"}}\n",
+            "{\"timestamp\":\"2026-01-01T00:01:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":10,\"output_tokens\":20,\"cached_input_tokens\":1,\"cache_creation_input_tokens\":2,\"reasoning_output_tokens\":3}}}}"
+        ),
+    );
+
+    let (first_records, cursor_json) = codex::parse(&home, None).expect("first codex parse");
+    assert_eq!(first_records.len(), 1);
+    assert_eq!(first_records[0].model, "gpt-4.1");
+
+    sleep(Duration::from_millis(1100));
+
+    write_text(
+        &file,
+        concat!(
+            "{\"timestamp\":\"2026-01-01T00:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"model_provider\":\"openai\",\"model\":\"gpt-4.1\"}}\n",
+            "{\"timestamp\":\"2026-01-01T00:01:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":10,\"output_tokens\":20,\"cached_input_tokens\":1,\"cache_creation_input_tokens\":2,\"reasoning_output_tokens\":3}}}}\n",
+            "{\"timestamp\":\"2026-01-01T00:02:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":15,\"output_tokens\":30,\"cached_input_tokens\":1,\"cache_creation_input_tokens\":2,\"reasoning_output_tokens\":3}}}}"
+        ),
+    );
+
+    let (second_records, _) = codex::parse(&home, Some(&cursor_json)).expect("second codex parse");
+    assert_eq!(second_records.len(), 1);
+    assert_eq!(second_records[0].model, "gpt-4.1");
+    assert_ne!(second_records[0].model, "unknown");
 }
 
 fn temp_home() -> PathBuf {

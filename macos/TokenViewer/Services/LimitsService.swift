@@ -303,6 +303,10 @@ enum LimitsService {
     private static func numeric(_ v: Any?) -> Double? {
         if let d = v as? Double { return d }
         if let i = v as? Int { return Double(i) }
+        if let s = v as? String {
+            let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let d = Double(trimmed) { return d }
+        }
         return nil
     }
 

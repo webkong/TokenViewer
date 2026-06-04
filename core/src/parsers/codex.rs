@@ -29,17 +29,39 @@ pub fn parse_codex_format(
             continue;
         }
         let offset = cursor.get_offset(&key);
-        let (lines, new_offset) = match read_lines_from_offset(&file, offset) {
+        let file_len = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
+        let start_offset = if offset > file_len {
+            cursor.last_models.remove(&key);
+            cursor.last_providers.remove(&key);
+            0
+        } else {
+            offset
+        };
+        let mut last_model = cursor
+            .last_models
+            .get(&key)
+            .cloned()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| String::from("unknown"));
+        let mut last_provider = cursor
+            .last_providers
+            .get(&key)
+            .cloned()
+            .unwrap_or_default();
+        let (lines, new_offset) = match read_lines_from_offset(&file, start_offset) {
             Ok(r) => r,
             Err(_) => continue,
         };
         if lines.is_empty() {
             cursor.set_offset(&key, new_offset);
+            if !last_model.is_empty() {
+                cursor.last_models.insert(key.clone(), last_model);
+            }
+            if !last_provider.is_empty() {
+                cursor.last_providers.insert(key.clone(), last_provider);
+            }
             continue;
         }
-
-        let mut last_model = String::from("unknown");
-        let mut last_provider = String::new();
         let bucket = file_mtime_bucket(&file);
 
         for line in &lines {
@@ -140,6 +162,12 @@ pub fn parse_codex_format(
         }
 
         cursor.set_offset(&key, new_offset);
+        if !last_model.is_empty() {
+            cursor.last_models.insert(key.clone(), last_model);
+        }
+        if !last_provider.is_empty() {
+            cursor.last_providers.insert(key.clone(), last_provider);
+        }
     }
 
     Ok((aggregate_records(all_records), cursor.to_json()))

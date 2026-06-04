@@ -40,6 +40,8 @@ struct SettingsView: View {
             if #available(macOS 13.0, *) {
                 launchAtLogin = SMAppService.mainApp.status == .enabled
             }
+            panelShowSummary = true
+            panelShowLimits = true
             loadProviders()
         }
     }
@@ -96,11 +98,19 @@ struct SettingsView: View {
             Text(l10n.menuBarPanelDesc)
                 .font(.system(size: 11)).foregroundStyle(.secondary)
             Divider()
-            Toggle(l10n.summary, isOn: $panelShowSummary)
-            Toggle(l10n.limits, isOn: $panelShowLimits)
-            Toggle(l10n.trend, isOn: $panelShowTrend)
-            Toggle(l10n.heatmap, isOn: $panelShowHeatmap)
-            Toggle(l10n.topModels, isOn: $panelShowModels)
+            HStack(spacing: 8) {
+                panelChip(title: l10n.summary, isSelected: true, isLocked: true) {}
+                panelChip(title: l10n.limits, isSelected: true, isLocked: true) {}
+                panelChip(title: l10n.trend, isSelected: panelShowTrend) {
+                    panelShowTrend.toggle()
+                }
+                panelChip(title: l10n.heatmap, isSelected: panelShowHeatmap) {
+                    panelShowHeatmap.toggle()
+                }
+                panelChip(title: l10n.topModels, isSelected: panelShowModels) {
+                    panelShowModels.toggle()
+                }
+            }
         }
     }
 
@@ -178,27 +188,28 @@ struct SettingsView: View {
 
     private var dataSection: some View {
         SettingsCard(title: l10n.dataManagement) {
-            HStack {
-                Text(l10n.directory).font(.system(size: 13))
-                Spacer()
-                Text(dataDir).font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
-            }
-            Divider()
-            HStack {
-                Button(l10n.openInFinder) {
-                    NSWorkspace.shared.open(URL(fileURLWithPath: dataDir))
-                }
-                .font(.system(size: 13))
-                Spacer()
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack {
+                    Text(l10n.directory).font(.system(size: 13))
+                    Spacer()
+                    Text(dataDir).font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 12)
+                    Button(l10n.openInFinder) {
+                        NSWorkspace.shared.open(URL(fileURLWithPath: dataDir))
+                    }
+                    .font(.system(size: 13))
+                }
+
+                Divider()
+
+                HStack {
+                    Text(l10n.rebuildData).font(.system(size: 13))
+                    Spacer()
                     Button(l10n.rebuildData) { showRebuildAlert = true }
                         .font(.system(size: 13))
+                        .buttonStyle(.borderedProminent)
                         .disabled(viewModel.isLoading)
-                    Spacer()
                 }
                 Text(l10n.rebuildDataHint)
                     .font(.system(size: 11))
@@ -222,6 +233,43 @@ struct SettingsView: View {
             let decoded = data.flatMap { try? JSONDecoder().decode([ProviderStatus].self, from: $0) } ?? []
             await MainActor.run { providers = decoded }
         }
+    }
+
+    private func panelChip(title: String, isSelected: Bool, isLocked: Bool = false, action: @escaping () -> Void) -> some View {
+        let fillColor = isSelected ? TVColor.brand : Color(nsColor: .controlBackgroundColor)
+        let borderColor: Color = isSelected
+            ? TVColor.brand.opacity(0.22)
+            : Color(nsColor: .separatorColor).opacity(0.55)
+
+        return Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.95) : .secondary)
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.white : .primary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .fixedSize(horizontal: true, vertical: true)
+                .background(
+                    Capsule()
+                        .fill(fillColor)
+                    .overlay(
+                        Capsule().strokeBorder(
+                            borderColor,
+                            lineWidth: 0.75
+                        )
+                    )
+                    .shadow(color: isSelected ? TVColor.brand.opacity(0.14) : .clear, radius: 1.5, x: 0, y: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(isLocked)
+        .opacity(isLocked ? 0.82 : 1.0)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
 }
