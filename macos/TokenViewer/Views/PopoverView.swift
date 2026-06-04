@@ -44,7 +44,7 @@ struct PopoverView: View {
         .onKeyPress(.escape) { onClose?(); return .handled }
         .onAppear {
             viewModel.sync()
-            if showLimits { limitsVM.refreshIfStale() }
+            limitsVM.refreshIfStale()
         }
     }
 

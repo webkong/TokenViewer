@@ -174,6 +174,7 @@ class UsageViewModel: ObservableObject {
     }
 
     func sync() {
+        guard !isLoading else { return }
         #if DEBUG
         if ProcessInfo.processInfo.environment["TV_SKIP_SYNC"] != nil {
             refresh(); return

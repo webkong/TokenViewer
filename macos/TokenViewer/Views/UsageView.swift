@@ -102,7 +102,7 @@ struct UsageView: View {
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .onAppear { viewModel.refresh() }
+        .onAppear { viewModel.sync() }
     }
 
     /// Lay two cards side-by-side (top-aligned) when wide, else stacked.
