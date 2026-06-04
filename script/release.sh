@@ -179,12 +179,11 @@ fi
 exit 0
 PREINSTALL
 
-  # postinstall: remove quarantine + relaunch
+  # postinstall: remove quarantine + relaunch the app after a successful install.
   cat >"$scripts_dir/postinstall" <<POSTINSTALL
 #!/bin/bash
 set -euo pipefail
 APP_PATH="/Applications/$APP_DISPLAY_NAME.app"
-MARKER="/tmp/com.tokenviewer.app.was-running"
 
 console_user() { /usr/bin/stat -f "%Su" /dev/console 2>/dev/null || true; }
 run_as_user() {
@@ -200,11 +199,8 @@ if [[ -d "\$APP_PATH" ]]; then
   /usr/bin/xattr -dr com.apple.quarantine "\$APP_PATH" 2>/dev/null || true
 fi
 
-# Relaunch if it was running before install
-if [[ -f "\$MARKER" ]]; then
-  /bin/rm -f "\$MARKER"
-  [[ -d "\$APP_PATH" ]] && run_as_user /usr/bin/open "\$APP_PATH" >/dev/null 2>&1 || true
-fi
+# Relaunch the installed app for interactive installs and updates.
+[[ -d "\$APP_PATH" ]] && run_as_user /usr/bin/open "\$APP_PATH" >/dev/null 2>&1 || true
 exit 0
 POSTINSTALL
 
