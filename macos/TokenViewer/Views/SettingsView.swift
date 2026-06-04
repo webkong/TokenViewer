@@ -36,8 +36,10 @@ struct SettingsView: View {
                 generalSection
                 appearanceSection
                 panelSection
+                updatesSection
                 providersSection
                 dataSection
+                footer
             }
             .padding(20)
         }

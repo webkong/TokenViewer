@@ -89,7 +89,7 @@ final class UpdateChecker: ObservableObject {
                 state = .upToDate(version: currentVersion)
             }
         } catch {
-            state = .upToDate(version: currentVersion)
+            state = .failed("Could not check for updates")
         }
     }
 

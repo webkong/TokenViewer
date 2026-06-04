@@ -4,16 +4,22 @@
 <dict>
     <key>CFBundleName</key>
     <string>TokenViewer</string>
-    <key>CFBundleDisplayName</key>
-    <string>Token Viewer</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
+	<key>CFBundleDisplayName</key>
+	<string>Token Viewer</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>CFBundleShortVersionString</key>
     <string>$(MARKETING_VERSION)</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSHumanReadableCopyright</key>

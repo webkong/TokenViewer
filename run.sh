@@ -16,18 +16,20 @@ fi
 
 echo "▶ Building Swift app..."
 cd "$ROOT/macos"
-BUILD_LOG=$(xcodebuild -scheme TokenViewer -configuration Release build 2>&1)
+BUILD_LOG=$(xcodebuild -scheme TokenViewer -configuration Release -derivedDataPath "$ROOT/DerivedData" build 2>&1)
 echo "$BUILD_LOG" | grep -E "(BUILD|error:)" | head -5
 echo "$BUILD_LOG" | grep -q "BUILD SUCCEEDED" || { echo "❌ Build failed"; exit 1; }
 
 echo "▶ Launching..."
 pkill -f "TokenViewer.app" 2>/dev/null || true; sleep 0.5
-APP=$(find ~/Library/Developer/Xcode/DerivedData/TokenViewer-*/Build/Products/Release -name "TokenViewer.app" -maxdepth 1 2>/dev/null | head -1)
+APP=$(find "$ROOT/DerivedData/Build/Products/Release" -name "TokenViewer.app" -maxdepth 1 2>/dev/null | head -1)
 if [ -z "$APP" ]; then echo "❌ App not found"; exit 1; fi
 echo "  $APP"
+APP_BIN="$APP/Contents/MacOS/TokenViewer"
+if [ ! -x "$APP_BIN" ]; then echo "❌ App binary not found"; exit 1; fi
 if [[ "$*" == *"--skip-sync"* ]]; then
-    TV_SKIP_SYNC=1 open -a "$APP" --env TV_SKIP_SYNC=1
+    TV_SKIP_SYNC=1 "$APP_BIN" >/dev/null 2>&1 &
 else
-    open "$APP" &
+    "$APP_BIN" >/dev/null 2>&1 &
 fi
 echo "✅ Done"
