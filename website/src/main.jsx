@@ -5,7 +5,7 @@ import "./styles.css";
 
 const SITE_URL = "https://tokenviewer.webkong.top";
 const GITHUB_REPO_URL = "https://github.com/webkong/TokenViewer";
-const PKG_DOWNLOAD_URL = "https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer-0.1.1-Installer.pkg"
+const PKG_DOWNLOAD_URL = "https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer-0.1.2-Installer.pkg"
 const DMG_DOWNLOAD_URL = "https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer.dmg";
 const LANGUAGE_STORAGE_KEY = "tokenviewer-site-language";
 

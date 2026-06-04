@@ -8,8 +8,8 @@
 
 A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects token counts and costs from **22 AI coding tools**, aggregates them locally, and surfaces real usage trends in a beautiful dashboard. No cloud account, no Node.js, no browser — just a tiny native app.
 
-[![Release](https://img.shields.io/github/v/release/webkong/TokenViewer?color=059669&label=Download)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer-0.1.1-Installer.pkg)
-[![Platform](https://img.shields.io/badge/Platform-macOS%2014%2B-lightgrey?logo=apple&logoColor=white)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer-0.1.1-Installer.pkg)
+[![Release](https://img.shields.io/github/v/release/webkong/TokenViewer?color=059669&label=Download)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer-0.1.2-Installer.pkg)
+[![Platform](https://img.shields.io/badge/Platform-macOS%2014%2B-lightgrey?logo=apple&logoColor=white)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer-0.1.2-Installer.pkg)
 [![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-green.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
 [![GitHub stars](https://img.shields.io/github/stars/webkong/TokenViewer?style=social)](https://github.com/webkong/TokenViewer/stargazers)
 
@@ -29,7 +29,7 @@ A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects tok
 
 > **Requirements**: macOS 14 (Sonoma) or later, Apple Silicon or Intel.
 
-1. [**Download the latest DMG**](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer-0.1.1-Installer.pkg)
+1. [**Download the latest DMG**](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer-0.1.2-Installer.pkg)
 2. Open the DMG and drag **TokenViewer.app** to `/Applications`
 3. Launch — the **T** icon appears in your menu bar
 4. Click the icon for an instant usage summary
