@@ -86,18 +86,42 @@ final class L10n: ObservableObject {
     var syncFrequency: String { isZh ? "同步频率" : "Sync Frequency" }
     var manual: String { isZh ? "手动" : "Manual" }
     var updates: String { isZh ? "更新" : "Updates" }
+    var softwareUpdate: String { isZh ? "软件更新" : "Software Update" }
     var upToDate: String { isZh ? "已是最新版本" : "Up to date" }
     var newVersion: String { isZh ? "有新版本" : "New version available" }
     var download: String { isZh ? "下载" : "Download" }
     var checkNow: String { isZh ? "检查更新" : "Check Now" }
+    var lastChecked: String { isZh ? "上次检查" : "Last checked" }
+    var checkingUpdates: String { isZh ? "正在检查更新…" : "Checking for updates…" }
+    var releaseNotesTitle: String { isZh ? "更新说明" : "Release Notes" }
+    var installUpdate: String { isZh ? "安装更新" : "Install Update" }
+    var later: String { isZh ? "稍后" : "Later" }
+    var updateAvailableMessage: String { isZh ? "现在安装新版本？" : "Install the new version now?" }
+    func updateAvailableTitle(version: String) -> String { isZh ? "TokenViewer \(version) 有可用更新" : "TokenViewer \(version) is available" }
+    func downloadingUpdate(version: String) -> String { isZh ? "正在下载 v\(version)…" : "Downloading v\(version)…" }
+    var checkForUpdatesFailed: String { isZh ? "无法检查更新" : "Could not check for updates" }
+    var couldNotOpenInstaller: String { isZh ? "无法打开安装器" : "Could not open installer" }
+    var noReleaseNotesAvailable: String { isZh ? "暂无更新说明。" : "No release notes available." }
+    func updateAvailableStatus(version: String) -> String { isZh ? "v\(version) 有新版本" : "v\(version) available" }
+    var github: String { isZh ? "GitHub" : "GitHub" }
+    var engine: String { isZh ? "引擎" : "Engine" }
+    var storage: String { isZh ? "存储" : "Storage" }
+    func copyrightFooter(year: Int) -> String {
+        isZh ? "© \(year) webkong. 保留所有权利。" : "© \(year) webkong. All rights reserved."
+    }
     var providers: String { isZh ? "数据源" : "Providers" }
     var noProviderData: String { isZh ? "尚无数据。使用任意 AI 工具后点击同步。" : "No provider data yet. Use any supported AI tool, then Sync." }
     func recordsCount(_ n: Int) -> String { isZh ? "\(n) 条记录" : "\(n) records" }
     func activeCount(_ n: Int) -> String { isZh ? "22 个支持工具中 \(n) 个活跃" : "\(n) of 22 supported tools active" }
     var data: String { isZh ? "数据" : "Data" }
-    var resetData: String { isZh ? "重置数据" : "Reset Data" }
-    var resetDataDesc: String { isZh ? "删除所有本地 Token 数据，此操作不可撤销。" : "Deletes all local token data. This cannot be undone." }
-    var resetConfirm: String { isZh ? "确认重置" : "Confirm Reset" }
-    var resetDone: String { isZh ? "请重启 TokenViewer 完成重置。" : "Please relaunch TokenViewer to finish resetting." }
+    var dataManagement: String { isZh ? "数据管理" : "Data Management" }
+    var directory: String { isZh ? "目录" : "Directory" }
+    var openInFinder: String { isZh ? "在 Finder 中打开" : "Open in Finder" }
+    var rebuildData: String { isZh ? "重建数据" : "Rebuild Data" }
+    var rebuildDataDesc: String { isZh ? "清理已处理的数据和同步游标，然后从原始数据重新拉取。" : "Clears processed data and sync cursors, then rescans raw source files." }
+    var rebuildDataHint: String { isZh ? "当数据看起来缺失、过旧，或同步游标异常时使用。" : "Use when data looks stale, missing, or sync cursors are out of date." }
+    var rebuildConfirm: String { isZh ? "确认重建" : "Confirm Rebuild" }
+    var rebuildDone: String { isZh ? "数据重建完成，请稍后刷新查看。" : "Data rebuild complete. Refresh to view the latest data." }
+    var cancel: String { isZh ? "取消" : "Cancel" }
     var about: String { isZh ? "关于" : "About" }
 }

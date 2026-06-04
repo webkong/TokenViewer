@@ -100,6 +100,15 @@ impl Database {
         Ok(())
     }
 
+    /// Clear processed usage data and sync cursors so the next sync replays
+    /// the original raw files from scratch.
+    pub fn clear_processed_data(&self) -> SqlResult<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute_batch("DELETE FROM usage; DELETE FROM sync_cursors;")?;
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn query_summary(&self, from: &str, to: &str) -> SqlResult<UsageSummary> {
         let mut stmt = self.conn.prepare(
             "SELECT

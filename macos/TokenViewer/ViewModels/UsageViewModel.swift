@@ -196,6 +196,23 @@ class UsageViewModel: ObservableObject {
         }
     }
 
+    func rebuildData() {
+        guard !isLoading else { return }
+        isLoading = true
+        let startTime = Date()
+        Task.detached { [weak self] in
+            _ = CoreBridge.shared.rebuildAll()
+            let elapsed = Date().timeIntervalSince(startTime)
+            if elapsed < 1.0 {
+                try? await Task.sleep(nanoseconds: UInt64((1.0 - elapsed) * 1_000_000_000))
+            }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.refresh()
+            }
+        }
+    }
+
     private func dateRange(for range: TimeRange) -> (String, String) {
         let cal = Calendar.current
         let todayStart = cal.startOfDay(for: Date())

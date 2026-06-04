@@ -28,8 +28,8 @@ echo "  $APP"
 APP_BIN="$APP/Contents/MacOS/TokenViewer"
 if [ ! -x "$APP_BIN" ]; then echo "❌ App binary not found"; exit 1; fi
 if [[ "$*" == *"--skip-sync"* ]]; then
-    TV_SKIP_SYNC=1 "$APP_BIN" >/dev/null 2>&1 &
+    TV_SKIP_SYNC=1 TV_OPEN_MAIN_WINDOW=1 "$APP_BIN" >/dev/null 2>&1 &
 else
-    "$APP_BIN" >/dev/null 2>&1 &
+    TV_OPEN_MAIN_WINDOW=1 "$APP_BIN" >/dev/null 2>&1 &
 fi
 echo "✅ Done"

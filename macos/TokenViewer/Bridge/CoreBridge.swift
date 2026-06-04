@@ -29,6 +29,10 @@ final class CoreBridge: @unchecked Sendable {
         call { tt_sync_all($0) }
     }
 
+    func rebuildAll() -> Data? {
+        call { tt_rebuild_all($0) }
+    }
+
     func getProviderStatus() -> Data? {
         call { tt_get_provider_status($0) }
     }

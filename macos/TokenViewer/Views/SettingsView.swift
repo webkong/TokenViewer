@@ -9,22 +9,16 @@ struct SettingsView: View {
     @AppStorage("panelShowTrend") private var panelShowTrend = true
     @AppStorage("panelShowModels") private var panelShowModels = true
     @State private var launchAtLogin = false
-    @State private var showResetAlert = false
-    @State private var showRestartNote = false
+    @State private var showRebuildAlert = false
     @State private var providers: [ProviderStatus] = []
     @ObservedObject private var theme = ThemeManager.shared
     @ObservedObject private var currency = CurrencyStore.shared
-    @ObservedObject private var updater = UpdateChecker.shared
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var viewModel = UsageViewModel.shared
 
     private let dataDir: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return "\(home)/.tokenviewer"
-    }()
-
-    private let version: String = {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
     }()
 
     var body: some View {
@@ -36,10 +30,8 @@ struct SettingsView: View {
                 generalSection
                 appearanceSection
                 panelSection
-                updatesSection
                 providersSection
                 dataSection
-                footer
             }
             .padding(20)
         }
@@ -110,44 +102,6 @@ struct SettingsView: View {
             Toggle(l10n.heatmap, isOn: $panelShowHeatmap)
             Toggle(l10n.topModels, isOn: $panelShowModels)
         }
-    }
-
-    // MARK: Updates
-
-    private var updatesSection: some View {
-        SettingsCard(title: l10n.updates) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Software Update").font(.system(size: 13))
-                    if !updater.status.isEmpty {
-                        Text(updater.status).font(.system(size: 10)).foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-                if updater.latestURL != nil {
-                    Button("Download") { if let u = updater.latestURL { NSWorkspace.shared.open(u) } }
-                }
-                Button(action: { updater.check() }) {
-                    Text(updater.busy ? "Checking…" : "Check for Updates")
-                }.disabled(updater.busy)
-            }
-        }
-    }
-
-    // MARK: Footer
-
-    private var footer: some View {
-        HStack(spacing: 8) {
-            Spacer()
-            Text("TokenViewer v\(version)").font(.system(size: 11)).foregroundStyle(.secondary)
-            Text("·").foregroundStyle(.tertiary)
-            Button("GitHub") {
-                if let u = URL(string: "https://github.com/\(UpdateChecker.repo)") { NSWorkspace.shared.open(u) }
-            }
-            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(TVColor.brand)
-            Spacer()
-        }
-        .padding(.top, 4)
     }
 
     // MARK: General
@@ -223,53 +177,42 @@ struct SettingsView: View {
     // MARK: Data
 
     private var dataSection: some View {
-        SettingsCard(title: l10n.data) {
+        SettingsCard(title: l10n.dataManagement) {
             HStack {
-                Text("Directory").font(.system(size: 13))
+                Text(l10n.directory).font(.system(size: 13))
                 Spacer()
                 Text(dataDir).font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
             }
             Divider()
             HStack {
-                Button("Open in Finder") {
+                Button(l10n.openInFinder) {
                     NSWorkspace.shared.open(URL(fileURLWithPath: dataDir))
                 }
+                .font(.system(size: 13))
                 Spacer()
-                Button("Reset All Data", role: .destructive) { showResetAlert = true }
             }
-            .alert("Reset All Data?", isPresented: $showResetAlert) {
-                Button("Cancel", role: .cancel) {}
-                Button("Reset", role: .destructive) { resetData() }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Button(l10n.rebuildData) { showRebuildAlert = true }
+                        .font(.system(size: 13))
+                        .disabled(viewModel.isLoading)
+                    Spacer()
+                }
+                Text(l10n.rebuildDataHint)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Text(l10n.rebuildDataDesc)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+            .alert(l10n.rebuildConfirm, isPresented: $showRebuildAlert) {
+                Button(l10n.cancel, role: .cancel) {}
+                Button(l10n.rebuildData, role: .destructive) { UsageViewModel.shared.rebuildData() }
             } message: {
-                Text(l10n.resetDataDesc)
+                Text(l10n.rebuildDataDesc)
             }
-            .alert("Data Reset", isPresented: $showRestartNote) {
-                Button("Quit Now") { NSApplication.shared.terminate(nil) }
-                Button("Later", role: .cancel) {}
-            } message: {
-                Text(l10n.resetDone)
-            }
-        }
-    }
-
-    // MARK: About
-
-    private var aboutSection: some View {
-        SettingsCard(title: l10n.about) {
-            row("Version", version)
-            Divider()
-            row("Engine", "tokenviewer-core (Rust)")
-            Divider()
-            row("Storage", "SQLite · local-only")
-        }
-    }
-
-    private func row(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label).font(.system(size: 13))
-            Spacer()
-            Text(value).font(.system(size: 12)).foregroundStyle(.secondary)
         }
     }
 
@@ -281,14 +224,6 @@ struct SettingsView: View {
         }
     }
 
-    private func resetData() {
-        // Tear down the handle first so SQLite releases the file (H8).
-        CoreBridge.shared.shutdown()
-        for suffix in ["", "-shm", "-wal"] {
-            try? FileManager.default.removeItem(atPath: "\(dataDir)/data.db\(suffix)")
-        }
-        showRestartNote = true
-    }
 }
 
 /// Rounded card container matching the dashboard's Card primitive.

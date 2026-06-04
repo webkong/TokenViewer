@@ -7,6 +7,7 @@ typedef struct CoreHandle CoreHandle;
 
 CoreHandle* _Nullable tt_init(const char* _Nonnull db_path);
 char* _Nullable tt_sync_all(CoreHandle* _Nullable handle);
+char* _Nullable tt_rebuild_all(CoreHandle* _Nullable handle);
 char* _Nullable tt_get_provider_status(CoreHandle* _Nullable handle);
 char* _Nullable tt_query_summary(CoreHandle* _Nullable handle, const char* _Nonnull from, const char* _Nonnull to);
 char* _Nullable tt_query_daily(CoreHandle* _Nullable handle, const char* _Nonnull from, const char* _Nonnull to);

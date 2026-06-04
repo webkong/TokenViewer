@@ -64,6 +64,35 @@ pub extern "C" fn tt_sync_all(handle: *mut CoreHandle) -> *mut c_char {
     to_json_cstring(&json)
 }
 
+/// Clear processed data and immediately resync from raw sources.
+/// Returns the same JSON shape as `tt_sync_all`.
+///
+/// # Safety
+/// `handle` must be a valid pointer returned by `tt_init`, or null (returns null).
+#[no_mangle]
+pub extern "C" fn tt_rebuild_all(handle: *mut CoreHandle) -> *mut c_char {
+    let handle = match unsafe { handle.as_ref() } {
+        Some(h) => h,
+        None => return std::ptr::null_mut(),
+    };
+
+    if let Err(e) = handle.db.clear_processed_data() {
+        return to_json_cstring(&serde_json::json!({
+            "providers_synced": 0,
+            "records_added": 0,
+            "errors": [format!("reset failed: {}", e)],
+        }));
+    }
+
+    let result = sync::sync_all(&handle.db, &handle.home_dir);
+    let json = serde_json::json!({
+        "providers_synced": result.providers_synced,
+        "records_added": result.records_added,
+        "errors": result.errors,
+    });
+    to_json_cstring(&json)
+}
+
 /// Get provider status. Returns JSON array of provider info.
 ///
 /// # Safety

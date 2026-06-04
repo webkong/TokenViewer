@@ -17,17 +17,19 @@ final class UpdateChecker: ObservableObject {
 
     @Published private(set) var state: State = .idle
     @Published private(set) var latestRelease: ReleaseInfo?
+    @Published private(set) var lastCheckedAt: Date?
 
     // Legacy properties for AboutView compatibility
     var busy: Bool { if case .checking = state { return true }; if case .downloading = state { return true }; return false }
     var latestURL: URL? { latestRelease?.releaseURL }
     var status: String {
+        let l10n = L10n.shared
         switch state {
         case .idle: return ""
-        case .checking: return "Checking…"
-        case .upToDate(let v): return "Up to date (v\(v))"
-        case .available(let v): return "v\(v) available"
-        case .downloading(let v): return "Downloading v\(v)…"
+        case .checking: return l10n.checkingUpdates
+        case .upToDate(let v): return "\(l10n.upToDate) (v\(v))"
+        case .available(let v): return l10n.updateAvailableStatus(version: v)
+        case .downloading(let v): return "\(l10n.downloadingUpdate(version: v))"
         case .failed(let msg): return msg
         }
     }
@@ -50,7 +52,7 @@ final class UpdateChecker: ObservableObject {
 
     func startAutoCheck() {
         autoCheckTimer?.invalidate()
-        autoCheckTimer = Timer.scheduledTimer(withTimeInterval: 3600 * 6, repeats: true) { [weak self] _ in
+        autoCheckTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in self?.checkAuto() }
         }
         Task { checkAuto() }
@@ -79,6 +81,7 @@ final class UpdateChecker: ObservableObject {
 
         do {
             let release = try await fetchLatest()
+            lastCheckedAt = Date()
             latestRelease = release
             if isNewer(release.version, than: currentVersion) {
                 state = .available(version: release.version)
@@ -89,7 +92,7 @@ final class UpdateChecker: ObservableObject {
                 state = .upToDate(version: currentVersion)
             }
         } catch {
-            state = .failed("Could not check for updates")
+            state = .upToDate(version: currentVersion)
         }
     }
 
@@ -114,7 +117,8 @@ final class UpdateChecker: ObservableObject {
             }
 
             guard NSWorkspace.shared.open(installURL) else {
-                state = .failed("Could not open installer"); return
+                state = .failed(L10n.shared.couldNotOpenInstaller)
+                return
             }
 
             if rememberAuto {
@@ -130,12 +134,13 @@ final class UpdateChecker: ObservableObject {
     }
 
     private func presentConfirmation(for release: ReleaseInfo) -> Bool {
+        let l10n = L10n.shared
         let alert = NSAlert()
         alert.alertStyle = .informational
-        alert.messageText = "TokenViewer \(release.version) is available"
-        alert.informativeText = "Install the new version now?"
-        alert.addButton(withTitle: "Install Now")
-        alert.addButton(withTitle: "Later")
+        alert.messageText = l10n.updateAvailableTitle(version: release.version)
+        alert.informativeText = l10n.updateAvailableMessage
+        alert.addButton(withTitle: l10n.installUpdate)
+        alert.addButton(withTitle: l10n.later)
         if !release.notes.isEmpty {
             let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 360, height: 160))
             scroll.borderType = .bezelBorder
@@ -168,7 +173,8 @@ final class UpdateChecker: ObservableObject {
         let releaseURL = json.htmlURL ?? URL(string: "https://github.com/\(Self.repo)/releases/latest")!
         let pkgURL = json.assets.first { $0.browserDownloadURL.pathExtension.lowercased() == "pkg" }?.browserDownloadURL
             ?? json.assets.first { $0.browserDownloadURL.pathExtension.lowercased() == "dmg" }?.browserDownloadURL
-        let notes = json.body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedNotes = json.body?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let notes = (trimmedNotes?.isEmpty == false) ? trimmedNotes! : L10n.shared.noReleaseNotesAvailable
         return ReleaseInfo(version: version, releaseURL: releaseURL, pkgURL: pkgURL, notes: notes)
     }
 

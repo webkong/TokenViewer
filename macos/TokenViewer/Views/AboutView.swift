@@ -3,6 +3,7 @@ import SwiftUI
 struct AboutView: View {
     @ObservedObject private var updater = UpdateChecker.shared
     @ObservedObject private var l10n = L10n.shared
+    @State private var autoDownloadVersion: String?
 
     private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
 
@@ -15,12 +16,12 @@ struct AboutView: View {
                 SettingsCard(title: l10n.about) {
                     row("TokenViewer", "v\(version)")
                     Divider()
-                    row("Engine", "tokenviewer-core (Rust)")
+                    row(l10n.engine, "tokenviewer-core (Rust)")
                     Divider()
-                    row("Storage", "SQLite · local-only")
+                    row(l10n.storage, "SQLite · local-only")
                     Divider()
                     HStack {
-                        Text("GitHub").font(.system(size: 13))
+                        Text(l10n.github).font(.system(size: 13))
                         Spacer()
                         Button(UpdateChecker.repo) {
                             if let u = URL(string: "https://github.com/\(UpdateChecker.repo)") {
@@ -35,25 +36,37 @@ struct AboutView: View {
 
                 // Updates
                 SettingsCard(title: l10n.updates) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Software Update").font(.system(size: 13))
-                            if !updater.status.isEmpty {
-                                Text(updater.status).font(.system(size: 10)).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .center, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(l10n.softwareUpdate)
+                                    .font(.system(size: 13))
+                                if !updater.status.isEmpty {
+                                    Text(updater.status)
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.secondary)
+                                }
+                                if let lastChecked = updater.lastCheckedAt {
+                                    Text("\(l10n.lastChecked) \(lastChecked.formatted(date: .abbreviated, time: .shortened))")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.secondary)
+                                }
                             }
+                            Spacer()
+                            updateActionView
                         }
-                        Spacer()
-                        if case .available = updater.state {
-                            Button(l10n.download) { updater.install() }
+
+                        if case .failed(let message) = updater.state {
+                            Text(message)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.orange)
                         }
-                        Button(updater.busy ? "Checking…" : l10n.checkNow) { updater.check() }
-                            .disabled(updater.busy)
                     }
                 }
             }
             .padding(20)
 
-            Text("© \(Calendar.current.component(.year, from: Date())) webkong. All rights reserved.")
+            Text(l10n.copyrightFooter(year: Calendar.current.component(.year, from: Date())))
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -67,6 +80,12 @@ struct AboutView: View {
             .padding(.bottom, 20)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+        .task(id: updater.state) {
+            guard case .available(let availableVersion) = updater.state else { return }
+            guard autoDownloadVersion != availableVersion else { return }
+            autoDownloadVersion = availableVersion
+            updater.install()
+        }
     }
 
     private func row(_ label: String, _ value: String) -> some View {
@@ -74,6 +93,20 @@ struct AboutView: View {
             Text(label).font(.system(size: 13))
             Spacer()
             Text(value).font(.system(size: 12)).foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var updateActionView: some View {
+        switch updater.state {
+        case .checking, .downloading:
+            ProgressView()
+                .controlSize(.small)
+        case .available:
+            Button(l10n.download) { updater.install() }
+        default:
+            Button(updater.busy ? l10n.checkingUpdates : l10n.checkNow) { updater.check() }
+                .disabled(updater.busy)
         }
     }
 }

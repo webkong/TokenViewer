@@ -21,6 +21,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ThemeManager.shared.apply()
         statusBarController = StatusBarController()
         UpdateChecker.shared.startAutoCheck()
+
+        if ProcessInfo.processInfo.environment["TV_OPEN_MAIN_WINDOW"] == "1" {
+            DispatchQueue.main.async { [weak self] in
+                self?.statusBarController?.openMainWindow()
+            }
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
