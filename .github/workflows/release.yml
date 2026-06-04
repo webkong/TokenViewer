@@ -118,3 +118,49 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: website/dist
           cname: tokenviewer.webkong.top
+
+  build-windows:
+    runs-on: windows-latest
+    needs: build-and-release
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_EVENT_NAME -eq "push") {
+            $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          } else {
+            $version = "${{ inputs.version }}"
+          }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build Windows artifacts
+        shell: pwsh
+        env:
+          RUST_TARGET: x86_64-pc-windows-msvc
+          WINDOWS_RUNTIME: win-x64
+          VERSION: ${{ env.VERSION }}
+        run: |
+          ./script/windows-release.ps1
+
+      - name: Upload Windows asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          files: dist/release/TokenViewer-Windows-win-x64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

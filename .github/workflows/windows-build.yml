@@ -1,0 +1,51 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "windows/**"
+      - "core/**"
+      - "script/windows-release.ps1"
+      - ".github/workflows/windows-build.yml"
+  pull_request:
+    paths:
+      - "windows/**"
+      - "core/**"
+      - "script/windows-release.ps1"
+      - ".github/workflows/windows-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build artifacts
+        shell: pwsh
+        env:
+          RUST_TARGET: x86_64-pc-windows-msvc
+          WINDOWS_RUNTIME: win-x64
+          VERSION: 0.1.0
+        run: |
+          ./script/windows-release.ps1
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: tokenviewer-windows
+          path: |
+            dist/windows
+            dist/release/TokenViewer-Windows-win-x64.zip
