@@ -2,6 +2,7 @@
 set -e
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+export PATH="$HOME/.cargo/bin:/opt/homebrew/opt/rustup/bin:$PATH"
 
 LIB="$ROOT/core/target/aarch64-apple-darwin/release/libtokenviewer_core.a"
 NEWEST_SRC=$(find "$ROOT/core/src" -name "*.rs" -newer "$LIB" 2>/dev/null | head -1)
@@ -11,7 +12,7 @@ if [ -z "$NEWEST_SRC" ] && [ -f "$LIB" ]; then
 else
     echo "▶ Building Rust core..."
     cd "$ROOT/core"
-    cargo build --release --target aarch64-apple-darwin 2>&1 | grep -E "^error" || true
+    cargo build --release --target aarch64-apple-darwin
 fi
 
 echo "▶ Building Swift app..."
