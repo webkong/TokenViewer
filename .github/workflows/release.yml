@@ -110,7 +110,10 @@ jobs:
           cache-dependency-path: website/package-lock.json
 
       - name: Build website
-        run: cd website && npm ci && npm run build
+        run: |
+          cd website
+          npm install --no-fund --no-audit
+          npx vite build
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
