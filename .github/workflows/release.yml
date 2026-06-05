@@ -27,10 +27,12 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "push" ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
+            BUILD="$(grep '^BUILD_NUMBER=' script/version.env | cut -d= -f2)"
           else
-            VERSION="${{ inputs.version }}"
+            VERSION="${{ github.event.inputs.version }}"
+            BUILD="${{ github.event.inputs.build_number }}"
           fi
-          BUILD="${{ inputs.build_number || '10000' }}"
+          BUILD="${BUILD:-10000}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "BUILD_NUMBER=$BUILD" >> $GITHUB_ENV
           echo "RELEASE_TAG=v$VERSION" >> $GITHUB_ENV
@@ -95,5 +97,7 @@ jobs:
 
   deploy-website:
     needs: build-and-release
+    permissions:
+      contents: write
     uses: ./.github/workflows/reusable-deploy-website.yml
     secrets: inherit
