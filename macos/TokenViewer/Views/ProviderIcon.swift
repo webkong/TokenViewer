@@ -43,6 +43,7 @@ struct ProviderIcon: View {
         "antigravity": "antigravity", "kiro": "kiro", "kiro-ide": "kiro", "opencode": "opencode",
         "openclaw": "openclaw", "cursor": "cursor", "grok": "grok", "kimi": "kimi",
         "copilot": "copilot", "hermes": "hermes", "kilocli": "kilo", "kilocode": "kilo",
+        "qoder": "qoder", "trae": "trae", "windsurf": "windsurf", "zed": "zed",
     ]
 
     /// Logos drawn with `currentColor` (monochrome) — tint to adapt to light/dark.
@@ -71,9 +72,10 @@ struct ProviderIcon: View {
     }
 
     private func logoImage() -> NSImage? {
-        guard let name = Self.logoMap[resolvedSource.lowercased()],
-              let url = Bundle.main.url(forResource: name, withExtension: "svg"),
-              let img = NSImage(contentsOf: url) else { return nil }
+        guard let name = Self.logoMap[resolvedSource.lowercased()] else { return nil }
+        let url = Bundle.main.url(forResource: name, withExtension: "svg")
+            ?? Bundle.main.url(forResource: name, withExtension: "png")
+        guard let url, let img = NSImage(contentsOf: url) else { return nil }
         // SVGs load with a 1x1 intrinsic size; give the vector a real size so
         // it rasterizes crisply at Retina scale.
         img.size = NSSize(width: 64, height: 64)

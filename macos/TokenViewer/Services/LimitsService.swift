@@ -15,7 +15,22 @@ struct ProviderLimit: Identifiable, Codable {
     let planLabel: String?
     let configured: Bool
     let error: String?
+    var subscriptionExpiresAt: Date? = nil
+    var subscriptionResetAt: Date? = nil
+    var quotaResetAt: Date? = nil
     let windows: [LimitWindow]
+}
+
+extension ProviderLimit {
+    var hasLimitDisplay: Bool {
+        !windows.isEmpty || subscriptionExpiresAt != nil || subscriptionResetAt != nil || quotaResetAt != nil
+    }
+
+    var nextResetAt: Date? {
+        let dates = windows.compactMap(\.resetAt)
+        let now = Date()
+        return dates.filter { $0 >= now }.min() ?? dates.max()
+    }
 }
 
 // MARK: - Service
@@ -32,7 +47,11 @@ enum LimitsService {
         async let gemini = fetchGemini()
         async let kimi = fetchKimi()
         async let antigravity = fetchAntigravity()
-        return await [claude, codex, copilot, kiro, cursor, gemini, kimi, antigravity]
+        async let zed = fetchZed()
+        async let trae = fetchTrae()
+        async let windsurf = fetchWindsurf()
+        async let qoder = fetchQoder()
+        return await [claude, codex, copilot, kiro, cursor, gemini, kimi, antigravity, zed, trae, windsurf, qoder]
     }
 
     // MARK: Claude (Keychain → Anthropic OAuth usage API)
@@ -70,8 +89,14 @@ enum LimitsService {
               let accessToken = tokens["access_token"] as? String else {
             return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
-        let plan = planLabel(jwtClaim(accessToken, "chatgpt_plan_type"), "Codex")
+        let idToken = tokens["id_token"] as? String
+        let plan = planLabel(jwtClaim(accessToken, "chatgpt_plan_type") ?? idToken.flatMap { jwtClaim($0, "chatgpt_plan_type") }, "Codex")
         let accountId = tokens["account_id"] as? String ?? jwtClaim(accessToken, "chatgpt_account_id")
+        let subscriptionExpiresAt = await codexSubscriptionExpiresAt(
+            accessToken: accessToken,
+            idToken: idToken,
+            accountId: accountId
+        )
 
         var req = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/wham/usage")!)
         req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
@@ -79,7 +104,7 @@ enum LimitsService {
         if let acc = accountId { req.setValue(acc, forHTTPHeaderField: "ChatGPT-Account-Id") }
 
         guard let json = await getJSON(req), let rl = json["rate_limit"] as? [String: Any] else {
-            return ProviderLimit(name: name, planLabel: plan, configured: true, error: "Request failed", windows: [])
+            return ProviderLimit(name: name, planLabel: plan, configured: true, error: "Request failed", subscriptionExpiresAt: subscriptionExpiresAt, windows: [])
         }
         var windows: [LimitWindow] = []
         for key in ["primary_window", "secondary_window"] {
@@ -89,7 +114,7 @@ enum LimitsService {
             let used = (w["used_percent"] as? Double) ?? Double(w["used_percent"] as? Int ?? 0)
             windows.append(LimitWindow(label: label, usedPercent: used, resetAt: parseDate(w["reset_at"])))
         }
-        return ProviderLimit(name: name, planLabel: plan, configured: true, error: nil, windows: windows)
+        return ProviderLimit(name: name, planLabel: plan, configured: true, error: nil, subscriptionExpiresAt: subscriptionExpiresAt, windows: windows)
     }
 
     // MARK: Copilot (apps.json → GitHub API)
@@ -124,7 +149,7 @@ enum LimitsService {
                 windows.append(LimitWindow(label: label, usedPercent: used, resetAt: reset))
             }
         }
-        return ProviderLimit(name: name, planLabel: plan, configured: true, error: nil, windows: windows)
+        return ProviderLimit(name: name, planLabel: plan, configured: true, error: nil, quotaResetAt: reset, windows: windows)
     }
 
     // MARK: Kiro (kiro-cli /usage)
@@ -143,15 +168,16 @@ enum LimitsService {
         let clean = out.replacingOccurrences(of: "\(esc)\\[[0-9;]*[a-zA-Z]", with: "", options: .regularExpression)
         // "KIRO PRO+\" / "KIRO POWER" / "KIRO PRO" / "KIRO FREE" — match plan including '+'
         let plan = planLabel(firstMatch(clean, #"\|\s*(KIRO\s+[\w\+]+)"#) ?? firstMatch(clean, #"Plan:\s*(.+)"#), "Kiro")
+        let resetAt = kiroResetDate(clean)
         var windows: [LimitWindow] = []
         // "1850.54 of 2000 covered" or "1850 of 2000 covered"
         if let used = firstMatch(clean, #"(\d+(?:\.\d+)?)\s+of\s+(\d+(?:\.\d+)?)\s+covered"#, group: 1).flatMap(Double.init),
            let total = firstMatch(clean, #"(\d+(?:\.\d+)?)\s+of\s+(\d+(?:\.\d+)?)\s+covered"#, group: 2).flatMap(Double.init), total > 0 {
-            windows.append(LimitWindow(label: "Credits", usedPercent: used / total * 100, resetAt: kiroResetDate(clean)))
+            windows.append(LimitWindow(label: "Credits", usedPercent: used / total * 100, resetAt: resetAt))
         } else if let pct = firstMatch(clean, #"█+\s*(\d+)%"#).flatMap({ Double($0) }) {
-            windows.append(LimitWindow(label: "Credits", usedPercent: pct, resetAt: kiroResetDate(clean)))
+            windows.append(LimitWindow(label: "Credits", usedPercent: pct, resetAt: resetAt))
         }
-        return ProviderLimit(name: name, planLabel: plan, configured: !windows.isEmpty, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
+        return ProviderLimit(name: name, planLabel: plan, configured: !windows.isEmpty, error: windows.isEmpty ? "No usage data" : nil, quotaResetAt: resetAt, windows: windows)
     }
 
     // MARK: Cursor (state.vscdb SQLite → cursor.com/api/usage-summary)
@@ -202,7 +228,8 @@ enum LimitsService {
         }
         var windows: [LimitWindow] = []
         if let p = pct { windows.append(LimitWindow(label: "Plan", usedPercent: p, resetAt: parseDate(billing))) }
-        return ProviderLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
+        let resetAt = parseDate(billing)
+        return ProviderLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, quotaResetAt: resetAt, windows: windows)
     }
 
     // MARK: Gemini (oauth_creds.json → cloudcode-pa.googleapis.com)
@@ -230,7 +257,7 @@ enum LimitsService {
         }
         let used = (1.0 - lowestFrac) * 100
         let windows = buckets.isEmpty ? [] : [LimitWindow(label: "Quota", usedPercent: used, resetAt: resetAt)]
-        return ProviderLimit(name: name, planLabel: nil, configured: true, error: nil, windows: windows)
+        return ProviderLimit(name: name, planLabel: nil, configured: true, error: nil, quotaResetAt: resetAt, windows: windows)
     }
 
     // MARK: Kimi (~/.kimi/credentials/kimi-code.json → api.kimi.com)
@@ -278,6 +305,190 @@ enum LimitsService {
         return ProviderLimit(name: name, planLabel: nil, configured: true, error: "Uses Gemini quota", windows: [])
     }
 
+    // MARK: Zed / Trae (cockpit-tools account cache)
+
+    static func fetchZed() async -> ProviderLimit {
+        let name = "zed"
+        guard let account = readCockpitAccount(provider: name) else {
+            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        }
+        let expiry = nestedDate(account, paths: [
+            ["billing_period_end_at"],
+            ["public_account", "billing_period_end_at"],
+            ["subscription_raw", "subscription", "period", "end_at"],
+            ["subscription_raw", "period", "end_at"],
+            ["public_account", "subscription_raw", "subscription", "period", "end_at"],
+            ["public_account", "subscription_raw", "period", "end_at"],
+            ["user_raw", "plan", "subscription_period", "ended_at"],
+            ["public_account", "user_raw", "plan", "subscription_period", "ended_at"],
+        ])
+        let plan = planLabel(nestedString(account, paths: [
+            ["plan_raw"],
+            ["public_account", "plan_raw"],
+            ["subscription_raw", "subscription", "name"],
+            ["subscription_raw", "name"],
+            ["public_account", "subscription_raw", "subscription", "name"],
+            ["public_account", "subscription_raw", "name"],
+        ]), "Zed")
+        return ProviderLimit(name: name, planLabel: plan, configured: true, error: expiry == nil ? "No subscription data" : nil, subscriptionExpiresAt: expiry, windows: [])
+    }
+
+    static func fetchTrae() async -> ProviderLimit {
+        let name = "trae"
+        guard let account = readCockpitAccount(provider: name) else {
+            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        }
+        let resetAt = nestedDate(account, paths: [
+            ["plan_reset_at"],
+            ["public_account", "plan_reset_at"],
+            ["trae_entitlement_raw", "detail", "subscription_renew_time"],
+            ["trae_entitlement_raw", "detail", "subscriptionRenewTime"],
+            ["trae_entitlement_raw", "data", "detail", "subscription_renew_time"],
+            ["trae_entitlement_raw", "data", "detail", "subscriptionRenewTime"],
+            ["trae_entitlement_raw", "entitlementInfo", "detail", "subscription_renew_time"],
+            ["trae_entitlement_raw", "entitlementInfo", "detail", "subscriptionRenewTime"],
+            ["public_account", "trae_entitlement_raw", "detail", "subscription_renew_time"],
+            ["public_account", "trae_entitlement_raw", "detail", "subscriptionRenewTime"],
+        ])
+        let plan = planLabel(nestedString(account, paths: [
+            ["plan_type"],
+            ["public_account", "plan_type"],
+            ["trae_entitlement_raw", "plan_type"],
+            ["trae_entitlement_raw", "data", "plan_type"],
+            ["public_account", "trae_entitlement_raw", "plan_type"],
+        ]), "Trae")
+        return ProviderLimit(name: name, planLabel: plan, configured: true, error: resetAt == nil ? "No subscription data" : nil, subscriptionResetAt: resetAt, windows: [])
+    }
+
+    static func fetchWindsurf() async -> ProviderLimit {
+        let name = "windsurf"
+        guard let account = readCockpitAccount(provider: name) else {
+            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        }
+        let resetAt = nestedDate(account, paths: [
+            ["copilot_quota_reset_date"],
+            ["copilot_limited_user_reset_date"],
+            ["public_account", "copilot_quota_reset_date"],
+            ["public_account", "copilot_limited_user_reset_date"],
+        ])
+        let plan = planLabel(nestedString(account, paths: [
+            ["copilot_plan"],
+            ["public_account", "copilot_plan"],
+            ["windsurf_plan_status", "plan"],
+            ["windsurf_plan_status", "planName"],
+            ["windsurf_user_status", "plan"],
+        ]), "Windsurf")
+        let windows = copilotStyleWindows(from: account, resetAt: resetAt)
+        return ProviderLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, quotaResetAt: resetAt, windows: windows)
+    }
+
+    static func fetchQoder() async -> ProviderLimit {
+        let name = "qoder"
+        guard let account = readCockpitAccount(provider: name) else {
+            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        }
+        let plan = planLabel(nestedString(account, paths: [
+            ["plan_type"],
+            ["public_account", "plan_type"],
+            ["auth_user_plan_raw", "plan_type"],
+            ["auth_user_plan_raw", "planType"],
+        ]), "Qoder")
+        var windows: [LimitWindow] = []
+        if let pct = numeric(nestedValue(account, ["credits_usage_percent"]))
+            ?? numeric(nestedValue(account, ["public_account", "credits_usage_percent"])) {
+            windows.append(LimitWindow(label: "Credits", usedPercent: min(max(pct, 0), 100), resetAt: nil))
+        } else if let used = numeric(nestedValue(account, ["credits_used"])),
+                  let total = numeric(nestedValue(account, ["credits_total"])), total > 0 {
+            windows.append(LimitWindow(label: "Credits", usedPercent: min(max(used / total * 100, 0), 100), resetAt: nil))
+        }
+        return ProviderLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
+    }
+
+    // MARK: Codex subscription expiry
+
+    private static func codexSubscriptionExpiresAt(accessToken: String, idToken: String?, accountId: String?) async -> Date? {
+        if let date = jwtClaimDate(accessToken, "chatgpt_subscription_active_until")
+            ?? idToken.flatMap({ jwtClaimDate($0, "chatgpt_subscription_active_until") }) {
+            return date
+        }
+
+        let accountCheck = await fetchCodexAccountCheckSubscription(accessToken: accessToken, accountId: accountId)
+        if let date = accountCheck.expiresAt, date > Date() { return date }
+
+        let resolvedAccountId = accountCheck.accountId ?? accountId ?? jwtClaim(accessToken, "chatgpt_account_id")
+        guard let resolvedAccountId,
+              let subscription = await fetchCodexSubscription(accessToken: accessToken, accountId: resolvedAccountId) else {
+            return accountCheck.expiresAt
+        }
+        return subscription
+    }
+
+    private static func fetchCodexAccountCheckSubscription(accessToken: String, accountId: String?) async -> (accountId: String?, expiresAt: Date?) {
+        var comps = URLComponents(string: "https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27")!
+        comps.queryItems = [URLQueryItem(name: "timezone_offset_min", value: "\(-TimeZone.current.secondsFromGMT() / 60)")]
+        guard let url = comps.url else { return (nil, nil) }
+        var req = codexSubscriptionRequest(url: url, accessToken: accessToken, accountId: nil, targetPath: "/backend-api/accounts/check/v4-2023-04-27")
+        guard let json = await getJSON(req) else { return (nil, nil) }
+        return parseCodexAccountCheckSubscription(json, preferredAccountId: accountId)
+    }
+
+    private static func fetchCodexSubscription(accessToken: String, accountId: String) async -> Date? {
+        var comps = URLComponents(string: "https://chatgpt.com/backend-api/subscriptions")!
+        comps.queryItems = [URLQueryItem(name: "account_id", value: accountId)]
+        guard let url = comps.url else { return nil }
+        let req = codexSubscriptionRequest(url: url, accessToken: accessToken, accountId: nil, targetPath: "/backend-api/subscriptions")
+        guard let json = await getJSON(req) else { return nil }
+        return parseDate(json["active_until"] ?? json["expires_at"])
+    }
+
+    private static func codexSubscriptionRequest(url: URL, accessToken: String, accountId: String?, targetPath: String) -> URLRequest {
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("https://chatgpt.com/", forHTTPHeaderField: "Referer")
+        req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
+        req.setValue(targetPath, forHTTPHeaderField: "x-openai-target-path")
+        req.setValue(targetPath, forHTTPHeaderField: "x-openai-target-route")
+        if let accountId { req.setValue(accountId, forHTTPHeaderField: "ChatGPT-Account-Id") }
+        return req
+    }
+
+    private static func parseCodexAccountCheckSubscription(_ json: [String: Any], preferredAccountId: String?) -> (accountId: String?, expiresAt: Date?) {
+        let records = codexAccountCheckRecords(json)
+        let selected = records.first { record in
+            guard let preferredAccountId else { return false }
+            return extractAccountId(record) == preferredAccountId
+        } ?? records.first
+
+        guard let selected else { return (nil, nil) }
+        let account = (selected["account"] as? [String: Any]) ?? selected
+        let entitlement = selected["entitlement"] as? [String: Any]
+        let accountId = firstString(account, keys: ["account_id", "id", "chatgpt_account_id", "workspace_id"])
+        let expiresAt = parseDate(entitlement?["expires_at"] ?? account["expires_at"])
+        return (accountId, expiresAt)
+    }
+
+    private static func codexAccountCheckRecords(_ json: [String: Any]) -> [[String: Any]] {
+        if let accounts = json["accounts"] as? [[String: Any]] { return accounts }
+        if let records = json["records"] as? [[String: Any]] { return records }
+        if let items = json["items"] as? [[String: Any]] { return items }
+        if let data = json["data"] as? [String: Any] { return codexAccountCheckRecords(data) }
+        if let accountItems = json["account_items"] as? [[String: Any]] { return accountItems }
+
+        return json.values.compactMap { value in
+            if let object = value as? [String: Any],
+               object["account"] != nil || object["entitlement"] != nil || object["expires_at"] != nil {
+                return object
+            }
+            return nil
+        }
+    }
+
+    private static func extractAccountId(_ record: [String: Any]) -> String? {
+        let account = (record["account"] as? [String: Any]) ?? record
+        return firstString(account, keys: ["account_id", "id", "chatgpt_account_id", "workspace_id"])
+    }
+
     // MARK: - Helpers (additional)
 
     private static func readSqliteValue(_ path: String, sql: String) -> String? {
@@ -303,6 +514,7 @@ enum LimitsService {
     private static func numeric(_ v: Any?) -> Double? {
         if let d = v as? Double { return d }
         if let i = v as? Int { return Double(i) }
+        if let n = v as? NSNumber { return n.doubleValue }
         if let s = v as? String {
             let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
             if let d = Double(trimmed) { return d }
@@ -324,15 +536,140 @@ enum LimitsService {
         return f.date(from: s)
     }
 
+    private static func firstString(_ object: [String: Any], keys: [String]) -> String? {
+        for key in keys {
+            if let s = object[key] as? String {
+                let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            } else if let n = object[key] as? NSNumber {
+                return n.stringValue
+            }
+        }
+        return nil
+    }
+
+    private static func readCockpitAccount(provider: String) -> [String: Any]? {
+        let base = "\(NSHomeDirectory())/.antigravity_cockpit"
+        let indexPath = "\(base)/\(provider)_accounts.json"
+        let accountsDir = "\(base)/\(provider)_accounts"
+        if let index = readJSON(indexPath),
+           let id = cockpitAccountId(index) {
+            if let detail = readJSON("\(accountsDir)/\(id).json") {
+                return detail
+            }
+        }
+
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: URL(fileURLWithPath: accountsDir),
+            includingPropertiesForKeys: [.contentModificationDateKey]
+        ) else { return nil }
+        let candidates = files
+            .filter { $0.pathExtension == "json" }
+            .sorted { lhs, rhs in
+                let left = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                let right = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                return left > right
+            }
+        for url in candidates {
+            if let detail = readJSON(url.path) { return detail }
+        }
+        return nil
+    }
+
+    private static func cockpitAccountId(_ index: [String: Any]) -> String? {
+        let accounts = (index["accounts"] as? [[String: Any]]) ?? []
+        let selected = accounts.max { lhs, rhs in
+            (numeric(lhs["last_used_at"] ?? lhs["last_used"] ?? lhs["updated_at"]) ?? 0)
+                < (numeric(rhs["last_used_at"] ?? rhs["last_used"] ?? rhs["updated_at"]) ?? 0)
+        }
+        guard let selected else {
+            return firstString(index, keys: ["current_account_id", "active_account_id", "account_id", "id"])
+        }
+        return firstString(selected, keys: ["id", "account_id", "user_id"])
+    }
+
+    private static func nestedString(_ object: Any?, paths: [[String]]) -> String? {
+        for path in paths {
+            if let value = nestedValue(object, path) {
+                if let s = value as? String {
+                    let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { return trimmed }
+                }
+                if let n = value as? NSNumber { return n.stringValue }
+            }
+        }
+        return nil
+    }
+
+    private static func nestedDate(_ object: Any?, paths: [[String]]) -> Date? {
+        for path in paths {
+            if let date = parseDate(nestedValue(object, path)) {
+                return date
+            }
+        }
+        return nil
+    }
+
+    private static func nestedValue(_ object: Any?, _ path: [String]) -> Any? {
+        var current = object
+        for key in path {
+            guard let dict = current as? [String: Any] else { return nil }
+            current = dict[key]
+        }
+        return current
+    }
+
+    private static func copilotStyleWindows(from account: [String: Any], resetAt: Date?) -> [LimitWindow] {
+        var windows: [LimitWindow] = []
+        let snapshots = nestedValue(account, ["copilot_quota_snapshots"])
+            ?? nestedValue(account, ["public_account", "copilot_quota_snapshots"])
+        if let snaps = snapshots as? [String: Any] {
+            for (key, label) in [("premium_interactions", "Premium"), ("premium_models", "Premium")] {
+                guard let q = snaps[key] as? [String: Any] else { continue }
+                if let remaining = numeric(q["percent_remaining"]) {
+                    windows.append(LimitWindow(label: label, usedPercent: min(max(100 - remaining, 0), 100), resetAt: resetAt))
+                    break
+                }
+            }
+            if let chat = snaps["chat"] as? [String: Any],
+               let remaining = numeric(chat["percent_remaining"]) {
+                windows.append(LimitWindow(label: "Chat", usedPercent: min(max(100 - remaining, 0), 100), resetAt: resetAt))
+            }
+        }
+
+        let limited = nestedValue(account, ["copilot_limited_user_quotas"])
+            ?? nestedValue(account, ["public_account", "copilot_limited_user_quotas"])
+        if let limited = limited as? [String: Any] {
+            for (key, label) in [("completions", "Completions"), ("chat", "Chat")] {
+                guard let remaining = numeric(limited[key]) else { continue }
+                if !windows.contains(where: { $0.label == label }) {
+                    windows.append(LimitWindow(label: label, usedPercent: remaining > 0 ? 0 : 100, resetAt: resetAt))
+                }
+            }
+        }
+        return windows
+    }
+
     private static func jwtClaim(_ token: String, _ claim: String) -> String? {
+        guard let value = jwtClaimValue(token, claim) else { return nil }
+        if let s = value as? String { return s }
+        if let n = value as? NSNumber { return n.stringValue }
+        return nil
+    }
+
+    private static func jwtClaimDate(_ token: String, _ claim: String) -> Date? {
+        parseDate(jwtClaimValue(token, claim))
+    }
+
+    private static func jwtClaimValue(_ token: String, _ claim: String) -> Any? {
         let parts = token.split(separator: ".")
         guard parts.count >= 2 else { return nil }
         var b64 = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
         while b64.count % 4 != 0 { b64 += "=" }
         guard let data = Data(base64Encoded: b64),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        if let auth = json["https://api.openai.com/auth"] as? [String: Any], let v = auth[claim] as? String { return v }
-        return json[claim] as? String
+        if let auth = json["https://api.openai.com/auth"] as? [String: Any], let v = auth[claim] { return v }
+        return json[claim]
     }
 
     private static func planLabel(_ raw: String?, _ prefix: String) -> String? {
@@ -412,6 +749,17 @@ enum LimitsService {
     }
 
     private static func kiroResetDate(_ out: String) -> Date? {
+        for key in ["resetAt", "resetTime", "resetOn", "nextDateReset"] {
+            if let raw = firstMatch(out, #""\#(key)"\s*:\s*"([^"]+)""#),
+               let date = parseDate(raw) {
+                return date
+            }
+            if let raw = firstMatch(out, #""\#(key)"\s*:\s*(\d+(?:\.\d+)?)"#),
+               let date = parseDate(raw) {
+                return date
+            }
+        }
+
         // "resets on 2026-07-01" (ISO) or "resets on 07/01" (MM/DD)
         if let iso = firstMatch(out, #"resets on (\d{4}-\d{2}-\d{2})"#) {
             let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "UTC")

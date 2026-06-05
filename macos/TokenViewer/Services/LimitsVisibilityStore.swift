@@ -10,6 +10,10 @@ enum LimitsVisibilityStore {
         "copilot",
         "kimi",
         "antigravity",
+        "zed",
+        "trae",
+        "windsurf",
+        "qoder",
     ]
 
     static let defaultsValue = allSources.joined(separator: ",")
@@ -36,6 +40,10 @@ enum LimitsVisibilityStore {
         case "copilot": return "GitHub Copilot"
         case "kimi": return "Kimi"
         case "antigravity": return "Antigravity"
+        case "zed": return "Zed"
+        case "trae": return "Trae"
+        case "windsurf": return "Windsurf"
+        case "qoder": return "Qoder"
         default:
             return source.capitalized
         }

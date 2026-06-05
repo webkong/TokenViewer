@@ -21,7 +21,7 @@ struct PopoverView: View {
     var onHeightChange: ((CGFloat) -> Void)?
 
     var body: some View {
-        let limitRowCount = visibleLimitProviders.reduce(0) { $0 + $1.windows.count }
+        let limitRowCount = visibleLimitProviders.reduce(0) { $0 + max(1, $1.windows.count) }
         let extraLimitRows = max(0, limitRowCount - 1)
         let visibleSectionCount = 2
             + (showTrend && !viewModel.dailyUsage.isEmpty ? 1 : 0)
@@ -150,7 +150,7 @@ struct PopoverView: View {
     private var visibleLimitProviders: [ProviderLimit] {
         let visibleSet = LimitsVisibilityStore.visibleSet(from: limitsVisibleSources)
         return limitsVM.providers.filter {
-            $0.configured && !$0.windows.isEmpty && visibleSet.contains($0.name)
+            $0.configured && $0.hasLimitDisplay && visibleSet.contains($0.name)
         }
     }
 
@@ -273,6 +273,7 @@ struct PopoverView: View {
 
 private struct CompactProviderLimitCard: View {
     let provider: ProviderLimit
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -290,6 +291,13 @@ private struct CompactProviderLimitCard: View {
                         .foregroundStyle(TVColor.provider(provider.name))
                 }
                 Spacer(minLength: 4)
+                if let expiry = provider.subscriptionExpiresAt {
+                    CompactProviderDateBadge(label: l10n.expires, date: expiry, tint: TVColor.provider(provider.name))
+                } else if let reset = provider.subscriptionResetAt {
+                    CompactProviderDateBadge(label: l10n.subscriptionReset, date: reset, tint: TVColor.provider(provider.name))
+                } else if let reset = provider.quotaResetAt {
+                    CompactProviderDateBadge(label: l10n.quotaReset, date: reset, tint: TVColor.provider(provider.name))
+                }
             }
 
             ForEach(provider.windows) { window in
@@ -305,9 +313,31 @@ private struct CompactProviderLimitCard: View {
     }
 }
 
+private struct CompactProviderDateBadge: View {
+    let label: String
+    let date: Date
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 8, weight: .semibold))
+            Text(label)
+            Text(date, format: .relative(presentation: .named))
+        }
+        .font(.system(size: 8, weight: .medium))
+        .foregroundStyle(tint)
+        .lineLimit(1)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(Capsule().fill(tint.opacity(0.12)))
+    }
+}
+
 private struct CompactLimitWindowRow: View {
     let window: LimitWindow
     let tint: Color
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         VStack(spacing: 4) {
@@ -317,7 +347,10 @@ private struct CompactLimitWindowRow: View {
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 if let reset = window.resetAt {
-                    Text("resets \(reset, format: .relative(presentation: .named))")
+                    HStack(spacing: 3) {
+                        Text(l10n.resets)
+                        Text(reset, format: .relative(presentation: .named))
+                    }
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

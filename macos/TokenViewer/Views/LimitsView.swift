@@ -8,8 +8,8 @@ struct LimitsView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
                 header
-                let activeProviders = viewModel.providers.filter { $0.configured && !$0.windows.isEmpty }
-                let inactiveProviders = viewModel.providers.filter { !$0.configured || $0.windows.isEmpty }
+                let activeProviders = viewModel.providers.filter { $0.configured && $0.hasLimitDisplay }
+                let inactiveProviders = viewModel.providers.filter { !$0.configured || !$0.hasLimitDisplay }
                 if viewModel.providers.isEmpty {
                     emptyState
                 } else {
@@ -47,7 +47,7 @@ struct LimitsView: View {
             }
             .buttonStyle(.borderless)
             .disabled(viewModel.isLoading)
-            .help(viewModel.isLoading ? "Refreshing…" : "Refresh limits")
+            .help(viewModel.isLoading ? l10n.refreshingLimits : l10n.refreshLimits)
         }
     }
 
@@ -86,8 +86,15 @@ private struct ProviderLimitCard: View {
                         .foregroundStyle(TVColor.provider(provider.name))
                 }
                 Spacer()
+                if let expiry = provider.subscriptionExpiresAt {
+                    ProviderDateBadge(label: l10n.expires, date: expiry, tint: TVColor.provider(provider.name))
+                } else if let reset = provider.subscriptionResetAt {
+                    ProviderDateBadge(label: l10n.subscriptionReset, date: reset, tint: TVColor.provider(provider.name))
+                } else if let reset = provider.quotaResetAt {
+                    ProviderDateBadge(label: l10n.quotaReset, date: reset, tint: TVColor.provider(provider.name))
+                }
                 if !provider.configured {
-                    Text("Not configured").font(.system(size: 11)).foregroundStyle(.tertiary)
+                    Text(l10n.notConfigured).font(.system(size: 11)).foregroundStyle(.tertiary)
                 } else if let err = provider.error {
                     Text(err).font(.system(size: 11)).foregroundStyle(.orange)
                 } else if provider.windows.isEmpty {
@@ -108,7 +115,7 @@ private struct ProviderLimitCard: View {
                 .fill(Color(nsColor: .controlBackgroundColor))
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 0.5))
         )
-        .opacity(provider.configured && !provider.windows.isEmpty ? 1 : 0.55)
+        .opacity(provider.configured && provider.hasLimitDisplay ? 1 : 0.55)
     }
 }
 
@@ -122,8 +129,7 @@ private struct LimitWindowRow: View {
                 Text(window.label).font(.system(size: 12, weight: .medium))
                 Spacer()
                 if let reset = window.resetAt {
-                    Text("resets \(reset, format: .relative(presentation: .named))")
-                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                    ResetInlineText(date: reset)
                 }
                 Text(String(format: "%.0f%%", window.usedPercent))
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
@@ -144,5 +150,40 @@ private struct LimitWindowRow: View {
         if window.usedPercent >= 90 { return .red }
         if window.usedPercent >= 70 { return .orange }
         return tint
+    }
+}
+
+private struct ProviderDateBadge: View {
+    let label: String
+    let date: Date
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 9, weight: .semibold))
+            Text(label)
+            Text(date, format: .relative(presentation: .named))
+        }
+        .font(.system(size: 10, weight: .medium))
+        .foregroundStyle(tint)
+        .lineLimit(1)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(tint.opacity(0.12)))
+    }
+}
+
+private struct ResetInlineText: View {
+    let date: Date
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Text(l10n.resets)
+            Text(date, format: .relative(presentation: .named))
+        }
+        .font(.system(size: 10))
+        .foregroundStyle(.secondary)
     }
 }

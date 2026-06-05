@@ -68,6 +68,14 @@ final class L10n: ObservableObject {
     var noUsageData: String { isZh ? "暂无数据" : "No usage data" }
     var noLimitsData: String { isZh ? "当前没有限额数据。" : "No limits data yet." }
     var limitsNoDataDesc: String { isZh ? "使用任意支持的 Agent 后，再点击同步查看。或者前往设置勾选要显示的 Agent。" : "Use any supported agent, then sync to view data. You can also open Settings to choose which agents appear." }
+    var reset: String { isZh ? "重置" : "Reset" }
+    var resets: String { isZh ? "重置" : "Resets" }
+    var expires: String { isZh ? "到期" : "Expires" }
+    var subscriptionReset: String { isZh ? "订阅重置" : "Subscription reset" }
+    var quotaReset: String { isZh ? "额度重置" : "Quota reset" }
+    var refreshingLimits: String { isZh ? "正在刷新限额…" : "Refreshing limits…" }
+    var refreshLimits: String { isZh ? "刷新限额" : "Refresh limits" }
+    var notConfigured: String { isZh ? "未配置" : "Not configured" }
     var openSettings: String { isZh ? "打开设置" : "Open Settings" }
     var heatmapLess: String { isZh ? "少" : "Less" }
     var heatmapMore: String { isZh ? "多" : "More" }

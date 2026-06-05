@@ -7,8 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		00C008DCFCAFC8835E1DDA43 /* zed.png in Resources */ = {isa = PBXBuildFile; fileRef = 498F1C2839F90B67CC4C6110 /* zed.png */; };
 		0990F9AF3227ECE947742A87 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 6DC1D012B29037EB42DA1429 /* AppIcon.icns */; };
 		0E0B6D6D08106FA4CD3ECEE7 /* LimitsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBE72CF07CC99195B52D4715 /* LimitsService.swift */; };
+		13A280D2AB0B9FD6CBA5E8DA /* trae.png in Resources */ = {isa = PBXBuildFile; fileRef = 9FCDFF3B030DCF4A5536E67E /* trae.png */; };
 		149B8B58C06302D14076B43F /* gemini.svg in Resources */ = {isa = PBXBuildFile; fileRef = E9F2DD464AF49DBA8E6A6E86 /* gemini.svg */; };
 		1B2E655D1EB989A9FA40B134 /* cursor.svg in Resources */ = {isa = PBXBuildFile; fileRef = 9D533D3DCF9CA4378E9A240D /* cursor.svg */; };
 		1CBF7C85F3FB372DBE9FBCFC /* StatusBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4129E968EF3C5D9FD95437C6 /* StatusBarController.swift */; };
@@ -26,8 +28,10 @@
 		7F679758E5115B64D4ADC95D /* ProviderIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DCD82F79AAD3F077EAA8A17 /* ProviderIcon.swift */; };
 		868CC0E9639E89B5B0D2C3E1 /* codex.svg in Resources */ = {isa = PBXBuildFile; fileRef = 88494BAD929D52E39664A618 /* codex.svg */; };
 		88038E2FBCB342196F263BFA /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 034652C5EE019A959887EFA2 /* Localization.swift */; };
+		8AB637CE1DF29AC4BDB9CDC9 /* windsurf.svg in Resources */ = {isa = PBXBuildFile; fileRef = D4FE6EC826BF3B2F1F94086F /* windsurf.svg */; };
 		9296DA73CB97F5E8DABB1F08 /* opencode.svg in Resources */ = {isa = PBXBuildFile; fileRef = 49D0C81B5FF6EBFF4F66A51D /* opencode.svg */; };
 		94FD9E64724730AA7B7061D7 /* TokenViewerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4965F633CE47DB93FDA573C0 /* TokenViewerApp.swift */; };
+		B46E624E79A30F1B0B72E060 /* qoder.png in Resources */ = {isa = PBXBuildFile; fileRef = EE91DBFAE4E2670D53307DE2 /* qoder.png */; };
 		BC8DC64BB060D01E192CFC39 /* UsageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E11BCBF448FA6555EA8CA7A3 /* UsageView.swift */; };
 		BF4CFB246707A8EF0A4D565B /* UsageViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A9C474022E1CC5E92244F6A /* UsageViewModel.swift */; };
 		C410EC5A0E53CD4A11C75B0C /* LimitsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60B4862C0D6C9FD2ED147837 /* LimitsView.swift */; };
@@ -52,6 +56,7 @@
 		39EB5D762689CD00096F0785 /* LimitsVisibilityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitsVisibilityStore.swift; sourceTree = "<group>"; };
 		4129E968EF3C5D9FD95437C6 /* StatusBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarController.swift; sourceTree = "<group>"; };
 		4965F633CE47DB93FDA573C0 /* TokenViewerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenViewerApp.swift; sourceTree = "<group>"; };
+		498F1C2839F90B67CC4C6110 /* zed.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = zed.png; sourceTree = "<group>"; };
 		49D0C81B5FF6EBFF4F66A51D /* opencode.svg */ = {isa = PBXFileReference; path = opencode.svg; sourceTree = "<group>"; };
 		5085801F155A829C95375778 /* kilo.svg */ = {isa = PBXFileReference; path = kilo.svg; sourceTree = "<group>"; };
 		59A2E3357CCDB083777BF426 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -69,17 +74,20 @@
 		93435E21A3AF9517E145BB82 /* codebuddy.svg */ = {isa = PBXFileReference; path = codebuddy.svg; sourceTree = "<group>"; };
 		95B0617E9C570C731BB0961A /* LimitsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitsViewModel.swift; sourceTree = "<group>"; };
 		9D533D3DCF9CA4378E9A240D /* cursor.svg */ = {isa = PBXFileReference; path = cursor.svg; sourceTree = "<group>"; };
+		9FCDFF3B030DCF4A5536E67E /* trae.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = trae.png; sourceTree = "<group>"; };
 		A11C5F726D4BF938374A9F8B /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowView.swift; sourceTree = "<group>"; };
 		A9F3FB73CDED44D7115FB025 /* grok.svg */ = {isa = PBXFileReference; path = grok.svg; sourceTree = "<group>"; };
 		B92F1EDF8973582C61B3DC55 /* hermes.svg */ = {isa = PBXFileReference; path = hermes.svg; sourceTree = "<group>"; };
 		C54A6C43A31CA1B59412B121 /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
 		CCA7AD173CD5F720CAAFC580 /* copilot.svg */ = {isa = PBXFileReference; path = copilot.svg; sourceTree = "<group>"; };
+		D4FE6EC826BF3B2F1F94086F /* windsurf.svg */ = {isa = PBXFileReference; path = windsurf.svg; sourceTree = "<group>"; };
 		D9E69FCF0E721C554A2CA895 /* TokenViewer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TokenViewer.entitlements; sourceTree = "<group>"; };
 		DF2E2E86DDB42752338CA381 /* TrendChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendChartView.swift; sourceTree = "<group>"; };
 		E11BCBF448FA6555EA8CA7A3 /* UsageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageView.swift; sourceTree = "<group>"; };
 		E979605B67613F9CBB276006 /* antigravity.svg */ = {isa = PBXFileReference; path = antigravity.svg; sourceTree = "<group>"; };
 		E9F2DD464AF49DBA8E6A6E86 /* gemini.svg */ = {isa = PBXFileReference; path = gemini.svg; sourceTree = "<group>"; };
 		EBE72CF07CC99195B52D4715 /* LimitsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitsService.swift; sourceTree = "<group>"; };
+		EE91DBFAE4E2670D53307DE2 /* qoder.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = qoder.png; sourceTree = "<group>"; };
 		F13B30FF8F49D9B8D59A4CEA /* kimi.svg */ = {isa = PBXFileReference; path = kimi.svg; sourceTree = "<group>"; };
 		F1DDAFB4FBCF9DDDF0B9B8A3 /* MenuBarIcon.svg */ = {isa = PBXFileReference; path = MenuBarIcon.svg; sourceTree = "<group>"; };
 		F69660CE5393741209A39863 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
@@ -200,6 +208,10 @@
 				72789F911185C411E70F2D10 /* kiro.svg */,
 				7558F3C2071E901CF0ECA4FD /* openclaw.svg */,
 				49D0C81B5FF6EBFF4F66A51D /* opencode.svg */,
+				EE91DBFAE4E2670D53307DE2 /* qoder.png */,
+				9FCDFF3B030DCF4A5536E67E /* trae.png */,
+				D4FE6EC826BF3B2F1F94086F /* windsurf.svg */,
+				498F1C2839F90B67CC4C6110 /* zed.png */,
 			);
 			path = "brand-logos";
 			sourceTree = "<group>";
@@ -281,6 +293,10 @@
 				67FF0F9ECDC8086E43011BA7 /* kiro.svg in Resources */,
 				E24828ABBE0F085D952957AA /* openclaw.svg in Resources */,
 				9296DA73CB97F5E8DABB1F08 /* opencode.svg in Resources */,
+				B46E624E79A30F1B0B72E060 /* qoder.png in Resources */,
+				13A280D2AB0B9FD6CBA5E8DA /* trae.png in Resources */,
+				8AB637CE1DF29AC4BDB9CDC9 /* windsurf.svg in Resources */,
+				00C008DCFCAFC8835E1DDA43 /* zed.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
