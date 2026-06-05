@@ -73,6 +73,10 @@ final class L10n: ObservableObject {
     var expires: String { isZh ? "到期" : "Expires" }
     var subscriptionReset: String { isZh ? "订阅重置" : "Subscription reset" }
     var quotaReset: String { isZh ? "额度重置" : "Quota reset" }
+    func expiresInDays(_ days: Int) -> String { isZh ? "\(days) 天后到期" : "Expires in \(dayCount(days))" }
+    func quotaResetsInDays(_ days: Int) -> String { isZh ? "\(days) 天后重置额度" : "Quota resets in \(dayCount(days))" }
+    func subscriptionResetsInDays(_ days: Int) -> String { isZh ? "\(days) 天后重置订阅" : "Subscription resets in \(dayCount(days))" }
+    func resetsInDays(_ days: Int) -> String { isZh ? "\(days) 天后重置" : "Resets in \(dayCount(days))" }
     var refreshingLimits: String { isZh ? "正在刷新限额…" : "Refreshing limits…" }
     var refreshLimits: String { isZh ? "刷新限额" : "Refresh limits" }
     var notConfigured: String { isZh ? "未配置" : "Not configured" }
@@ -138,4 +142,8 @@ final class L10n: ObservableObject {
     var rebuildDone: String { isZh ? "数据重建完成，请稍后刷新查看。" : "Data rebuild complete. Refresh to view the latest data." }
     var cancel: String { isZh ? "取消" : "Cancel" }
     var about: String { isZh ? "关于" : "About" }
+
+    private func dayCount(_ days: Int) -> String {
+        days == 1 ? "1 day" : "\(days) days"
+    }
 }

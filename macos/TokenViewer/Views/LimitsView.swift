@@ -87,11 +87,11 @@ private struct ProviderLimitCard: View {
                 }
                 Spacer()
                 if let expiry = provider.subscriptionExpiresAt {
-                    ProviderDateBadge(label: l10n.expires, date: expiry, tint: TVColor.provider(provider.name))
+                    ProviderDateBadge(kind: .expires, date: expiry, tint: TVColor.provider(provider.name))
                 } else if let reset = provider.subscriptionResetAt {
-                    ProviderDateBadge(label: l10n.subscriptionReset, date: reset, tint: TVColor.provider(provider.name))
+                    ProviderDateBadge(kind: .subscriptionReset, date: reset, tint: TVColor.provider(provider.name))
                 } else if let reset = provider.quotaResetAt {
-                    ProviderDateBadge(label: l10n.quotaReset, date: reset, tint: TVColor.provider(provider.name))
+                    ProviderDateBadge(kind: .quotaReset, date: reset, tint: TVColor.provider(provider.name))
                 }
                 if !provider.configured {
                     Text(l10n.notConfigured).font(.system(size: 11)).foregroundStyle(.tertiary)
@@ -154,16 +154,16 @@ private struct LimitWindowRow: View {
 }
 
 private struct ProviderDateBadge: View {
-    let label: String
+    let kind: ProviderCountdownKind
     let date: Date
     let tint: Color
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 9, weight: .semibold))
-            Text(label)
-            Text(date, format: .relative(presentation: .named))
+            Text(kind.text(date: date, l10n: l10n))
         }
         .font(.system(size: 10, weight: .medium))
         .foregroundStyle(tint)
@@ -179,11 +179,34 @@ private struct ResetInlineText: View {
     @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
-        HStack(spacing: 3) {
-            Text(l10n.resets)
-            Text(date, format: .relative(presentation: .named))
-        }
+        Text(l10n.resetsInDays(date.tvCountdownDaysFromNow))
         .font(.system(size: 10))
         .foregroundStyle(.secondary)
+    }
+}
+
+enum ProviderCountdownKind {
+    case expires
+    case subscriptionReset
+    case quotaReset
+
+    func text(date: Date, l10n: L10n) -> String {
+        let days = date.tvCountdownDaysFromNow
+        switch self {
+        case .expires:
+            return l10n.expiresInDays(days)
+        case .subscriptionReset:
+            return l10n.subscriptionResetsInDays(days)
+        case .quotaReset:
+            return l10n.quotaResetsInDays(days)
+        }
+    }
+}
+
+extension Date {
+    var tvCountdownDaysFromNow: Int {
+        let seconds = timeIntervalSince(Date())
+        if seconds <= 0 { return 0 }
+        return max(1, Int(ceil(seconds / 86_400)))
     }
 }

@@ -292,11 +292,11 @@ private struct CompactProviderLimitCard: View {
                 }
                 Spacer(minLength: 4)
                 if let expiry = provider.subscriptionExpiresAt {
-                    CompactProviderDateBadge(label: l10n.expires, date: expiry, tint: TVColor.provider(provider.name))
+                    CompactProviderDateBadge(kind: .expires, date: expiry, tint: TVColor.provider(provider.name))
                 } else if let reset = provider.subscriptionResetAt {
-                    CompactProviderDateBadge(label: l10n.subscriptionReset, date: reset, tint: TVColor.provider(provider.name))
+                    CompactProviderDateBadge(kind: .subscriptionReset, date: reset, tint: TVColor.provider(provider.name))
                 } else if let reset = provider.quotaResetAt {
-                    CompactProviderDateBadge(label: l10n.quotaReset, date: reset, tint: TVColor.provider(provider.name))
+                    CompactProviderDateBadge(kind: .quotaReset, date: reset, tint: TVColor.provider(provider.name))
                 }
             }
 
@@ -314,16 +314,16 @@ private struct CompactProviderLimitCard: View {
 }
 
 private struct CompactProviderDateBadge: View {
-    let label: String
+    let kind: ProviderCountdownKind
     let date: Date
     let tint: Color
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 8, weight: .semibold))
-            Text(label)
-            Text(date, format: .relative(presentation: .named))
+            Text(kind.text(date: date, l10n: l10n))
         }
         .font(.system(size: 8, weight: .medium))
         .foregroundStyle(tint)
@@ -347,10 +347,7 @@ private struct CompactLimitWindowRow: View {
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 if let reset = window.resetAt {
-                    HStack(spacing: 3) {
-                        Text(l10n.resets)
-                        Text(reset, format: .relative(presentation: .named))
-                    }
+                    Text(l10n.resetsInDays(reset.tvCountdownDaysFromNow))
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
