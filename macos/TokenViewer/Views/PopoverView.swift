@@ -21,11 +21,13 @@ struct PopoverView: View {
     var onHeightChange: ((CGFloat) -> Void)?
 
     var body: some View {
+        let limitRowCount = visibleLimitProviders.reduce(0) { $0 + $1.windows.count }
+        let extraLimitRows = max(0, limitRowCount - 1)
         let visibleSectionCount = 2
             + (showTrend && !viewModel.dailyUsage.isEmpty ? 1 : 0)
             + (showHeatmap && !viewModel.heatmap.isEmpty ? 1 : 0)
             + (showModels && !viewModel.modelBreakdown.isEmpty ? 1 : 0)
-        let contentHeight = CGFloat(visibleSectionCount) * 88 + 132
+        let contentHeight = CGFloat(visibleSectionCount) * 88 + CGFloat(extraLimitRows) * 24 + 132
         let popoverHeight = min(maxPopoverHeight, max(360, contentHeight))
 
         VStack(spacing: 0) {
@@ -145,33 +147,21 @@ struct PopoverView: View {
 
     // MARK: Limits (compact)
 
-    private var limitsSection: some View {
+    private var visibleLimitProviders: [ProviderLimit] {
         let visibleSet = LimitsVisibilityStore.visibleSet(from: limitsVisibleSources)
-        let active = limitsVM.providers.filter {
+        return limitsVM.providers.filter {
             $0.configured && !$0.windows.isEmpty && visibleSet.contains($0.name)
         }
+    }
+
+    private var limitsSection: some View {
+        let active = visibleLimitProviders
         return Group {
             if !active.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     sectionHeader(l10n.limits)
                     ForEach(active) { p in
-                        if let w = p.windows.first {
-                            HStack(spacing: 6) {
-                                ProviderIcon(source: p.name, size: 13)
-                                Text(p.name.capitalized).font(.system(size: 11)).lineLimit(1)
-                                Spacer(minLength: 4)
-                                GeometryReader { geo in
-                                    ZStack(alignment: .leading) {
-                                        Capsule().fill(.quaternary).frame(height: 4)
-                                        Capsule().fill(barColor(w.usedPercent))
-                                            .frame(width: max(2, geo.size.width * min(w.usedPercent, 100) / 100), height: 4)
-                                    }
-                                }.frame(width: 90, height: 4)
-                                Text(String(format: "%.0f%%", w.usedPercent))
-                                    .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
-                                    .frame(width: 34, alignment: .trailing)
-                            }
-                        }
+                        CompactProviderLimitCard(provider: p)
                     }
                 }
             }
@@ -275,10 +265,83 @@ struct PopoverView: View {
     private func sectionHeader(_ t: String) -> some View {
         Text(t).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
     }
-    private func barColor(_ p: Double) -> Color { p >= 90 ? .red : (p >= 70 ? .orange : TVColor.brand) }
     private func heatColor(_ l: UInt8) -> Color {
         switch l { case 0: return .gray.opacity(0.12); case 1: return TVColor.brand.opacity(0.35)
         case 2: return TVColor.brand.opacity(0.55); case 3: return TVColor.brand.opacity(0.78); default: return TVColor.brand }
+    }
+}
+
+private struct CompactProviderLimitCard: View {
+    let provider: ProviderLimit
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                ProviderIcon(source: provider.name, size: 13)
+                Text(provider.name.capitalized)
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                if let plan = provider.planLabel {
+                    Text(plan)
+                        .font(.system(size: 8, weight: .medium))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(TVColor.provider(provider.name).opacity(0.14)))
+                        .foregroundStyle(TVColor.provider(provider.name))
+                }
+                Spacer(minLength: 4)
+            }
+
+            ForEach(provider.windows) { window in
+                CompactLimitWindowRow(window: window, tint: TVColor.provider(provider.name))
+            }
+        }
+        .padding(9)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(nsColor: .controlBackgroundColor))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary, lineWidth: 0.5))
+        )
+    }
+}
+
+private struct CompactLimitWindowRow: View {
+    let window: LimitWindow
+    let tint: Color
+
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 6) {
+                Text(window.label)
+                    .font(.system(size: 10, weight: .medium))
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if let reset = window.resetAt {
+                    Text("resets \(reset, format: .relative(presentation: .named))")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Text(String(format: "%.0f%%", window.usedPercent))
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(barColor)
+                    .frame(width: 34, alignment: .trailing)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.quaternary).frame(height: 5)
+                    Capsule().fill(barColor)
+                        .frame(width: max(2, geo.size.width * min(window.usedPercent, 100) / 100.0), height: 5)
+                }
+            }
+            .frame(height: 5)
+        }
+    }
+
+    private var barColor: Color {
+        if window.usedPercent >= 90 { return .red }
+        if window.usedPercent >= 70 { return .orange }
+        return tint
     }
 }
 
