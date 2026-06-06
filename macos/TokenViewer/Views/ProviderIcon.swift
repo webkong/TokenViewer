@@ -26,13 +26,21 @@ struct ProviderIcon: View {
     /// via Codex CLI should still show the Claude logo).
     private var resolvedSource: String {
         let m = (modelName ?? "").lowercased()
+        let s = source.lowercased()
         if m.hasPrefix("claude") { return "claude" }
-        if m.hasPrefix("gpt-") || m.hasPrefix("o3") || m.hasPrefix("o4") || m.hasPrefix("codex") { return "codex" }
+        if m.hasPrefix("provider:anthropic") || m == "anthropic" { return "claude" }
+        if m.hasPrefix("gpt-") || m.hasPrefix("o1") || m.hasPrefix("o3") || m.hasPrefix("o4") || m.hasPrefix("o5") || m.hasPrefix("codex") || m == "openai" || m.hasPrefix("provider:openai") {
+            return "codex"
+        }
+        if m.hasPrefix("provider:google") { return "gemini" }
         if m.hasPrefix("gemini") { return "gemini" }
+        if m.hasPrefix("provider:xai") { return "grok" }
         if m.hasPrefix("grok") { return "grok" }
-        if m.hasPrefix("deepseek") { return "opencode" }  // no dedicated logo, opencode closest
+        if m.contains("deepseek") || s.contains("deepseek") { return "deepseek" }
+        if m.hasPrefix("provider:moonshot") { return "kimi" }
         if m.hasPrefix("kimi") || m.hasPrefix("moonshot") { return "kimi" }
         if m.hasPrefix("qwen") || m.hasPrefix("glm") || m.hasPrefix("minimax") || m.hasPrefix("mimo") { return "opencode" }
+        if Self.logoMap[s] != nil { return s }
         return source
     }
 
@@ -41,9 +49,9 @@ struct ProviderIcon: View {
         "claude": "claude-code", "codebuddy": "codebuddy", "codex": "codex",
         "every-code": "codex", "everycode": "codex", "gemini": "gemini",
         "antigravity": "antigravity", "kiro": "kiro", "kiro-ide": "kiro", "opencode": "opencode",
-        "openclaw": "openclaw", "cursor": "cursor", "grok": "grok", "kimi": "kimi",
-        "copilot": "copilot", "hermes": "hermes", "kilocli": "kilo", "kilocode": "kilo",
-        "qoder": "qoder", "trae": "trae", "windsurf": "windsurf", "zed": "zed",
+        "openclaw": "openclaw", "cursor": "cursor", "deepseek": "deepseek", "grok": "grok", "kimi": "kimi",
+        "copilot": "copilot", "hermes": "hermes", "kilocli": "kilo", "kilo-cli": "kilo", "kilocode": "kilo",
+        "qoder": "qoder", "trae": "trae", "windsurf": "windsurf", "zed": "zed", "workbuddy": "workbuddy",
     ]
 
     /// Logos drawn with `currentColor` (monochrome) — tint to adapt to light/dark.
@@ -73,13 +81,16 @@ struct ProviderIcon: View {
 
     private func logoImage() -> NSImage? {
         guard let name = Self.logoMap[resolvedSource.lowercased()] else { return nil }
-        let url = Bundle.main.url(forResource: name, withExtension: "svg")
-            ?? Bundle.main.url(forResource: name, withExtension: "png")
-        guard let url, let img = NSImage(contentsOf: url) else { return nil }
-        // SVGs load with a 1x1 intrinsic size; give the vector a real size so
-        // it rasterizes crisply at Retina scale.
-        img.size = NSSize(width: 64, height: 64)
-        if Self.monoLogos.contains(name) { img.isTemplate = true }
-        return img
+        for ext in ["svg", "png"] {
+            guard let url = Bundle.main.url(forResource: name, withExtension: ext),
+                  let img = NSImage(contentsOf: url)
+            else { continue }
+            // SVGs load with a 1x1 intrinsic size; give the vector a real size so
+            // it rasterizes crisply at Retina scale.
+            img.size = NSSize(width: 64, height: 64)
+            if Self.monoLogos.contains(name) { img.isTemplate = true }
+            return img
+        }
+        return nil
     }
 }

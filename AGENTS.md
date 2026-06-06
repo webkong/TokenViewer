@@ -1,6 +1,6 @@
 # AGENTS.md — TokenViewer
 
-Native macOS menu-bar app that tracks AI token usage & cost across 22 coding tools. Local-first: all data in `~/.tokenviewer/data.db`, no cloud, no account.
+Native macOS menu-bar app that tracks AI token usage & cost across 23 coding tools. Local-first: all data in `~/.tokenviewer/data.db`, no cloud, no account.
 
 - **Stack**: Rust core (parsing + SQLite + pricing) ⟷ C FFI ⟷ SwiftUI macOS app
 - **Brand color**: emerald `#059669`

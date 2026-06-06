@@ -51,7 +51,8 @@ enum LimitsService {
         async let trae = fetchTrae()
         async let windsurf = fetchWindsurf()
         async let qoder = fetchQoder()
-        return await [claude, codex, copilot, kiro, cursor, gemini, kimi, antigravity, zed, trae, windsurf, qoder]
+        async let workbuddy = fetchWorkBuddy()
+        return await [claude, codex, copilot, kiro, cursor, gemini, kimi, antigravity, zed, trae, windsurf, qoder, workbuddy]
     }
 
     // MARK: Claude (Keychain → Anthropic OAuth usage API)
@@ -404,6 +405,27 @@ enum LimitsService {
         return ProviderLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
     }
 
+    static func fetchWorkBuddy() async -> ProviderLimit {
+        let name = "workbuddy"
+        let cached = readCockpitAccount(provider: name)
+        guard let auth = readWorkBuddyAuth() else {
+            guard let cached else {
+                return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+            }
+            return workbuddyLimit(from: cached, configured: true)
+        }
+
+        if let refreshed = await refreshWorkBuddyAccount(from: auth) {
+            writeCockpitAccountSnapshot(provider: name, account: refreshed)
+            return workbuddyLimit(from: refreshed, configured: true)
+        }
+
+        if let cached {
+            return workbuddyLimit(from: cached, configured: true)
+        }
+        return ProviderLimit(name: name, planLabel: "WorkBuddy", configured: true, error: "Request failed", windows: [])
+    }
+
     // MARK: Codex subscription expiry
 
     private static func codexSubscriptionExpiresAt(accessToken: String, idToken: String?, accountId: String?) async -> Date? {
@@ -586,6 +608,247 @@ enum LimitsService {
             return firstString(index, keys: ["current_account_id", "active_account_id", "account_id", "id"])
         }
         return firstString(selected, keys: ["id", "account_id", "user_id"])
+    }
+
+    private static func readWorkBuddyAuth() -> [String: Any]? {
+        #if os(macOS)
+        let path = "\(NSHomeDirectory())/Library/Application Support/CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info"
+        #else
+        let path = "\(NSHomeDirectory())/.local/share/CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info"
+        #endif
+        return readJSON(path)
+    }
+
+    private static func refreshWorkBuddyAccount(from auth: [String: Any]) async -> [String: Any]? {
+        let authInfo = (auth["auth"] as? [String: Any]) ?? [:]
+        let accountInfo = (auth["account"] as? [String: Any]) ?? [:]
+
+        guard let accessToken = firstString(authInfo, keys: ["accessToken", "access_token"]),
+              !accessToken.isEmpty else {
+            return nil
+        }
+
+        let uid = firstString(accountInfo, keys: ["uid", "id"])
+        let nickname = firstString(accountInfo, keys: ["nickname", "label"])
+        let email = firstString(accountInfo, keys: ["email"]) ?? nickname ?? uid ?? "unknown"
+        let enterpriseId = firstString(accountInfo, keys: ["enterpriseId", "enterprise_id"])
+        let enterpriseName = firstString(accountInfo, keys: ["enterpriseName", "enterprise_name"])
+        let domain = firstString(authInfo, keys: ["domain"])
+        let refreshToken = firstString(authInfo, keys: ["refreshToken", "refresh_token"])
+        let tokenType = firstString(authInfo, keys: ["tokenType", "token_type"]) ?? "Bearer"
+        let expiresAt = numeric(authInfo["expiresAt"] ?? authInfo["expires_at"]).map(Int64.init)
+
+        async let dosage = postWorkBuddyJSON(
+            path: "/v2/billing/meter/get-dosage-notify",
+            accessToken: accessToken,
+            uid: uid,
+            enterpriseId: enterpriseId,
+            domain: domain,
+            body: [:]
+        )
+        async let payment = postWorkBuddyJSON(
+            path: "/v2/billing/meter/get-payment-type",
+            accessToken: accessToken,
+            uid: uid,
+            enterpriseId: enterpriseId,
+            domain: domain,
+            body: [:]
+        )
+        async let userResource = postWorkBuddyJSON(
+            path: "/v2/billing/meter/get-user-resource",
+            accessToken: accessToken,
+            uid: uid,
+            enterpriseId: enterpriseId,
+            domain: domain,
+            body: workbuddyUserResourceBody()
+        )
+
+        let dosageJSON = await dosage
+        let paymentJSON = await payment
+        let userResourceJSON = await userResource
+
+        guard dosageJSON != nil || paymentJSON != nil || userResourceJSON != nil else {
+            return nil
+        }
+
+        let paymentType = nestedString(paymentJSON, paths: [
+            ["data", "paymentType"],
+            ["data"],
+        ])
+
+        var quotaRaw: [String: Any] = [:]
+        if let dosageJSON { quotaRaw["dosage"] = dosageJSON }
+        if let paymentJSON { quotaRaw["payment"] = paymentJSON }
+        if let userResourceJSON { quotaRaw["userResource"] = userResourceJSON }
+
+        let now = Int(Date().timeIntervalSince1970)
+        let accountIdSeed = uid ?? email
+        let accountId = "workbuddy_" + sanitizeFileComponent(accountIdSeed.isEmpty ? "local" : accountIdSeed)
+
+        var result: [String: Any] = [
+            "id": accountId,
+            "email": email,
+            "access_token": accessToken,
+            "token_type": tokenType,
+            "last_used": now,
+            "created_at": now,
+            "status": "normal",
+            "auth_raw": auth,
+            "profile_raw": accountInfo,
+            "usage_updated_at": now,
+        ]
+        if let uid { result["uid"] = uid }
+        if let nickname { result["nickname"] = nickname }
+        if let enterpriseId { result["enterprise_id"] = enterpriseId }
+        if let enterpriseName { result["enterprise_name"] = enterpriseName }
+        if let refreshToken { result["refresh_token"] = refreshToken }
+        if let domain { result["domain"] = domain }
+        if let expiresAt { result["expires_at"] = expiresAt }
+        if let paymentType { result["payment_type"] = paymentType }
+        if !quotaRaw.isEmpty { result["quota_raw"] = quotaRaw }
+        if let userResourceJSON { result["usage_raw"] = userResourceJSON }
+        return result
+    }
+
+    private static func postWorkBuddyJSON(
+        path: String,
+        accessToken: String,
+        uid: String?,
+        enterpriseId: String?,
+        domain: String?,
+        body: [String: Any]
+    ) async -> [String: Any]? {
+        guard let url = URL(string: "https://www.codebuddy.cn\(path)") else { return nil }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
+        if let uid { req.setValue(uid, forHTTPHeaderField: "X-User-Id") }
+        if let enterpriseId {
+            req.setValue(enterpriseId, forHTTPHeaderField: "X-Enterprise-Id")
+            req.setValue(enterpriseId, forHTTPHeaderField: "X-Tenant-Id")
+        }
+        if let domain { req.setValue(domain, forHTTPHeaderField: "X-Domain") }
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        return await getJSON(req)
+    }
+
+    private static func workbuddyUserResourceBody() -> [String: Any] {
+        let now = Date()
+        let end = Calendar(identifier: .gregorian).date(byAdding: .year, value: 101, to: now) ?? now
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone.current
+        return [
+            "PageNumber": 1,
+            "PageSize": 100,
+            "ProductCode": "p_tcaca",
+            "Status": [0, 3],
+            "PackageEndTimeRangeBegin": formatter.string(from: now),
+            "PackageEndTimeRangeEnd": formatter.string(from: end),
+        ]
+    }
+
+    private static func writeCockpitAccountSnapshot(provider: String, account: [String: Any]) {
+        guard let accountId = firstString(account, keys: ["id"]) else { return }
+        let base = "\(NSHomeDirectory())/.antigravity_cockpit"
+        let accountsDir = "\(base)/\(provider)_accounts"
+        let indexPath = "\(base)/\(provider)_accounts.json"
+        let detailPath = "\(accountsDir)/\(accountId).json"
+        let summary: [String: Any] = [
+            "id": accountId,
+            "email": firstString(account, keys: ["email"]) ?? accountId,
+            "plan_type": firstString(account, keys: ["plan_type", "payment_type"]) as Any,
+            "created_at": account["created_at"] ?? Int(Date().timeIntervalSince1970),
+            "last_used": account["last_used"] ?? Int(Date().timeIntervalSince1970),
+        ].compactMapValues { $0 }
+        let index: [String: Any] = [
+            "version": "1.0",
+            "accounts": [summary],
+        ]
+
+        let fm = FileManager.default
+        try? fm.createDirectory(atPath: accountsDir, withIntermediateDirectories: true)
+        writeJSON(account, to: detailPath)
+        writeJSON(index, to: indexPath)
+    }
+
+    private static func writeJSON(_ json: [String: Any], to path: String) {
+        guard JSONSerialization.isValidJSONObject(json),
+              let data = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted]) else { return }
+        FileManager.default.createFile(atPath: path, contents: data)
+    }
+
+    private static func sanitizeFileComponent(_ raw: String) -> String {
+        let cleaned = raw.replacingOccurrences(of: #"[^A-Za-z0-9._-]"#, with: "_", options: .regularExpression)
+        return cleaned.isEmpty ? "local" : cleaned
+    }
+
+    private static func workbuddyLimit(from account: [String: Any], configured: Bool) -> ProviderLimit {
+        let name = "workbuddy"
+        let plan = planLabel(nestedString(account, paths: [
+            ["payment_type"],
+            ["plan_type"],
+            ["quota_raw", "payment", "data", "paymentType"],
+            ["quota_raw", "payment", "data"],
+        ]), "WorkBuddy")
+        let windows = workbuddyWindows(from: account)
+        return ProviderLimit(
+            name: name,
+            planLabel: plan,
+            configured: configured,
+            error: windows.isEmpty ? "No usage data" : nil,
+            quotaResetAt: windows.compactMap(\.resetAt).sorted().first,
+            windows: windows
+        )
+    }
+
+    private static func workbuddyWindows(from account: [String: Any]) -> [LimitWindow] {
+        let roots: [Any?] = [
+            nestedValue(account, ["usage_raw"]),
+            nestedValue(account, ["quota_raw", "userResource"]),
+            nestedValue(account, ["quota_raw"]),
+        ]
+
+        for root in roots {
+            guard let accounts = nestedValue(root, ["data", "Response", "Data", "Accounts"]) as? [[String: Any]] else {
+                continue
+            }
+
+            var used: Double = 0
+            var total: Double = 0
+            var resetAt: Date? = nil
+
+            for item in accounts {
+                if let status = item["Status"] as? Int, status != 0 && status != 3 { continue }
+                let itemTotal = numeric(item["CycleCapacitySizePrecise"] ?? item["CycleCapacitySize"] ?? item["CapacitySizePrecise"] ?? item["CapacitySize"]) ?? 0
+                let itemRemain = numeric(item["CycleCapacityRemainPrecise"] ?? item["CycleCapacityRemain"] ?? item["CapacityRemainPrecise"] ?? item["CapacityRemain"]) ?? 0
+                guard itemTotal > 0 else { continue }
+                total += itemTotal
+                used += max(itemTotal - itemRemain, 0)
+                let candidate = parseDate(item["CycleEndTime"] ?? item["ExpiredTime"] ?? item["DeductionEndTime"])
+                if let candidate {
+                    resetAt = nearestFutureDate(current: resetAt, candidate: candidate)
+                }
+            }
+
+            guard total > 0 else { continue }
+            return [LimitWindow(label: "Credits", usedPercent: min(max(used / total * 100, 0), 100), resetAt: resetAt)]
+        }
+
+        return []
+    }
+
+    private static func nearestFutureDate(current: Date?, candidate: Date) -> Date {
+        guard let current else { return candidate }
+        let now = Date()
+        let currentScore = current >= now ? current.timeIntervalSince(now) : Double.greatestFiniteMagnitude
+        let candidateScore = candidate >= now ? candidate.timeIntervalSince(now) : Double.greatestFiniteMagnitude
+        if candidateScore < currentScore { return candidate }
+        if currentScore == Double.greatestFiniteMagnitude && candidate > current { return candidate }
+        return current
     }
 
     private static func nestedString(_ object: Any?, paths: [[String]]) -> String? {

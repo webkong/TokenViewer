@@ -14,6 +14,7 @@ enum LimitsVisibilityStore {
         "trae",
         "windsurf",
         "qoder",
+        "workbuddy",
     ]
 
     static let defaultsValue = allSources.joined(separator: ",")
@@ -44,6 +45,7 @@ enum LimitsVisibilityStore {
         case "trae": return "Trae"
         case "windsurf": return "Windsurf"
         case "qoder": return "Qoder"
+        case "workbuddy": return "WorkBuddy"
         default:
             return source.capitalized
         }

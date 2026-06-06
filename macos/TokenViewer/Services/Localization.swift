@@ -130,7 +130,7 @@ final class L10n: ObservableObject {
     var providers: String { isZh ? "数据源" : "Providers" }
     var noProviderData: String { isZh ? "尚无数据。使用任意 AI 工具后点击同步。" : "No provider data yet. Use any supported AI tool, then Sync." }
     func recordsCount(_ n: Int) -> String { isZh ? "\(n) 条记录" : "\(n) records" }
-    func activeCount(_ n: Int) -> String { isZh ? "22 个支持工具中 \(n) 个活跃" : "\(n) of 22 supported tools active" }
+    func activeCount(_ n: Int) -> String { isZh ? "23 个支持工具中 \(n) 个活跃" : "\(n) of 23 supported tools active" }
     var data: String { isZh ? "数据" : "Data" }
     var dataManagement: String { isZh ? "数据管理" : "Data Management" }
     var directory: String { isZh ? "目录" : "Directory" }

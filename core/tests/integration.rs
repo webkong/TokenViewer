@@ -19,7 +19,7 @@ fn test_full_sync() {
         println!("  Error: {}", e);
     }
     // Should not panic, providers_synced should be > 0 if any tool is installed
-    assert!(result.errors.len() <= 22); // at most one error per provider
+    assert!(result.errors.len() <= 23); // at most one error per provider
 
     // Verify cost computation does not panic and pricing resolves.
     let rows = db.aggregate_by_model("2020-01-01T00:00:00Z", "2030-01-01T00:00:00Z").unwrap();

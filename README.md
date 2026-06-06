@@ -6,7 +6,7 @@
 
 ### Know exactly how many tokens you're spending — across every AI coding tool
 
-A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects token counts and costs from **22 AI coding tools**, aggregates them locally, and surfaces real usage trends in a beautiful dashboard. No cloud account, no Node.js, no browser — just a tiny native app.
+A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects token counts and costs from **23 AI coding tools**, aggregates them locally, and surfaces real usage trends in a beautiful dashboard. No cloud account, no Node.js, no browser — just a tiny native app.
 
 [![Release](https://img.shields.io/github/v/release/webkong/TokenViewer?color=059669&label=Download)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer-Installer.pkg)
 [![Platform](https://img.shields.io/badge/Platform-macOS%2014%2B-lightgrey?logo=apple&logoColor=white)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer-Installer.pkg)
@@ -55,7 +55,7 @@ A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects tok
 
 ## ✨ Features
 
-- 🔌 **22 AI tools out of the box** — Claude Code, Codex, Kiro, Cursor, GitHub Copilot, Gemini CLI, Opencode, Roocode, Kilo Code, Zed, Goose, Grok, Kimi, Craft, OpenClaw, Hermes, Antigravity, CodeBuddy, OhMyPi, Pi, KiloCLI, EveryCode
+- 🔌 **23 AI tools out of the box** — Claude Code, Codex, Kiro, Cursor, GitHub Copilot, Gemini CLI, Opencode, Roocode, Kilo Code, Zed, Goose, Grok, Kimi, Craft, OpenClaw, Hermes, Antigravity, CodeBuddy, WorkBuddy, OhMyPi, Pi, KiloCLI, EveryCode
 - 🏠 **100% local** — Token data never leaves your machine. No account, no API keys.
 - 🚀 **Zero config** — Reads existing log files your tools already produce. Nothing installed into those tools.
 - 📊 **Beautiful dashboard** — Usage trends, model breakdown, cost analysis, provider breakdown, daily detail table
@@ -116,6 +116,7 @@ A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects tok
 | **Hermes** | `~/.hermes/state.db` | SQLite reader |
 | **Antigravity** | `~/.gemini/antigravity*/brain/**/transcript.jsonl` | Passive reader |
 | **CodeBuddy** | `~/.codebuddy/**/*.jsonl` | Passive reader |
+| **WorkBuddy** | `~/.antigravity_cockpit/workbuddy_accounts/*.json` | Local quota snapshot reader |
 | **OhMyPi** | `~/.omp/agent/sessions/**/*.jsonl` | Passive reader |
 | **Pi** | `~/.pi/agent/sessions/**/*.jsonl` | Passive reader |
 | **KiloCLI** | `~/.local/share/kilo/kilo.db` | SQLite reader |
@@ -128,7 +129,7 @@ Missing your tool? [Open an issue](https://github.com/webkong/TokenViewer/issues
 
 ## 📊 Rate Limit Tracking
 
-TokenViewer can show live quota usage and reset countdowns for 8 providers:
+TokenViewer can show live quota usage and reset countdowns for 9 providers:
 
 | Provider | Plan Labels | Data Source |
 |----------|-------------|-------------|
@@ -140,6 +141,7 @@ TokenViewer can show live quota usage and reset countdowns for 8 providers:
 | **Gemini** | — | `cloudcode-pa.googleapis.com` (`~/.gemini/oauth_creds.json`) |
 | **Kimi** | Adagio / Andante / Moderato / Allegretto / Allegro | `api.kimi.com/coding/v1/usages` |
 | **Antigravity** | — | Uses Gemini quota |
+| **WorkBuddy** | Pro / Free / Enterprise | `codebuddy.cn` billing APIs (`workbuddy-desktop.info`) |
 
 Providers not installed show as greyed-out cards (configured providers sort to the top).
 
@@ -148,14 +150,14 @@ Providers not installed show as greyed-out cards (configured providers sort to t
 ## 🏗️ How It Works
 
 ```
-AI Tool Logs  →  22 Rust Parsers  →  SQLite (~/.tokenviewer/data.db)
+AI Tool Logs  →  23 Rust Parsers  →  SQLite (~/.tokenviewer/data.db)
                                           ↓
                               FFI (tt_sync / tt_query_*)
                                           ↓
                      SwiftUI Views ← CoreBridge ← UsageViewModel
 ```
 
-- **Rust core** (`core/`) — 22 parsers, SQLite storage, pricing engine. Compiled to `libtokenviewer_core.a`.
+- **Rust core** (`core/`) — 23 parsers, SQLite storage, pricing engine. Compiled to `libtokenviewer_core.a`.
 - **SwiftUI app** (`macos/`) — Menu-bar status item, popover panel, full dashboard window.
 - **Incremental sync** — Each parser stores a file offset cursor in SQLite. On the next sync only new bytes are read. Parsers run in parallel (rayon). Files with unchanged mtime are skipped entirely.
 

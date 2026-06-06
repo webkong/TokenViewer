@@ -5,7 +5,7 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rusqlite::Connection;
-use tokenviewer_core::parsers::{codex, parse_all};
+use tokenviewer_core::parsers::{codex, parse_all, workbuddy};
 
 #[derive(Debug, Clone)]
 struct Expectation {
@@ -22,7 +22,7 @@ fn provider_parser_matrix_matches_reference_shapes() {
     let results = parse_all(&home, &cursors);
     let by_source: HashMap<String, _> = results.into_iter().map(|r| (r.source.clone(), r)).collect();
 
-    let cases: [(&str, Expectation); 22] = [
+    let cases: [(&str, Expectation); 23] = [
         ("claude", Expectation { model: "claude-3-7-sonnet", total_tokens: 58 }),
         ("codex", Expectation { model: "openai", total_tokens: 18 }),
         ("cursor", Expectation { model: "cursor-1", total_tokens: 20 }),
@@ -45,6 +45,7 @@ fn provider_parser_matrix_matches_reference_shapes() {
         ("pi", Expectation { model: "pi-unknown", total_tokens: 19 }),
         ("craft", Expectation { model: "craft-1", total_tokens: 20 }),
         ("codebuddy", Expectation { model: "codebuddy-2", total_tokens: 37 }),
+        ("workbuddy", Expectation { model: "workbuddy-quota", total_tokens: 400 }),
     ];
 
     assert_eq!(by_source.len(), cases.len(), "expected one result per registered provider");
@@ -103,6 +104,46 @@ fn codex_incremental_sync_keeps_model_context() {
     assert_eq!(second_records.len(), 1);
     assert_eq!(second_records[0].model, "gpt-4.1");
     assert_ne!(second_records[0].model, "unknown");
+}
+
+#[test]
+fn workbuddy_parser_falls_back_to_quota_snapshot() {
+    let home = temp_home();
+    write_text(
+        &home.join(".antigravity_cockpit/workbuddy_accounts.json"),
+        r#"{"version":"1.0","accounts":[{"id":"workbuddy_quota_only","email":"wb@example.com","last_used":1735690200}]}"#,
+    );
+    write_text(
+        &home.join(".antigravity_cockpit/workbuddy_accounts/workbuddy_quota_only.json"),
+        r#"{
+  "id": "workbuddy_quota_only",
+  "email": "wb@example.com",
+  "quota_raw": {
+    "userResource": {
+      "data": {
+        "Response": {
+          "Data": {
+            "Accounts": [
+              {
+                "PackageCode": "TCACA_code_002_AkiJS3ZHF5",
+                "Status": 0,
+                "CycleCapacitySizePrecise": "500",
+                "CycleCapacityRemainPrecise": "125"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "usage_updated_at": 1735690200
+}"#,
+    );
+
+    let (records, _) = workbuddy::parse(&home, None).expect("workbuddy parse");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].model, "workbuddy-quota");
+    assert_eq!(records[0].total_tokens, 375);
 }
 
 fn temp_home() -> PathBuf {
@@ -276,6 +317,40 @@ fn seed_provider_fixtures(home: &Path) {
     write_text(
         &home.join(".codebuddy/projects/project-a/session.jsonl"),
         r#"{"type":"message","role":"assistant","uuid":"cb-1","providerData":{"model":"codebuddy-2","rawUsage":{"prompt_tokens":20,"completion_tokens":10,"prompt_tokens_details":{"cached_tokens":2,"reasoning_tokens":4},"cache_read_input_tokens":1,"cache_creation_input_tokens":3}},"timestamp":1735690080000}"#,
+    );
+
+    write_text(
+        &home.join(".antigravity_cockpit/workbuddy_accounts.json"),
+        r#"{"version":"1.0","accounts":[{"id":"workbuddy_fixture","email":"wb@example.com","last_used":1735690200}]}"#,
+    );
+
+    write_text(
+        &home.join(".antigravity_cockpit/workbuddy_accounts/workbuddy_fixture.json"),
+        r#"{
+  "id": "workbuddy_fixture",
+  "email": "wb@example.com",
+  "payment_type": "pro",
+  "usage_updated_at": 1735690200,
+  "usage_raw": {
+    "data": {
+      "Response": {
+        "Data": {
+          "Accounts": [
+            {
+              "PackageCode": "TCACA_code_002_AkiJS3ZHF5",
+              "PackageName": "Pro Monthly",
+              "Status": 0,
+              "CycleStartTime": "2025-12-01 00:00:00",
+              "CycleEndTime": "2026-01-31 00:00:00",
+              "CycleCapacitySizePrecise": "1000",
+              "CycleCapacityRemainPrecise": "600"
+            }
+          ]
+        }
+      }
+    }
+  }
+}"#,
     );
 
 }
