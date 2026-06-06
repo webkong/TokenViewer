@@ -179,7 +179,7 @@ build_app() {
 
   echo "▶ Building Xcode app (v$VERSION / $BUILD_NUMBER)..."
   mkdir -p "$RELEASE_DIR"
-  rm -rf "$DIST_DIR/xcode-build" "$RELEASE_DIR/$APP_DISPLAY_NAME.app"
+  rm -rf "$RELEASE_DIR/$APP_DISPLAY_NAME.app"
 
   local xcode_sign_args=()
   local skip_xcode_signing=0
@@ -294,12 +294,24 @@ POSTINSTALL
   rm -f "$PKG_PATH"
   rm -f "$PKG_ALIAS_PATH"
 
+  # Disable bundle relocation so the app always lands in /Applications
+  pkgbuild --analyze --root "$root_dir" "$work_dir/component.plist" >/dev/null 2>&1 || true
+  if [[ -f "$work_dir/component.plist" ]]; then
+    /usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$work_dir/component.plist" 2>/dev/null || true
+  fi
+
+  local component_args=()
+  if [[ -f "$work_dir/component.plist" ]]; then
+    component_args=(--component-plist "$work_dir/component.plist")
+  fi
+
   pkgbuild \
     --root "$root_dir" \
     --scripts "$scripts_dir" \
     --identifier "com.tokenviewer.app.pkg" \
     --version "$VERSION" \
     --install-location "/" \
+    "${component_args[@]}" \
     "$PKG_PATH"
 
   cp -f "$PKG_PATH" "$PKG_ALIAS_PATH"
