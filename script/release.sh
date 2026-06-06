@@ -21,7 +21,8 @@ RELEASE_TAG="${RELEASE_TAG:-v$VERSION}"
 RELEASE_NOTES_FILE="${RELEASE_NOTES_FILE:-$ROOT_DIR/docs/releases/$RELEASE_TAG.md}"
 
 SELF_SIGNED_ENV_FILE="${SELF_SIGNED_ENV_FILE:-$ROOT_DIR/signing/tokenviewer-internal-codesign.env}"
-CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
+CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:-}"
+DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM:-}"
 KEYCHAIN_ARGS=()
 
 load_self_signed_env() {
@@ -29,7 +30,7 @@ load_self_signed_env() {
 }
 
 # If no explicit CODE_SIGN_IDENTITY set, try to use self-signed
-if [[ "$CODE_SIGN_IDENTITY" == "-" ]]; then
+if [[ -z "$CODE_SIGN_IDENTITY" ]]; then
   load_self_signed_env
   if [[ -n "${SELF_SIGNED_COMMON_NAME:-}" ]]; then
     CODE_SIGN_IDENTITY="$SELF_SIGNED_COMMON_NAME"
@@ -63,7 +64,8 @@ Commands:
 Environment:
   VERSION=x.y.z           Overrides script/version.env
   BUILD_NUMBER=NNNNN       Overrides script/version.env
-  CODE_SIGN_IDENTITY=...   Codesign identity (default: ad-hoc '-')
+  CODE_SIGN_IDENTITY=...   Codesign identity (default: preserve Xcode app signature)
+  DEVELOPMENT_TEAM=...     Team ID to pass through to Xcode signing
   GITHUB_TOKEN=...         Required for push-release when gh not installed
   RELEASE_TAG=vX.Y.Z
   RELEASE_NOTES_FILE=docs/releases/vX.Y.Z.md
@@ -85,6 +87,32 @@ require_release_notes() {
     echo "Missing release notes file: $RELEASE_NOTES_FILE" >&2
     echo "Create docs/releases/$RELEASE_TAG.md before releasing." >&2
     exit 1
+  fi
+}
+
+app_signature_report() {
+  codesign -dv --verbose=4 "$1" 2>&1 || return 1
+}
+
+validate_non_adhoc_signature() {
+  local app="$1"
+  local context="$2"
+  local signature_info
+
+  signature_info="$(app_signature_report "$app")" || {
+    echo "Missing or invalid code signature for $context: $app" >&2
+    return 1
+  }
+
+  if grep -q "Signature=adhoc" <<<"$signature_info"; then
+    echo "Refusing to package ad-hoc signed app for $context: $app" >&2
+    echo "Configure Xcode signing or pass CODE_SIGN_IDENTITY / DEVELOPMENT_TEAM explicitly." >&2
+    return 1
+  fi
+
+  if ! grep -q "^Authority=" <<<"$signature_info"; then
+    echo "Refusing to package app without signing authority for $context: $app" >&2
+    return 1
   fi
 }
 
@@ -113,6 +141,16 @@ build_app() {
 
   echo "▶ Building Xcode app (v$VERSION / $BUILD_NUMBER)..."
   mkdir -p "$RELEASE_DIR"
+  rm -rf "$DIST_DIR/xcode-build" "$RELEASE_DIR/$APP_DISPLAY_NAME.app"
+
+  local xcode_sign_args=()
+  if [[ -n "$CODE_SIGN_IDENTITY" ]]; then
+    xcode_sign_args+=("CODE_SIGN_IDENTITY=$CODE_SIGN_IDENTITY")
+    xcode_sign_args+=("CODE_SIGN_STYLE=Manual")
+  fi
+  if [[ -n "$DEVELOPMENT_TEAM" ]]; then
+    xcode_sign_args+=("DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM")
+  fi
 
   xcodebuild \
     -scheme "$SCHEME" \
@@ -120,6 +158,7 @@ build_app() {
     -derivedDataPath "$DIST_DIR/xcode-build" \
     MARKETING_VERSION="$VERSION" \
     CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+    "${xcode_sign_args[@]}" \
     build
 
   local built_app
@@ -129,6 +168,7 @@ build_app() {
   fi
 
   cp -R "$built_app" "$RELEASE_DIR/"
+  validate_non_adhoc_signature "$RELEASE_DIR/$APP_DISPLAY_NAME.app" "Xcode build output"
   echo "✓ Built: $RELEASE_DIR/$APP_DISPLAY_NAME.app"
 }
 
@@ -136,8 +176,16 @@ build_app() {
 
 codesign_app() {
   local app="$RELEASE_DIR/$APP_DISPLAY_NAME.app"
-  codesign --force --deep --sign "$CODE_SIGN_IDENTITY" "$app" >/dev/null
-  echo "✓ Signed with: $CODE_SIGN_IDENTITY"
+  if [[ -n "$CODE_SIGN_IDENTITY" ]]; then
+    codesign --force --deep --sign "$CODE_SIGN_IDENTITY" \
+      ${KEYCHAIN_ARGS[@]+"${KEYCHAIN_ARGS[@]}"} \
+      "$app" >/dev/null
+    echo "✓ Signed with: $CODE_SIGN_IDENTITY"
+  else
+    echo "✓ Preserved Xcode app signature"
+  fi
+
+  validate_non_adhoc_signature "$app" "release app"
 }
 
 # ─── ZIP ──────────────────────────────────────────────────────────────────────
@@ -158,10 +206,7 @@ build_pkg() {
   require_command pkgbuild
 
   build_app
-  # Re-sign with self-signed identity (codesign_app was called by build_app via build_zip path)
-  codesign --force --deep --sign "$CODE_SIGN_IDENTITY" \
-    ${KEYCHAIN_ARGS[@]+"${KEYCHAIN_ARGS[@]}"} \
-    "$RELEASE_DIR/$APP_DISPLAY_NAME.app" >/dev/null 2>&1 || true
+  codesign_app
 
   local work_dir; work_dir="$(mktemp -d)"
   local root_dir="$work_dir/root"
