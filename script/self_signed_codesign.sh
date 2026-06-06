@@ -24,12 +24,6 @@ Commands:
   generate   Create or refresh a self-signed code signing certificate and .p12 bundle
   import     Import the .p12 bundle into a project-local keychain for codesign
   identity   Print the common name that build scripts should use
-
-Environment:
-  SELF_SIGNED_COMMON_NAME=...      Certificate common name
-  SELF_SIGNED_KEY_NAME=...         Base filename prefix inside signing/
-  SELF_SIGNED_P12_PASSWORD=...     Password for the exported .p12 bundle
-  SELF_SIGNED_KEYCHAIN_PASSWORD=... Password used for the project keychain
 EOF
 }
 
@@ -45,10 +39,22 @@ load_existing_env() {
     # shellcheck source=/dev/null
     source "$ENV_PATH"
     COMMON_NAME="${SELF_SIGNED_COMMON_NAME:-$COMMON_NAME}"
-    P12_PATH="${SELF_SIGNED_P12_PATH:-$P12_PATH}"
+    if [[ -n "${SELF_SIGNED_P12_PATH:-}" && -f "${SELF_SIGNED_P12_PATH:-}" ]]; then
+      P12_PATH="$SELF_SIGNED_P12_PATH"
+    fi
     P12_PASSWORD="${SELF_SIGNED_P12_PASSWORD:-$P12_PASSWORD}"
-    KEYCHAIN_PATH="${SELF_SIGNED_KEYCHAIN_PATH:-$KEYCHAIN_PATH}"
+    if [[ -n "${SELF_SIGNED_KEYCHAIN_PATH:-}" && "${SELF_SIGNED_KEYCHAIN_PATH:-}" == "$HOME"* ]]; then
+      KEYCHAIN_PATH="${SELF_SIGNED_KEYCHAIN_PATH}"
+    fi
     KEYCHAIN_PASSWORD="${SELF_SIGNED_KEYCHAIN_PASSWORD:-$KEYCHAIN_PASSWORD}"
+  fi
+
+  if [[ ! -f "$P12_PATH" && -f "$SIGNING_DIR/$KEY_NAME.p12" ]]; then
+    P12_PATH="$SIGNING_DIR/$KEY_NAME.p12"
+  fi
+
+  if [[ "$KEYCHAIN_PATH" != "$HOME"* ]]; then
+    KEYCHAIN_PATH="$KEYCHAIN_DIR/$KEY_NAME.keychain-db"
   fi
 }
 
@@ -124,12 +130,6 @@ generate_certificate() {
 
   chmod 600 "$PRIVATE_KEY_PATH" "$P12_PATH"
   write_env_file
-
-  echo "Generated self-signed code signing bundle:"
-  echo "  Certificate: $CERT_PATH"
-  echo "  Private key: $PRIVATE_KEY_PATH"
-  echo "  PKCS#12:     $P12_PATH"
-  echo "  Env file:    $ENV_PATH"
 }
 
 ensure_keychain() {
@@ -152,10 +152,7 @@ ensure_keychain_in_search_list() {
     line="${line#"${line%%[![:space:]]*}"}"
     line="${line%\"}"
     line="${line#\"}"
-
-    if [[ -n "$line" ]]; then
-      current_keychains+=("$line")
-    fi
+    [[ -n "$line" ]] && current_keychains+=("$line")
   done < <(security list-keychains -d user)
 
   for existing in "${current_keychains[@]}"; do
@@ -199,7 +196,6 @@ import_certificate() {
     "$CERT_PATH" >/dev/null
 
   ensure_keychain_in_search_list
-
   write_env_file
 
   echo "Imported signing identity into project keychain:"

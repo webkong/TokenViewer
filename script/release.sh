@@ -21,7 +21,7 @@ RELEASE_TAG="${RELEASE_TAG:-v$VERSION}"
 RELEASE_NOTES_FILE="${RELEASE_NOTES_FILE:-$ROOT_DIR/docs/releases/$RELEASE_TAG.md}"
 
 SELF_SIGNED_ENV_FILE="${SELF_SIGNED_ENV_FILE:-$ROOT_DIR/signing/tokenviewer-internal-codesign.env}"
-CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:-}"
+CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM:-}"
 KEYCHAIN_ARGS=()
 
@@ -29,14 +29,51 @@ load_self_signed_env() {
   [[ -f "$SELF_SIGNED_ENV_FILE" ]] && source "$SELF_SIGNED_ENV_FILE" || true
 }
 
-# If no explicit CODE_SIGN_IDENTITY set, try to use self-signed
-if [[ -z "$CODE_SIGN_IDENTITY" ]]; then
+prepare_self_signed_identity() {
   load_self_signed_env
-  if [[ -n "${SELF_SIGNED_COMMON_NAME:-}" ]]; then
-    CODE_SIGN_IDENTITY="$SELF_SIGNED_COMMON_NAME"
-    KEYCHAIN_ARGS=(--keychain "${SELF_SIGNED_KEYCHAIN_PATH}")
+
+  if [[ "$CODE_SIGN_IDENTITY" != "-" && -n "$CODE_SIGN_IDENTITY" ]]; then
+    return 0
   fi
-fi
+
+  if [[ -z "${SELF_SIGNED_COMMON_NAME:-}" || -z "${SELF_SIGNED_P12_PATH:-}" || -z "${SELF_SIGNED_P12_PASSWORD:-}" ]]; then
+    return 1
+  fi
+
+  if [[ ! -f "$SELF_SIGNED_P12_PATH" ]]; then
+    return 1
+  fi
+
+  if [[ -z "${SELF_SIGNED_KEYCHAIN_PATH:-}" || -z "${SELF_SIGNED_KEYCHAIN_PASSWORD:-}" ]]; then
+    return 1
+  fi
+
+  "$ROOT_DIR/script/self_signed_codesign.sh" import >/dev/null
+  CODE_SIGN_IDENTITY="$SELF_SIGNED_COMMON_NAME"
+  KEYCHAIN_ARGS=(--keychain "$SELF_SIGNED_KEYCHAIN_PATH")
+  return 0
+}
+
+require_stable_code_sign_identity() {
+  if [[ "$CODE_SIGN_IDENTITY" != "-" && -n "$CODE_SIGN_IDENTITY" ]]; then
+    return 0
+  fi
+
+  if prepare_self_signed_identity; then
+    return 0
+  fi
+
+  cat >&2 <<EOF
+error: A stable signing identity is required for release builds.
+
+Use either:
+  CODE_SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" DEVELOPMENT_TEAM=TEAMID $0 build-dmg
+or import the project self-signed identity for internal testing:
+  ./script/self_signed_codesign.sh generate
+  ./script/self_signed_codesign.sh import
+EOF
+  exit 1
+}
 
 DMG_PATH="$RELEASE_DIR/$APP_DISPLAY_NAME.dmg"
 ZIP_PATH="$RELEASE_DIR/$APP_DISPLAY_NAME-$VERSION.zip"
@@ -64,7 +101,7 @@ Commands:
 Environment:
   VERSION=x.y.z           Overrides script/version.env
   BUILD_NUMBER=NNNNN       Overrides script/version.env
-  CODE_SIGN_IDENTITY=...   Codesign identity (default: preserve Xcode app signature)
+  CODE_SIGN_IDENTITY=...   Codesign identity (default: project self-signed identity when available)
   DEVELOPMENT_TEAM=...     Team ID to pass through to Xcode signing
   GITHUB_TOKEN=...         Required for push-release when gh not installed
   RELEASE_TAG=vX.Y.Z
@@ -135,6 +172,7 @@ build_app() {
   fi
 
   require_command xcodebuild
+  require_stable_code_sign_identity
 
   # Patch version into project.yml settings
   cd "$MACOS_DIR"
@@ -144,12 +182,19 @@ build_app() {
   rm -rf "$DIST_DIR/xcode-build" "$RELEASE_DIR/$APP_DISPLAY_NAME.app"
 
   local xcode_sign_args=()
-  if [[ -n "$CODE_SIGN_IDENTITY" ]]; then
+  local skip_xcode_signing=0
+  if [[ -n "$CODE_SIGN_IDENTITY" && "$CODE_SIGN_IDENTITY" != "${SELF_SIGNED_COMMON_NAME:-}" ]]; then
     xcode_sign_args+=("CODE_SIGN_IDENTITY=$CODE_SIGN_IDENTITY")
     xcode_sign_args+=("CODE_SIGN_STYLE=Manual")
+  else
+    skip_xcode_signing=1
   fi
   if [[ -n "$DEVELOPMENT_TEAM" ]]; then
     xcode_sign_args+=("DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM")
+  fi
+  if [[ "$skip_xcode_signing" == "1" ]]; then
+    xcode_sign_args+=("CODE_SIGNING_ALLOWED=NO")
+    xcode_sign_args+=("CODE_SIGNING_REQUIRED=NO")
   fi
 
   xcodebuild \
@@ -168,7 +213,6 @@ build_app() {
   fi
 
   cp -R "$built_app" "$RELEASE_DIR/"
-  validate_non_adhoc_signature "$RELEASE_DIR/$APP_DISPLAY_NAME.app" "Xcode build output"
   echo "✓ Built: $RELEASE_DIR/$APP_DISPLAY_NAME.app"
 }
 
@@ -176,14 +220,10 @@ build_app() {
 
 codesign_app() {
   local app="$RELEASE_DIR/$APP_DISPLAY_NAME.app"
-  if [[ -n "$CODE_SIGN_IDENTITY" ]]; then
-    codesign --force --deep --sign "$CODE_SIGN_IDENTITY" \
-      ${KEYCHAIN_ARGS[@]+"${KEYCHAIN_ARGS[@]}"} \
-      "$app" >/dev/null
-    echo "✓ Signed with: $CODE_SIGN_IDENTITY"
-  else
-    echo "✓ Preserved Xcode app signature"
-  fi
+  codesign --force --deep --sign "$CODE_SIGN_IDENTITY" \
+    ${KEYCHAIN_ARGS[@]+"${KEYCHAIN_ARGS[@]}"} \
+    "$app" >/dev/null
+  echo "✓ Signed with: $CODE_SIGN_IDENTITY"
 
   validate_non_adhoc_signature "$app" "release app"
 }
@@ -267,6 +307,7 @@ POSTINSTALL
   rm -rf "$work_dir"
   echo "✓ PKG: $PKG_PATH"
   echo "✓ PKG alias: $PKG_ALIAS_PATH"
+
 }
 
 # ─── DMG ──────────────────────────────────────────────────────────────────────
