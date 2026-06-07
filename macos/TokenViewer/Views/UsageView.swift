@@ -129,7 +129,7 @@ struct UsageView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button(action: { viewModel.sync() }) {
+            Button(action: { AppSyncCoordinator.shared.syncAll() }) {
                 Image(systemName: "arrow.triangle.2.circlepath")
                     .font(.system(size: 13, weight: .semibold))
                     .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))

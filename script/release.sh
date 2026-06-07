@@ -180,6 +180,8 @@ build_app() {
   echo "▶ Building Xcode app (v$VERSION / $BUILD_NUMBER)..."
   mkdir -p "$RELEASE_DIR"
   rm -rf "$RELEASE_DIR/$APP_DISPLAY_NAME.app"
+  local derived_data_path
+  derived_data_path="$(mktemp -d "$DIST_DIR/xcode-build.XXXXXX")"
 
   local xcode_sign_args=()
   local skip_xcode_signing=0
@@ -200,19 +202,20 @@ build_app() {
   xcodebuild \
     -scheme "$SCHEME" \
     -configuration Release \
-    -derivedDataPath "$DIST_DIR/xcode-build" \
+    -derivedDataPath "$derived_data_path" \
     MARKETING_VERSION="$VERSION" \
     CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
     "${xcode_sign_args[@]}" \
     build
 
   local built_app
-  built_app="$(find "$DIST_DIR/xcode-build/Build/Products/Release" -name "*.app" -maxdepth 1 | head -1)"
+  built_app="$(find "$derived_data_path/Build/Products/Release" -name "*.app" -maxdepth 1 | head -1)"
   if [[ -z "$built_app" ]]; then
     echo "App not found after build" >&2; exit 1
   fi
 
   cp -R "$built_app" "$RELEASE_DIR/"
+  rm -rf "$derived_data_path"
   echo "✓ Built: $RELEASE_DIR/$APP_DISPLAY_NAME.app"
 }
 

@@ -167,7 +167,7 @@ struct SettingsView: View {
                 .pickerStyle(.menu).labelsHidden().frame(width: 100)
                 .onChange(of: syncFrequency) { UsageViewModel.shared.startAutoSync() }
                 Spacer()
-                Button(action: { UsageViewModel.shared.sync() }) {
+                Button(action: { AppSyncCoordinator.shared.syncAll() }) {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.system(size: 13))
                         .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))

@@ -14,6 +14,7 @@
 		149B8B58C06302D14076B43F /* gemini.svg in Resources */ = {isa = PBXBuildFile; fileRef = E9F2DD464AF49DBA8E6A6E86 /* gemini.svg */; };
 		1B2E655D1EB989A9FA40B134 /* cursor.svg in Resources */ = {isa = PBXBuildFile; fileRef = 9D533D3DCF9CA4378E9A240D /* cursor.svg */; };
 		1CBF7C85F3FB372DBE9FBCFC /* StatusBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4129E968EF3C5D9FD95437C6 /* StatusBarController.swift */; };
+		2BF34F42698E79499583C1AE /* AppSyncCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30035A7991BA5D4CBAAFA67 /* AppSyncCoordinatorTests.swift */; };
 		2C6AC7DAAA159E8732B59FB2 /* copilot.svg in Resources */ = {isa = PBXBuildFile; fileRef = CCA7AD173CD5F720CAAFC580 /* copilot.svg */; };
 		347A46B387C70D49DC91DAA1 /* kilo.svg in Resources */ = {isa = PBXBuildFile; fileRef = 5085801F155A829C95375778 /* kilo.svg */; };
 		3F3AA6C6B6C882FEEC1628A5 /* LimitsVisibilityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39EB5D762689CD00096F0785 /* LimitsVisibilityStore.swift */; };
@@ -29,6 +30,7 @@
 		7C48F3EEBCAADE26A81AC8D8 /* TrendChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF2E2E86DDB42752338CA381 /* TrendChartView.swift */; };
 		7E54CEAAAA141E3E14F7621C /* deepseek.png in Resources */ = {isa = PBXBuildFile; fileRef = 03F8C9F012B20601EF166330 /* deepseek.png */; };
 		7F679758E5115B64D4ADC95D /* ProviderIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DCD82F79AAD3F077EAA8A17 /* ProviderIcon.swift */; };
+		85F86A1B6739B28431A0AEE7 /* AppSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C824BA0CFB5B1E3F7AF26937 /* AppSyncCoordinator.swift */; };
 		868CC0E9639E89B5B0D2C3E1 /* codex.svg in Resources */ = {isa = PBXBuildFile; fileRef = 88494BAD929D52E39664A618 /* codex.svg */; };
 		88038E2FBCB342196F263BFA /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 034652C5EE019A959887EFA2 /* Localization.swift */; };
 		8AB637CE1DF29AC4BDB9CDC9 /* windsurf.svg in Resources */ = {isa = PBXBuildFile; fileRef = D4FE6EC826BF3B2F1F94086F /* windsurf.svg */; };
@@ -50,6 +52,16 @@
 		FD3805921AFF88053B64AEDD /* MenuBarIcon.svg in Resources */ = {isa = PBXBuildFile; fileRef = F1DDAFB4FBCF9DDDF0B9B8A3 /* MenuBarIcon.svg */; };
 		FD93F43BB910DAAD2E8571B3 /* grok.svg in Resources */ = {isa = PBXBuildFile; fileRef = A9F3FB73CDED44D7115FB025 /* grok.svg */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		0B8A4B36838BCEAB8016599F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B20CE0F4C4D38EB9BB4A81ED /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CF8BFD7AA38F26D108FFF2E0;
+			remoteInfo = TokenViewer;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		034652C5EE019A959887EFA2 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
@@ -81,13 +93,16 @@
 		9D533D3DCF9CA4378E9A240D /* cursor.svg */ = {isa = PBXFileReference; path = cursor.svg; sourceTree = "<group>"; };
 		9FCDFF3B030DCF4A5536E67E /* trae.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = trae.png; sourceTree = "<group>"; };
 		A11C5F726D4BF938374A9F8B /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowView.swift; sourceTree = "<group>"; };
+		A30035A7991BA5D4CBAAFA67 /* AppSyncCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSyncCoordinatorTests.swift; sourceTree = "<group>"; };
 		A9F3FB73CDED44D7115FB025 /* grok.svg */ = {isa = PBXFileReference; path = grok.svg; sourceTree = "<group>"; };
 		B92F1EDF8973582C61B3DC55 /* hermes.svg */ = {isa = PBXFileReference; path = hermes.svg; sourceTree = "<group>"; };
 		C54A6C43A31CA1B59412B121 /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
+		C824BA0CFB5B1E3F7AF26937 /* AppSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSyncCoordinator.swift; sourceTree = "<group>"; };
 		CBE87DC9C12F91D7599987EC /* workbuddy.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = workbuddy.png; sourceTree = "<group>"; };
 		CCA7AD173CD5F720CAAFC580 /* copilot.svg */ = {isa = PBXFileReference; path = copilot.svg; sourceTree = "<group>"; };
 		D4FE6EC826BF3B2F1F94086F /* windsurf.svg */ = {isa = PBXFileReference; path = windsurf.svg; sourceTree = "<group>"; };
 		D9E69FCF0E721C554A2CA895 /* TokenViewer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TokenViewer.entitlements; sourceTree = "<group>"; };
+		DADE04DCA30B3557F5F2776F /* TokenViewerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TokenViewerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DF2E2E86DDB42752338CA381 /* TrendChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendChartView.swift; sourceTree = "<group>"; };
 		E11BCBF448FA6555EA8CA7A3 /* UsageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageView.swift; sourceTree = "<group>"; };
 		E979605B67613F9CBB276006 /* antigravity.svg */ = {isa = PBXFileReference; path = antigravity.svg; sourceTree = "<group>"; };
@@ -151,6 +166,7 @@
 			isa = PBXGroup;
 			children = (
 				7C710A80148201C51072D6D0 /* TokenViewer.app */,
+				DADE04DCA30B3557F5F2776F /* TokenViewerTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -159,6 +175,7 @@
 			isa = PBXGroup;
 			children = (
 				A14900E465726F121A6CA13F /* TokenViewer */,
+				FD4069D3059CE7949FF75C0C /* TokenViewerTests */,
 				8DA0D55D7CE30DB5E24C8B5F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -179,6 +196,7 @@
 		C10F72C19D30816C7BAB3DA3 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				C824BA0CFB5B1E3F7AF26937 /* AppSyncCoordinator.swift */,
 				EBE72CF07CC99195B52D4715 /* LimitsService.swift */,
 				39EB5D762689CD00096F0785 /* LimitsVisibilityStore.swift */,
 				034652C5EE019A959887EFA2 /* Localization.swift */,
@@ -225,9 +243,35 @@
 			path = "brand-logos";
 			sourceTree = "<group>";
 		};
+		FD4069D3059CE7949FF75C0C /* TokenViewerTests */ = {
+			isa = PBXGroup;
+			children = (
+				A30035A7991BA5D4CBAAFA67 /* AppSyncCoordinatorTests.swift */,
+			);
+			path = TokenViewerTests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		04027ECEDB9042075642DE17 /* TokenViewerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0540AB0B727C1691D40E5C70 /* Build configuration list for PBXNativeTarget "TokenViewerTests" */;
+			buildPhases = (
+				5B3F85CEDF74C2B1370C5F56 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7830BC209EBE636970DF5F4D /* PBXTargetDependency */,
+			);
+			name = TokenViewerTests;
+			packageProductDependencies = (
+			);
+			productName = TokenViewerTests;
+			productReference = DADE04DCA30B3557F5F2776F /* TokenViewerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		CF8BFD7AA38F26D108FFF2E0 /* TokenViewer */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = F2D47A14B250D0D19E126B33 /* Build configuration list for PBXNativeTarget "TokenViewer" */;
@@ -276,6 +320,7 @@
 			projectRoot = "";
 			targets = (
 				CF8BFD7AA38F26D108FFF2E0 /* TokenViewer */,
+				04027ECEDB9042075642DE17 /* TokenViewerTests */,
 			);
 		};
 /* End PBXProject section */
@@ -337,11 +382,20 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		5B3F85CEDF74C2B1370C5F56 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2BF34F42698E79499583C1AE /* AppSyncCoordinatorTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BD265DBE173D35ECF1E9C0E1 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				F82C683EBDC37477E8A45228 /* AboutView.swift in Sources */,
+				85F86A1B6739B28431A0AEE7 /* AppSyncCoordinator.swift in Sources */,
 				591F15C6E853CC4623779432 /* CoreBridge.swift in Sources */,
 				0E0B6D6D08106FA4CD3ECEE7 /* LimitsService.swift in Sources */,
 				C410EC5A0E53CD4A11C75B0C /* LimitsView.swift in Sources */,
@@ -363,6 +417,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		7830BC209EBE636970DF5F4D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CF8BFD7AA38F26D108FFF2E0 /* TokenViewer */;
+			targetProxy = 0B8A4B36838BCEAB8016599F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		0FC670551BEBF912AD5B90D9 /* Release */ = {
@@ -393,6 +455,23 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "TokenViewer/Bridge/TokenViewer-Bridging-Header.h";
 			};
 			name = Release;
+		};
+		18004C9EC3110D856F7056CF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.tokenviewer.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TokenViewer.app/Contents/MacOS/TokenViewer";
+			};
+			name = Debug;
 		};
 		1A510DC476E3038995D60661 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -428,7 +507,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 10006;
+				CURRENT_PROJECT_VERSION = 10007;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -447,7 +526,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.6;
+				MARKETING_VERSION = 0.1.7;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -522,7 +601,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 10006;
+				CURRENT_PROJECT_VERSION = 10007;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -535,7 +614,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.6;
+				MARKETING_VERSION = 0.1.7;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -546,9 +625,35 @@
 			};
 			name = Release;
 		};
+		CFB158F33CC91B3BA9B8E005 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.tokenviewer.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TokenViewer.app/Contents/MacOS/TokenViewer";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0540AB0B727C1691D40E5C70 /* Build configuration list for PBXNativeTarget "TokenViewerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				18004C9EC3110D856F7056CF /* Debug */,
+				CFB158F33CC91B3BA9B8E005 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		C8B1DC270D8AA81186527DE1 /* Build configuration list for PBXProject "TokenViewer" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
