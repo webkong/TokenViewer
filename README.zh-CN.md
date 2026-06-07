@@ -8,8 +8,8 @@
 
 一款用 **SwiftUI + Rust** 构建的原生 macOS 菜单栏应用，自动收集 **23 个 AI 编程工具**的 Token 用量和费用，在本地聚合后呈现在精美的仪表盘中。无需云端账号、无需 Node.js、无需浏览器——只是一个小巧的原生应用。
 
-[![Release](https://img.shields.io/github/v/release/webkong/TokenViewer?color=059669&label=下载)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer-Installer.pkg)
-[![Platform](https://img.shields.io/badge/平台-macOS%2014%2B-lightgrey?logo=apple&logoColor=white)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer-Installer.pkg)
+[![Release](https://img.shields.io/github/v/release/webkong/TokenViewer?color=059669&label=下载)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer.dmg)
+[![Platform](https://img.shields.io/badge/平台-macOS%2014%2B-lightgrey?logo=apple&logoColor=white)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer.dmg)
 [![License: CC BY-NC 4.0](https://img.shields.io/badge/协议-CC%20BY--NC%204.0-green.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
 [![GitHub stars](https://img.shields.io/github/stars/webkong/TokenViewer?style=social)](https://github.com/webkong/TokenViewer/stargazers)
 
@@ -29,7 +29,7 @@
 
 > **环境要求**：macOS 14（Sonoma）或更高版本，Apple Silicon 或 Intel。
 
-1. [**下载最新 DMG**](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer-Installer.pkg)
+1. [**下载最新 DMG**](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer.dmg)
 2. 打开 DMG，将 **TokenViewer.app** 拖入 `/Applications`
 3. 启动——菜单栏出现 **T** 图标
 4. 点击图标即可查看用量摘要
