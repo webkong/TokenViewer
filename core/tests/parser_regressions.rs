@@ -169,7 +169,7 @@ fn seed_provider_fixtures(home: &Path) {
 
     write_text(
         &home.join(".claude/projects/project-a/session.jsonl"),
-        r#"{"timestamp":"2026-01-01T00:05:00Z","message":{"model":"claude-3-7-sonnet","usage":{"input_tokens":12,"output_tokens":34,"cache_read_input_tokens":5,"cache_creation_input_tokens":7}}}"#,
+        r#"{"timestamp":"2026-01-01T00:05:00Z","message":{"id":"msg_001","model":"claude-3-7-sonnet","usage":{"input_tokens":12,"output_tokens":34,"cache_read_input_tokens":5,"cache_creation_input_tokens":7}}}"#,
     );
 
     write_text(
@@ -316,7 +316,7 @@ fn seed_provider_fixtures(home: &Path) {
 
     write_text(
         &home.join(".codebuddy/projects/project-a/session.jsonl"),
-        r#"{"type":"message","role":"assistant","uuid":"cb-1","providerData":{"model":"codebuddy-2","rawUsage":{"prompt_tokens":20,"completion_tokens":10,"prompt_tokens_details":{"cached_tokens":2,"reasoning_tokens":4},"cache_read_input_tokens":1,"cache_creation_input_tokens":3}},"timestamp":1735690080000}"#,
+        r#"{"type":"message","role":"assistant","uuid":"cb-1","providerData":{"model":"codebuddy-2","rawUsage":{"prompt_tokens":20,"completion_tokens":10,"prompt_tokens_details":{"cached_tokens":2},"completion_tokens_details":{"reasoning_tokens":4},"cache_read_input_tokens":1,"cache_creation_input_tokens":3}},"timestamp":1735690080000}"#,
     );
 
     write_text(

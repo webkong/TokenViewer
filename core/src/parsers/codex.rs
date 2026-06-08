@@ -118,14 +118,14 @@ pub fn parse_codex_format(
             let cached = usage.get("cached_input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
             let cache_creation = usage.get("cache_creation_input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
             let reasoning = usage.get("reasoning_output_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-            let input = raw_input.saturating_sub(cached);
 
             let (fi, fo, fc_read, fc_write, fr) = if use_delta {
-                let cur = [input, output, cached, cache_creation, reasoning];
+                // Delta on raw values first, then normalize input -= cached
+                let cur = [raw_input, output, cached, cache_creation, reasoning];
                 let d = cursor.delta(&key, cur);
-                (d[0], d[1], d[2], d[3], d[4])
+                (d[0].saturating_sub(d[2]), d[1], d[2], d[3], d[4])
             } else {
-                (input, output, cached, cache_creation, reasoning)
+                (raw_input.saturating_sub(cached), output, cached, cache_creation, reasoning)
             };
 
             let total = fi + fo + fc_read + fc_write + fr;

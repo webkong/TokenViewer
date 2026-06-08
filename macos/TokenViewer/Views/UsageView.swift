@@ -225,10 +225,12 @@ private struct DailyChartView: View {
 private struct ModelBreakdownView: View {
     let models: [ModelEntry]
 
+    private var merged: [ModelEntry] { mergedByModel(models) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Models").font(.system(size: 15, weight: .semibold))
-            ForEach(models.prefix(8)) { entry in
+            ForEach(merged.prefix(8)) { entry in
                 VStack(spacing: 5) {
                     HStack(spacing: 8) {
                         ProviderIcon(source: entry.source, modelName: entry.model, size: 14)

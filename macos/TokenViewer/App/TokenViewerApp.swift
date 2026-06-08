@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.register(defaults: ["syncFrequencyMinutes": 30])
         // Initialize Rust core early to create database
         _ = CoreBridge.shared
+        rebuildIfVersionChanged()
         ThemeManager.shared.apply()
         statusBarController = StatusBarController()
         UpdateChecker.shared.startAutoCheck()
@@ -26,6 +27,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { [weak self] in
                 self?.statusBarController?.openMainWindow()
             }
+        }
+    }
+
+    private func rebuildIfVersionChanged() {
+        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+        let lastVersion = UserDefaults.standard.string(forKey: "lastDataVersion")
+        if lastVersion != currentVersion {
+            _ = CoreBridge.shared.rebuildAll()
+            UserDefaults.standard.set(currentVersion, forKey: "lastDataVersion")
         }
     }
 

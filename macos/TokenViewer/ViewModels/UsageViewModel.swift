@@ -40,12 +40,35 @@ struct DailyPoint: Codable, Identifiable {
 }
 
 struct ModelEntry: Codable, Identifiable {
-    var id: String { model }
+    var id: String { "\(source):\(model)" }
     let model: String
     let source: String
     let total_tokens: UInt64
     let total_cost_usd: Double
     let percentage: Double
+}
+
+/// Merge ModelEntry list by model name (ignoring source), recalculating percentages.
+func mergedByModel(_ entries: [ModelEntry]) -> [ModelEntry] {
+    var map: [(String, UInt64, Double)] = [] // (model, tokens, cost)
+    var order: [String] = []
+    var dict: [String: Int] = [:]
+    for e in entries {
+        if let idx = dict[e.model] {
+            map[idx].1 += e.total_tokens
+            map[idx].2 += e.total_cost_usd
+        } else {
+            dict[e.model] = map.count
+            order.append(e.model)
+            map.append((e.model, e.total_tokens, e.total_cost_usd))
+        }
+    }
+    let grand = map.reduce(0 as UInt64) { $0 + $1.1 }
+    return map.sorted { $0.1 > $1.1 }.map { item in
+        ModelEntry(model: item.0, source: entries.first { $0.model == item.0 }?.source ?? "",
+                   total_tokens: item.1, total_cost_usd: item.2,
+                   percentage: grand > 0 ? Double(item.1) / Double(grand) * 100 : 0)
+    }
 }
 
 struct SyncResult: Codable {

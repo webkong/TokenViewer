@@ -14,6 +14,7 @@ enum LimitsVisibilityStore {
         "trae",
         "windsurf",
         "qoder",
+        "codebuddy",
         "workbuddy",
     ]
 
@@ -45,6 +46,7 @@ enum LimitsVisibilityStore {
         case "trae": return "Trae"
         case "windsurf": return "Windsurf"
         case "qoder": return "Qoder"
+        case "codebuddy": return "CodeBuddy"
         case "workbuddy": return "WorkBuddy"
         default:
             return source.capitalized

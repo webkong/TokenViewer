@@ -174,15 +174,15 @@ impl FileCursor {
         }
     }
 
-    /// Glob files with directory-level caching. If the parent directory mtime
-    /// hasn't changed, return the cached file list instead of re-globbing.
+    /// Glob files with directory-level caching. If no subdirectory mtime
+    /// has changed, return the cached file list instead of re-globbing.
     pub fn glob_cached(&mut self, pattern: &str, dir: &Path) -> Vec<std::path::PathBuf> {
         let dir_key = dir.to_string_lossy().to_string();
-        let dir_mtime = file_mtime_secs(dir);
+        let max_mtime = max_subtree_mtime(dir);
         let cached_mtime = self.dir_mtimes.get(&dir_key).copied().unwrap_or(0);
 
-        if dir_mtime <= cached_mtime {
-            // Dir unchanged — return cached list
+        if max_mtime <= cached_mtime {
+            // Dir tree unchanged — return cached list
             if let Some(cached) = self.dir_files.get(pattern) {
                 return cached.iter().map(std::path::PathBuf::from).collect();
             }
@@ -190,7 +190,7 @@ impl FileCursor {
 
         // Re-glob
         let files = glob_files(pattern);
-        self.dir_mtimes.insert(dir_key, dir_mtime);
+        self.dir_mtimes.insert(dir_key, max_mtime);
         self.dir_files.insert(
             pattern.to_string(),
             files.iter().map(|p| p.to_string_lossy().to_string()).collect(),
@@ -254,6 +254,27 @@ pub fn aggregate_records(records: Vec<UsageRecord>) -> Vec<UsageRecord> {
         entry.conversation_count += r.conversation_count;
     }
     map.into_values().collect()
+}
+
+/// Walk a directory tree and return the maximum mtime (epoch secs) of any entry.
+fn max_subtree_mtime(dir: &Path) -> u64 {
+    let mut max_mt = file_mtime_secs(dir);
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return max_mt,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let mt = if path.is_dir() {
+            max_subtree_mtime(&path)
+        } else {
+            file_mtime_secs(&path)
+        };
+        if mt > max_mt {
+            max_mt = mt;
+        }
+    }
+    max_mt
 }
 
 /// Glob for files matching a pattern relative to a base directory.

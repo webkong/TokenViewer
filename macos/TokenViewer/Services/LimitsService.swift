@@ -51,8 +51,9 @@ enum LimitsService {
         async let trae = fetchTrae()
         async let windsurf = fetchWindsurf()
         async let qoder = fetchQoder()
+        async let codebuddy = fetchCodebuddy()
         async let workbuddy = fetchWorkBuddy()
-        return await [claude, codex, copilot, kiro, cursor, gemini, kimi, antigravity, zed, trae, windsurf, qoder, workbuddy]
+        return await [claude, codex, copilot, kiro, cursor, gemini, kimi, antigravity, zed, trae, windsurf, qoder, codebuddy, workbuddy]
     }
 
     // MARK: Claude (Keychain → Anthropic OAuth usage API)
@@ -405,6 +406,27 @@ enum LimitsService {
         return ProviderLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
     }
 
+    static func fetchCodebuddy() async -> ProviderLimit {
+        let name = "codebuddy"
+        let cached = readCockpitAccount(provider: name)
+        guard let auth = readCodebuddyAuth() else {
+            guard let cached else {
+                return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+            }
+            return workbuddyLimit(from: cached, configured: true, providerName: name, displayPrefix: "CodeBuddy")
+        }
+
+        if let refreshed = await refreshWorkBuddyAccount(from: auth) {
+            writeCockpitAccountSnapshot(provider: name, account: refreshed)
+            return workbuddyLimit(from: refreshed, configured: true, providerName: name, displayPrefix: "CodeBuddy")
+        }
+
+        if let cached {
+            return workbuddyLimit(from: cached, configured: true, providerName: name, displayPrefix: "CodeBuddy")
+        }
+        return ProviderLimit(name: name, planLabel: "CodeBuddy", configured: true, error: "Request failed", windows: [])
+    }
+
     static func fetchWorkBuddy() async -> ProviderLimit {
         let name = "workbuddy"
         let cached = readCockpitAccount(provider: name)
@@ -610,6 +632,15 @@ enum LimitsService {
         return firstString(selected, keys: ["id", "account_id", "user_id"])
     }
 
+    private static func readCodebuddyAuth() -> [String: Any]? {
+        #if os(macOS)
+        let path = "\(NSHomeDirectory())/Library/Application Support/CodeBuddyExtension/Data/Public/auth/Tencent-Cloud.coding-copilot.info"
+        #else
+        let path = "\(NSHomeDirectory())/.local/share/CodeBuddyExtension/Data/Public/auth/Tencent-Cloud.coding-copilot.info"
+        #endif
+        return readJSON(path)
+    }
+
     private static func readWorkBuddyAuth() -> [String: Any]? {
         #if os(macOS)
         let path = "\(NSHomeDirectory())/Library/Application Support/CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info"
@@ -786,14 +817,14 @@ enum LimitsService {
         return cleaned.isEmpty ? "local" : cleaned
     }
 
-    private static func workbuddyLimit(from account: [String: Any], configured: Bool) -> ProviderLimit {
-        let name = "workbuddy"
+    private static func workbuddyLimit(from account: [String: Any], configured: Bool, providerName: String = "workbuddy", displayPrefix: String = "WorkBuddy") -> ProviderLimit {
+        let name = providerName
         let plan = planLabel(nestedString(account, paths: [
             ["payment_type"],
             ["plan_type"],
             ["quota_raw", "payment", "data", "paymentType"],
             ["quota_raw", "payment", "data"],
-        ]), "WorkBuddy")
+        ]), displayPrefix)
         let windows = workbuddyWindows(from: account)
         return ProviderLimit(
             name: name,

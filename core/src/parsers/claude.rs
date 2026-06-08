@@ -16,6 +16,12 @@ fn parse_claude_line(v: &Value, source: &str) -> Option<UsageRecord> {
         return None;
     }
 
+    // Skip if no valid timestamp
+    let hour_start = v.get("timestamp")
+        .and_then(|t| t.as_str())
+        .filter(|s| !s.is_empty())
+        .map(iso_to_bucket)?;
+
     // Model from message.model or top-level model
     let model = v.pointer("/message/model")
         .or_else(|| v.get("model"))
@@ -32,12 +38,6 @@ fn parse_claude_line(v: &Value, source: &str) -> Option<UsageRecord> {
     if total == 0 {
         return None;
     }
-
-    // Get timestamp from the line
-    let hour_start = v.get("timestamp")
-        .and_then(|t| t.as_str())
-        .map(|s| iso_to_bucket(s))
-        .unwrap_or_default();
 
     Some(UsageRecord {
         id: None,
@@ -80,14 +80,37 @@ pub fn parse_claude_format(
             continue;
         }
         let offset = cursor.get_offset(&key);
-        let (records, new_offset) = parse_jsonl_file(&file, offset, source, |v, src| {
-            // Quick filter: only parse lines that contain usage data
+        let (lines, new_offset) = match read_lines_from_offset(&file, offset) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+
+        for line in &lines {
+            let v: serde_json::Value = match serde_json::from_str(line) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
             if v.pointer("/message/usage").is_none() && v.get("usage").is_none() {
-                return None;
+                continue;
             }
-            parse_claude_line(v, src)
-        });
-        all_records.extend(records);
+            // Dedup by message.id + requestId
+            let msg_id = v.pointer("/message/id").and_then(|id| id.as_str()).unwrap_or("");
+            if !msg_id.is_empty() {
+                let req_id = v.get("requestId").and_then(|id| id.as_str()).unwrap_or("");
+                let dedup_key = if !req_id.is_empty() {
+                    format!("{}:{}", msg_id, req_id)
+                } else {
+                    msg_id.to_string()
+                };
+                if !cursor.mark_seen(&dedup_key) {
+                    continue;
+                }
+            }
+            if let Some(record) = parse_claude_line(&v, source) {
+                all_records.push(record);
+            }
+        }
         cursor.set_offset(&key, new_offset);
     }
 

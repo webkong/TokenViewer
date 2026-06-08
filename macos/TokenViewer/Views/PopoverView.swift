@@ -245,9 +245,10 @@ struct PopoverView: View {
     // MARK: Top models
 
     private var modelsSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let merged = mergedByModel(viewModel.modelBreakdown)
+        return VStack(alignment: .leading, spacing: 6) {
             sectionHeader(l10n.topModels)
-            ForEach(Array(viewModel.modelBreakdown.prefix(4).enumerated()), id: \.offset) { _, m in
+            ForEach(Array(merged.prefix(4).enumerated()), id: \.offset) { _, m in
                 HStack(spacing: 6) {
                     ProviderIcon(source: m.source, modelName: m.model, size: 13)
                     Text(m.model).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)

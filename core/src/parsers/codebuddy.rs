@@ -29,20 +29,14 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
                 Err(_) => continue,
             };
 
-            // Filter: type=="message" && role=="assistant" && providerData.rawUsage exists
-            if v.get("type").and_then(|t| t.as_str()) != Some("message") {
-                continue;
-            }
-            if v.get("role").and_then(|r| r.as_str()) != Some("assistant") {
-                continue;
-            }
+            // Only require providerData.rawUsage to exist
             let provider_data = match v.get("providerData") {
                 Some(pd) => pd,
                 None => continue,
             };
             let raw_usage = match provider_data.get("rawUsage") {
-                Some(u) => u,
-                None => continue,
+                Some(u) if u.is_object() => u,
+                _ => continue,
             };
 
             // Dedup
@@ -57,13 +51,15 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
             let prompt_tokens = raw_usage.get("prompt_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
             let completion_tokens = raw_usage.get("completion_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
 
-            let details = raw_usage.get("prompt_tokens_details").unwrap_or(&Value::Null);
-            let details_cached = details.get("cached_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
+            let prompt_details = raw_usage.get("prompt_tokens_details").unwrap_or(&Value::Null);
+            let details_cached = prompt_details.get("cached_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
             let cache_read_field = raw_usage.get("cache_read_input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-            let cache_read = details_cached.max(cache_read_field);
+            let prompt_cache_hit = raw_usage.get("prompt_cache_hit_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
+            let cache_read = details_cached.max(cache_read_field).max(prompt_cache_hit);
 
             let cache_creation = raw_usage.get("cache_creation_input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-            let reasoning = details.get("reasoning_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
+            let completion_details = raw_usage.get("completion_tokens_details").unwrap_or(&Value::Null);
+            let reasoning = completion_details.get("reasoning_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
 
             let input = prompt_tokens.saturating_sub(cache_read);
             let output = completion_tokens;
@@ -74,7 +70,7 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
 
             let model = provider_data.get("model").and_then(|m| m.as_str())
                 .or_else(|| v.get("model").and_then(|m| m.as_str()))
-                .unwrap_or("codebuddy-unknown")
+                .unwrap_or("codebuddy-agent")
                 .to_string();
 
             let hour_start = v.get("timestamp")
