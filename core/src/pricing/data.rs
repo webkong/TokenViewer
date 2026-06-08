@@ -39,4 +39,8 @@ pub static PRICING_DATA: &[PricingEntry] = &[
     PricingEntry { model: "qwen3-coder", pricing: ModelPricing { input: 0.3, output: 1.2, cache_read: 0.06, cache_write: 0.0 } },
     PricingEntry { model: "gpt-5", pricing: ModelPricing { input: 1.25, output: 10.0, cache_read: 0.125, cache_write: 0.0 } },
     PricingEntry { model: "gemini-2.5", pricing: ModelPricing { input: 1.25, output: 10.0, cache_read: 0.31, cache_write: 0.0 } },
+    // CodeBuddy — Tencent Hy3 Preview (16~32K tier, USD @ 1:6.77 CNY)
+    PricingEntry { model: "hy3-preview", pricing: ModelPricing { input: 0.2365, output: 0.9459, cache_read: 0.0887, cache_write: 0.0 } },
+    PricingEntry { model: "hy3-preview-agent", pricing: ModelPricing { input: 0.2365, output: 0.9459, cache_read: 0.0887, cache_write: 0.0 } },
+    PricingEntry { model: "codebuddy-agent", pricing: ModelPricing { input: 0.2365, output: 0.9459, cache_read: 0.0887, cache_write: 0.0 } },
 ];
