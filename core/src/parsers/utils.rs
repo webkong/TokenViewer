@@ -133,6 +133,14 @@ pub struct FileCursor {
     /// Cached file lists per directory pattern.
     #[serde(default)]
     pub dir_files: HashMap<String, Vec<String>>,
+    /// kiro-cli/data.sqlite3 incremental state: max `updated_at` (epoch ms) seen,
+    /// used as the SQL-level filter to skip unchanged conversations.
+    #[serde(default)]
+    pub kiro_cli_updated_at: i64,
+    /// kiro-cli per-conversation watermark: conversation_id -> max processed
+    /// request timestamp (epoch ms). Turns at/below this are already counted.
+    #[serde(default)]
+    pub kiro_cli_conv_ts: HashMap<String, i64>,
 }
 
 impl FileCursor {

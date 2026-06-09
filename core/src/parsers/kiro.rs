@@ -412,22 +412,38 @@ fn read_kiro_settings_model(home_dir: &std::path::Path) -> Option<String> {
 /// Tokens are estimated at 4 chars/token (same as reference project).
 fn parse_kiro_cli_db(db_path: &Path, cursor: &mut FileCursor) -> Option<Vec<UsageRecord>> {
     let conn = Connection::open(db_path).ok()?;
-    let db_key = db_path.to_string_lossy().to_string();
-    // Use seen_ids to deduplicate by request_id
-    let mut stmt = conn.prepare(
-        "SELECT conversation_id, value FROM conversations_v2"
-    ).ok()?;
+
+    // Two-level incremental watermark (accuracy + performance):
+    //  1) SQL filter `updated_at >= last` only re-reads conversations that changed
+    //     since the previous sync (>= is boundary-safe; the per-conversation
+    //     watermark below prevents any double-count of already-seen turns).
+    //  2) Per-conversation timestamp watermark counts only turns whose event time
+    //     is strictly newer than what we processed before. Timestamps are
+    //     monotonic per conversation and survive history compaction (unlike an
+    //     index), so this is both compaction-safe and dedup-free.
+    let last_updated = cursor.kiro_cli_updated_at;
+    let mut stmt = conn
+        .prepare("SELECT conversation_id, value, updated_at FROM conversations_v2 WHERE updated_at >= ?1")
+        .ok()?;
 
     let mut records = Vec::new();
-    let rows = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-        ))
-    }).ok()?;
+    let rows = stmt
+        .query_map([last_updated], |row| {
+            Ok((
+                row.get::<_, String>(0)?,            // conversation_id
+                row.get::<_, String>(1)?,            // value (JSON blob)
+                row.get::<_, i64>(2).unwrap_or(0),   // updated_at (epoch ms)
+            ))
+        })
+        .ok()?;
+
+    let mut max_updated = last_updated;
 
     for row in rows.flatten() {
-        let (_conv_id, value_str) = row;
+        let (conv_id, value_str, updated_at) = row;
+        if updated_at > max_updated {
+            max_updated = updated_at;
+        }
         let val: Value = match serde_json::from_str(&value_str) {
             Ok(v) => v,
             Err(_) => continue,
@@ -436,31 +452,43 @@ fn parse_kiro_cli_db(db_path: &Path, cursor: &mut FileCursor) -> Option<Vec<Usag
             Some(h) => h,
             None => continue,
         };
+
+        let conv_wm = cursor.kiro_cli_conv_ts.get(&conv_id).copied().unwrap_or(0);
+        let mut new_wm = conv_wm;
+
         for turn in history {
-            // user turn
             let user = match turn.get("user") { Some(u) => u, None => continue };
-            // assistant has request_metadata
             let meta = match turn.get("assistant")
                 .and_then(|a| a.get("request_metadata"))
                 .or_else(|| turn.get("request_metadata")) {
                 Some(m) => m,
                 None => continue,
             };
-            let request_id = meta.get("request_id").and_then(|r| r.as_str()).unwrap_or("").to_string();
+            let request_id = meta.get("request_id").and_then(|r| r.as_str()).unwrap_or("");
             if request_id.is_empty() { continue; }
-            if !cursor.mark_seen(&request_id) { continue; } // dedup
+
+            // Event time (epoch ms): prefer request_start_timestamp_ms, fall back to
+            // the user message timestamp. Turns with neither cannot be placed in
+            // time nor deduplicated, so they are skipped.
+            let event_ts_ms = {
+                let req_ts = meta.get("request_start_timestamp_ms").and_then(|t| t.as_i64()).unwrap_or(0);
+                if req_ts > 0 {
+                    req_ts
+                } else {
+                    user.get("timestamp").and_then(|t| t.as_str())
+                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                        .map(|dt| dt.timestamp_millis())
+                        .unwrap_or(0)
+                }
+            };
+            if event_ts_ms <= 0 { continue; }
+            // Per-conversation watermark: skip turns already counted.
+            if event_ts_ms <= conv_wm { continue; }
+            if event_ts_ms > new_wm { new_wm = event_ts_ms; }
 
             let model_id = meta.get("model_id").and_then(|m| m.as_str()).unwrap_or("auto");
             let model = normalize_kiro_model(model_id);
-
-            let ts_ms = meta.get("request_start_timestamp_ms").and_then(|t| t.as_i64()).unwrap_or(0);
-            let hour_start = if ts_ms > 0 {
-                epoch_millis_to_bucket(ts_ms).unwrap_or_else(now_bucket)
-            } else {
-                // fallback: user timestamp
-                user.get("timestamp").and_then(|t| t.as_str())
-                    .map(iso_to_bucket).unwrap_or_else(now_bucket)
-            };
+            let hour_start = epoch_millis_to_bucket(event_ts_ms).unwrap_or_else(now_bucket);
 
             let prompt_chars = meta.get("user_prompt_length").and_then(|x| x.as_u64()).unwrap_or(0);
             let resp_chars = meta.get("response_size").and_then(|x| x.as_u64()).unwrap_or(0);
@@ -479,8 +507,12 @@ fn parse_kiro_cli_db(db_path: &Path, cursor: &mut FileCursor) -> Option<Vec<Usag
                 conversation_count: 1,
             });
         }
+
+        if new_wm > conv_wm {
+            cursor.kiro_cli_conv_ts.insert(conv_id, new_wm);
+        }
     }
-    // persist updated seen_ids back (file_changed already updated mtime)
-    let _ = db_key; // already tracked via file_changed
+
+    cursor.kiro_cli_updated_at = max_updated;
     Some(records)
 }
