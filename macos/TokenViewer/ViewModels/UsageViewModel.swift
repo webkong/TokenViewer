@@ -140,8 +140,13 @@ class UsageViewModel: ObservableObject {
     }
 
     /// Query the database off the main thread, then publish on the main actor (H7).
+    /// A generation token guards against out-of-order results when the range is
+    /// switched rapidly (e.g. week→month→week): only the latest refresh applies.
+    private var refreshToken = 0
     func refresh() {
         isLoading = true
+        refreshToken &+= 1
+        let token = refreshToken
         let (from, to) = dateRange(for: selectedRange)
         let useHourly = selectedRange == .today
         Task.detached { [weak self] in
@@ -154,6 +159,8 @@ class UsageViewModel: ObservableObject {
             let cards = Self.fetchPanelCards()
             await MainActor.run { [weak self] in
                 guard let self else { return }
+                // Discard stale results from a superseded refresh.
+                guard token == self.refreshToken else { return }
                 if let d = summaryData { self.summary = try? self.decoder.decode(UsageSummary.self, from: d) }
                 if let d = dailyData { self.dailyUsage = (try? self.decoder.decode([DailyPoint].self, from: d)) ?? [] }
                 if let d = modelData { self.modelBreakdown = (try? self.decoder.decode([ModelEntry].self, from: d)) ?? [] }
