@@ -50,8 +50,20 @@ fn parse_claude_line(v: &Value, source: &str) -> Option<UsageRecord> {
         cache_creation_input_tokens: cache_creation,
         reasoning_output_tokens: 0,
         total_tokens: total,
-        conversation_count: 1,
+        conversation_count: 0, // set by caller from user-turn count
     })
+}
+
+/// True if a Claude `type:"user"` line is a real typed prompt (has a text block),
+/// as opposed to an auto-generated tool_result message.
+fn claude_user_has_text(v: &Value) -> bool {
+    match v.pointer("/message/content") {
+        Some(Value::String(s)) => !s.is_empty(),
+        Some(Value::Array(arr)) => arr
+            .iter()
+            .any(|b| b.get("type").and_then(|t| t.as_str()) == Some("text")),
+        _ => false,
+    }
 }
 
 pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
@@ -79,17 +91,34 @@ pub fn parse_claude_format(
         if !cursor.file_changed(&key) {
             continue;
         }
+        // Conversations are counted from real user prompts in MAIN sessions only
+        // (subagent files contribute tokens but not conversation turns), matching
+        // the reference implementation.
+        let is_main = !key.contains("/subagents/");
         let offset = cursor.get_offset(&key);
         let (lines, new_offset) = match read_lines_from_offset(&file, offset) {
             Ok(r) => r,
             Err(_) => continue,
         };
 
+        // Accumulate user-typed turns and attribute them to the next assistant
+        // usage record (so conv counts land on a real model bucket, not a synthetic
+        // one). One user prompt typically triggers several assistant messages; only
+        // the first carries the turn count, the rest carry 0 — so conv ≈ #prompts.
+        let mut pending_convs: u32 = 0;
         for line in &lines {
             let v: serde_json::Value = match serde_json::from_str(line) {
                 Ok(v) => v,
                 Err(_) => continue,
             };
+
+            // Count real user prompts as conversation turns.
+            if is_main
+                && v.get("type").and_then(|t| t.as_str()) == Some("user")
+                && claude_user_has_text(&v)
+            {
+                pending_convs += 1;
+            }
 
             if v.pointer("/message/usage").is_none() && v.get("usage").is_none() {
                 continue;
@@ -107,7 +136,9 @@ pub fn parse_claude_format(
                     continue;
                 }
             }
-            if let Some(record) = parse_claude_line(&v, source) {
+            if let Some(mut record) = parse_claude_line(&v, source) {
+                record.conversation_count = pending_convs;
+                pending_convs = 0;
                 all_records.push(record);
             }
         }

@@ -85,6 +85,20 @@ pub fn file_mtime_secs(path: &Path) -> u64 {
         .unwrap_or(0)
 }
 
+/// File inode number (unix). Returns 0 if unavailable / non-unix.
+pub fn file_inode(path: &Path) -> u64 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        fs::metadata(path).map(|m| m.ino()).unwrap_or(0)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        0
+    }
+}
+
 /// Cursor state for tracking file offsets.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct FileCursor {
@@ -101,6 +115,10 @@ pub struct FileCursor {
     /// Per-file last mtime (epoch secs) for skip-if-unchanged optimization.
     #[serde(default)]
     pub mtimes: HashMap<String, u64>,
+    /// Per-file inode at the time `offset` was recorded. If the inode changes
+    /// (file truncated/recreated/rotated), the stored offset is invalidated.
+    #[serde(default)]
+    pub inodes: HashMap<String, u64>,
     /// Per-file last known model context for parsers that need stateful
     /// metadata across incremental reads.
     #[serde(default)]
@@ -128,11 +146,25 @@ impl FileCursor {
     }
 
     pub fn get_offset(&self, path: &str) -> u64 {
-        self.offsets.get(path).copied().unwrap_or(0)
+        let stored = self.offsets.get(path).copied().unwrap_or(0);
+        if stored == 0 {
+            return 0;
+        }
+        // If the file's inode changed since we recorded the offset, the file was
+        // truncated/recreated/rotated — reset to read from the start.
+        let cur = file_inode(Path::new(path));
+        match self.inodes.get(path) {
+            Some(&recorded) if cur != 0 && recorded != 0 && recorded != cur => 0,
+            _ => stored,
+        }
     }
 
     pub fn set_offset(&mut self, path: &str, offset: u64) {
         self.offsets.insert(path.to_string(), offset);
+        let ino = file_inode(Path::new(path));
+        if ino != 0 {
+            self.inodes.insert(path.to_string(), ino);
+        }
     }
 
     /// Given a key and the current cumulative totals, return the delta vs. the

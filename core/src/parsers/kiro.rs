@@ -16,7 +16,8 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
 
     // Primary: devdata.sqlite — accurate per-session data with timestamps
     let db_path = dev_data.join("devdata.sqlite");
-    if db_path.exists() && cursor.file_changed(&db_path.to_string_lossy().to_string()) {
+    let db_exists = db_path.exists();
+    if db_exists && cursor.file_changed(&db_path.to_string_lossy().to_string()) {
         // Build model timeline from .chat metadata files: start_ms → model_name
         let timeline = build_kiro_model_timeline(&dev_data);
         // Fallback model from Kiro settings (kiroAgent.modelSelection in storage.json)
@@ -75,17 +76,28 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
         }
     }
 
-    // Kiro IDE prompt log: tokens_generated.jsonl
-    // Use model "kiro-agent" only — will be filtered from model breakdown
+    // tokens_generated.jsonl is a SIBLING of devdata.sqlite (same usage events) but
+    // carries NO per-line timestamp. When the sqlite exists it is authoritative (it
+    // has timestamps + row ids), so we must NOT also read the jsonl — doing so would
+    // double-count the overlapping events AND dump the untimestamped rows onto the
+    // file's mtime day. Only fall back to the jsonl when the sqlite is absent.
     let jsonl = dev_data.join("tokens_generated.jsonl");
     if jsonl.exists() {
         let key = jsonl.to_string_lossy().to_string();
-        let offset = cursor.get_offset(&key);
-        let bucket = file_mtime_bucket(&jsonl);
-        let (mut records, new_offset) = parse_jsonl_file(&jsonl, offset, "kiro", parse_kiro_token_line);
-        for r in &mut records { if r.hour_start.is_empty() { r.hour_start = bucket.clone(); } }
-        all_records.extend(records);
-        cursor.set_offset(&key, new_offset);
+        if db_exists {
+            // Advance the cursor to the file tail without counting, so a later run
+            // (if the sqlite ever disappears) doesn't re-read already-covered lines.
+            let size = std::fs::metadata(&jsonl).map(|m| m.len()).unwrap_or(0);
+            cursor.set_offset(&key, size);
+        } else {
+            // Fallback only: no timestamps available, bucket by file mtime (best effort).
+            let offset = cursor.get_offset(&key);
+            let bucket = file_mtime_bucket(&jsonl);
+            let (mut records, new_offset) = parse_jsonl_file(&jsonl, offset, "kiro", parse_kiro_token_line);
+            for r in &mut records { if r.hour_start.is_empty() { r.hour_start = bucket.clone(); } }
+            all_records.extend(records);
+            cursor.set_offset(&key, new_offset);
+        }
     }
 
     // Kiro CLI sessions — read .json for turn metadata + .jsonl for char-based token estimation

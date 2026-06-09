@@ -3,16 +3,15 @@ use super::data::{PricingEntry, PRICING_DATA};
 
 const ZERO_PRICING: ModelPricing = ModelPricing { input: 0.0, output: 0.0, cache_read: 0.0, cache_write: 0.0 };
 
-/// Look up pricing for a model. Tries exact match, then longest-prefix match
-/// (a known family key that the model name starts with, e.g. "claude-sonnet-4"
-/// matches "claude-sonnet-4-6" / "claude-sonnet-4.6").
-pub fn get_model_pricing(model: &str, _source: &str) -> ModelPricing {
+/// Look up pricing, returning `None` when the model is unknown so callers can
+/// distinguish "unpriced/unknown" from a genuine zero price.
+pub fn lookup_model_pricing(model: &str) -> Option<ModelPricing> {
     let lower = model.to_lowercase();
 
     // Exact match wins.
     for entry in PRICING_DATA {
         if entry.model == lower {
-            return entry.pricing;
+            return Some(entry.pricing);
         }
     }
 
@@ -26,7 +25,39 @@ pub fn get_model_pricing(model: &str, _source: &str) -> ModelPricing {
             best = Some(entry);
         }
     }
-    best.map(|e| e.pricing).unwrap_or(ZERO_PRICING)
+    best.map(|e| e.pricing)
+}
+
+/// Look up pricing for a model. Tries exact match, then longest-prefix match
+/// (a known family key that the model name starts with, e.g. "claude-sonnet-4"
+/// matches "claude-sonnet-4-6" / "claude-sonnet-4.6").
+/// Unknown models fall back to zero pricing, but are logged once each so the
+/// cost is not silently dropped to $0 without a trace.
+pub fn get_model_pricing(model: &str, _source: &str) -> ModelPricing {
+    match lookup_model_pricing(model) {
+        Some(p) => p,
+        None => {
+            warn_unpriced_once(model);
+            ZERO_PRICING
+        }
+    }
+}
+
+/// Emit a single stderr warning per unknown model name (deduplicated across the
+/// process). `auto` and empty names are intentionally ignored.
+fn warn_unpriced_once(model: &str) {
+    use std::collections::HashSet;
+    use std::sync::{Mutex, OnceLock};
+    if model.is_empty() || model == "auto" {
+        return;
+    }
+    static WARNED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let set = WARNED.get_or_init(|| Mutex::new(HashSet::new()));
+    if let Ok(mut guard) = set.lock() {
+        if guard.insert(model.to_string()) {
+            eprintln!("tokenviewer: no pricing match for model '{model}' — cost counted as $0");
+        }
+    }
 }
 
 /// Compute USD cost for a single usage record.
