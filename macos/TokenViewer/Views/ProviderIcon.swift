@@ -39,7 +39,10 @@ struct ProviderIcon: View {
         if m.contains("deepseek") || s.contains("deepseek") { return "deepseek" }
         if m.hasPrefix("provider:moonshot") { return "kimi" }
         if m.hasPrefix("kimi") || m.hasPrefix("moonshot") { return "kimi" }
-        if m.hasPrefix("qwen") || m.hasPrefix("glm") || m.hasPrefix("minimax") || m.hasPrefix("mimo") { return "opencode" }
+        if m.hasPrefix("minimax") || m.hasPrefix("provider:minimax") || s == "minimax" { return "minimax" }
+        if m.hasPrefix("qwen") || m.hasPrefix("provider:qwen") || m.hasPrefix("provider:alibaba") || m.hasPrefix("provider:dashscope") { return "qwen" }
+        if m.hasPrefix("glm") || m.hasPrefix("chatglm") || m.hasPrefix("provider:zhipu") { return "glm" }
+        if m.hasPrefix("mimo") || m.hasPrefix("provider:xiaomi") { return "mimo" }
         if Self.logoMap[s] != nil { return s }
         return source
     }
@@ -50,12 +53,13 @@ struct ProviderIcon: View {
         "every-code": "codex", "everycode": "codex", "gemini": "gemini",
         "antigravity": "antigravity", "kiro": "kiro", "kiro-ide": "kiro", "opencode": "opencode",
         "openclaw": "openclaw", "cursor": "cursor", "deepseek": "deepseek", "grok": "grok", "kimi": "kimi",
+        "minimax": "minimax", "qwen": "qwen", "glm": "glm", "mimo": "mimo",
         "copilot": "copilot", "hermes": "hermes", "kilocli": "kilo", "kilo-cli": "kilo", "kilocode": "kilo",
         "qoder": "qoder", "trae": "trae", "windsurf": "windsurf", "zed": "zed", "workbuddy": "workbuddy",
     ]
 
     /// Logos drawn with `currentColor` (monochrome) — tint to adapt to light/dark.
-    private static let monoLogos: Set<String> = ["copilot", "cursor", "grok", "kimi", "kiro", "kiro-ide"]
+    private static let monoLogos: Set<String> = ["copilot", "cursor", "grok", "kimi", "kiro", "kiro-ide", "mimo"]
 
     var body: some View {
         if let img = logoImage() {

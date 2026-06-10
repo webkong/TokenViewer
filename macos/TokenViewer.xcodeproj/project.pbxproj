@@ -16,6 +16,7 @@
 		1CBF7C85F3FB372DBE9FBCFC /* StatusBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4129E968EF3C5D9FD95437C6 /* StatusBarController.swift */; };
 		2BF34F42698E79499583C1AE /* AppSyncCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30035A7991BA5D4CBAAFA67 /* AppSyncCoordinatorTests.swift */; };
 		2C6AC7DAAA159E8732B59FB2 /* copilot.svg in Resources */ = {isa = PBXBuildFile; fileRef = CCA7AD173CD5F720CAAFC580 /* copilot.svg */; };
+		2FA4573D36131DD3CDA26CCC /* glm.svg in Resources */ = {isa = PBXBuildFile; fileRef = B11438BA1A5E03040D8077DE /* glm.svg */; };
 		347A46B387C70D49DC91DAA1 /* kilo.svg in Resources */ = {isa = PBXBuildFile; fileRef = 5085801F155A829C95375778 /* kilo.svg */; };
 		3F3AA6C6B6C882FEEC1628A5 /* LimitsVisibilityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39EB5D762689CD00096F0785 /* LimitsVisibilityStore.swift */; };
 		4C8352C3B6296FA992BC28C7 /* workbuddy.png in Resources */ = {isa = PBXBuildFile; fileRef = CBE87DC9C12F91D7599987EC /* workbuddy.png */; };
@@ -23,19 +24,21 @@
 		563509D89AB9BF876DD5F6CE /* hermes.svg in Resources */ = {isa = PBXBuildFile; fileRef = B92F1EDF8973582C61B3DC55 /* hermes.svg */; };
 		591F15C6E853CC4623779432 /* CoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78CE8EAD3B139DBEB8EB4B5A /* CoreBridge.swift */; };
 		59C9CF298FD67A2731CDD576 /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C5F726D4BF938374A9F8B /* MainWindowView.swift */; };
+		6446B1F80536E65A510CD67F /* minimax.svg in Resources */ = {isa = PBXBuildFile; fileRef = F9C293D40888905D77B0E53D /* minimax.svg */; };
 		67FF0F9ECDC8086E43011BA7 /* kiro.svg in Resources */ = {isa = PBXBuildFile; fileRef = 72789F911185C411E70F2D10 /* kiro.svg */; };
 		689B564C83CA31718ADFEA3B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFC3E2ED727D536445673A50 /* SettingsView.swift */; };
 		702B25562F0C184BA1BAAD79 /* deepseek.svg in Resources */ = {isa = PBXBuildFile; fileRef = 4D00CFDFBC25C922B0FCA60B /* deepseek.svg */; };
 		74D160C3E7AAB7E3DE85B0C9 /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = C54A6C43A31CA1B59412B121 /* Preferences.swift */; };
 		7C48F3EEBCAADE26A81AC8D8 /* TrendChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF2E2E86DDB42752338CA381 /* TrendChartView.swift */; };
-		7E54CEAAAA141E3E14F7621C /* deepseek.png in Resources */ = {isa = PBXBuildFile; fileRef = 03F8C9F012B20601EF166330 /* deepseek.png */; };
 		7F679758E5115B64D4ADC95D /* ProviderIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DCD82F79AAD3F077EAA8A17 /* ProviderIcon.swift */; };
+		83FD6B4060B963A4C71AAA23 /* mimo.svg in Resources */ = {isa = PBXBuildFile; fileRef = BE7D8F9F057BCE3475B92B5D /* mimo.svg */; };
 		85F86A1B6739B28431A0AEE7 /* AppSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C824BA0CFB5B1E3F7AF26937 /* AppSyncCoordinator.swift */; };
 		868CC0E9639E89B5B0D2C3E1 /* codex.svg in Resources */ = {isa = PBXBuildFile; fileRef = 88494BAD929D52E39664A618 /* codex.svg */; };
 		88038E2FBCB342196F263BFA /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 034652C5EE019A959887EFA2 /* Localization.swift */; };
 		8AB637CE1DF29AC4BDB9CDC9 /* windsurf.svg in Resources */ = {isa = PBXBuildFile; fileRef = D4FE6EC826BF3B2F1F94086F /* windsurf.svg */; };
 		9296DA73CB97F5E8DABB1F08 /* opencode.svg in Resources */ = {isa = PBXBuildFile; fileRef = 49D0C81B5FF6EBFF4F66A51D /* opencode.svg */; };
 		94FD9E64724730AA7B7061D7 /* TokenViewerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4965F633CE47DB93FDA573C0 /* TokenViewerApp.swift */; };
+		985366007F540D744B1A62FC /* qwen.svg in Resources */ = {isa = PBXBuildFile; fileRef = CA15CD6F8BE5A54F1A3934E4 /* qwen.svg */; };
 		B46E624E79A30F1B0B72E060 /* qoder.png in Resources */ = {isa = PBXBuildFile; fileRef = EE91DBFAE4E2670D53307DE2 /* qoder.png */; };
 		BC8DC64BB060D01E192CFC39 /* UsageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E11BCBF448FA6555EA8CA7A3 /* UsageView.swift */; };
 		BF4CFB246707A8EF0A4D565B /* UsageViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A9C474022E1CC5E92244F6A /* UsageViewModel.swift */; };
@@ -65,7 +68,6 @@
 
 /* Begin PBXFileReference section */
 		034652C5EE019A959887EFA2 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
-		03F8C9F012B20601EF166330 /* deepseek.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = deepseek.png; sourceTree = "<group>"; };
 		1DCD82F79AAD3F077EAA8A17 /* ProviderIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderIcon.swift; sourceTree = "<group>"; };
 		21D91FBC31BF8A6F1CBFA202 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		2CDA4DFDC1A93996F495C246 /* claude-code.svg */ = {isa = PBXFileReference; path = "claude-code.svg"; sourceTree = "<group>"; };
@@ -95,9 +97,12 @@
 		A11C5F726D4BF938374A9F8B /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowView.swift; sourceTree = "<group>"; };
 		A30035A7991BA5D4CBAAFA67 /* AppSyncCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSyncCoordinatorTests.swift; sourceTree = "<group>"; };
 		A9F3FB73CDED44D7115FB025 /* grok.svg */ = {isa = PBXFileReference; path = grok.svg; sourceTree = "<group>"; };
+		B11438BA1A5E03040D8077DE /* glm.svg */ = {isa = PBXFileReference; path = glm.svg; sourceTree = "<group>"; };
 		B92F1EDF8973582C61B3DC55 /* hermes.svg */ = {isa = PBXFileReference; path = hermes.svg; sourceTree = "<group>"; };
+		BE7D8F9F057BCE3475B92B5D /* mimo.svg */ = {isa = PBXFileReference; path = mimo.svg; sourceTree = "<group>"; };
 		C54A6C43A31CA1B59412B121 /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
 		C824BA0CFB5B1E3F7AF26937 /* AppSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSyncCoordinator.swift; sourceTree = "<group>"; };
+		CA15CD6F8BE5A54F1A3934E4 /* qwen.svg */ = {isa = PBXFileReference; path = qwen.svg; sourceTree = "<group>"; };
 		CBE87DC9C12F91D7599987EC /* workbuddy.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = workbuddy.png; sourceTree = "<group>"; };
 		CCA7AD173CD5F720CAAFC580 /* copilot.svg */ = {isa = PBXFileReference; path = copilot.svg; sourceTree = "<group>"; };
 		D4FE6EC826BF3B2F1F94086F /* windsurf.svg */ = {isa = PBXFileReference; path = windsurf.svg; sourceTree = "<group>"; };
@@ -112,6 +117,7 @@
 		F13B30FF8F49D9B8D59A4CEA /* kimi.svg */ = {isa = PBXFileReference; path = kimi.svg; sourceTree = "<group>"; };
 		F1DDAFB4FBCF9DDDF0B9B8A3 /* MenuBarIcon.svg */ = {isa = PBXFileReference; path = MenuBarIcon.svg; sourceTree = "<group>"; };
 		F69660CE5393741209A39863 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
+		F9C293D40888905D77B0E53D /* minimax.svg */ = {isa = PBXFileReference; path = minimax.svg; sourceTree = "<group>"; };
 		FFC3E2ED727D536445673A50 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -224,17 +230,20 @@
 				88494BAD929D52E39664A618 /* codex.svg */,
 				CCA7AD173CD5F720CAAFC580 /* copilot.svg */,
 				9D533D3DCF9CA4378E9A240D /* cursor.svg */,
-				03F8C9F012B20601EF166330 /* deepseek.png */,
 				4D00CFDFBC25C922B0FCA60B /* deepseek.svg */,
 				E9F2DD464AF49DBA8E6A6E86 /* gemini.svg */,
+				B11438BA1A5E03040D8077DE /* glm.svg */,
 				A9F3FB73CDED44D7115FB025 /* grok.svg */,
 				B92F1EDF8973582C61B3DC55 /* hermes.svg */,
 				5085801F155A829C95375778 /* kilo.svg */,
 				F13B30FF8F49D9B8D59A4CEA /* kimi.svg */,
 				72789F911185C411E70F2D10 /* kiro.svg */,
+				BE7D8F9F057BCE3475B92B5D /* mimo.svg */,
+				F9C293D40888905D77B0E53D /* minimax.svg */,
 				7558F3C2071E901CF0ECA4FD /* openclaw.svg */,
 				49D0C81B5FF6EBFF4F66A51D /* opencode.svg */,
 				EE91DBFAE4E2670D53307DE2 /* qoder.png */,
+				CA15CD6F8BE5A54F1A3934E4 /* qwen.svg */,
 				9FCDFF3B030DCF4A5536E67E /* trae.png */,
 				D4FE6EC826BF3B2F1F94086F /* windsurf.svg */,
 				CBE87DC9C12F91D7599987EC /* workbuddy.png */,
@@ -339,17 +348,20 @@
 				868CC0E9639E89B5B0D2C3E1 /* codex.svg in Resources */,
 				2C6AC7DAAA159E8732B59FB2 /* copilot.svg in Resources */,
 				1B2E655D1EB989A9FA40B134 /* cursor.svg in Resources */,
-				7E54CEAAAA141E3E14F7621C /* deepseek.png in Resources */,
 				702B25562F0C184BA1BAAD79 /* deepseek.svg in Resources */,
 				149B8B58C06302D14076B43F /* gemini.svg in Resources */,
+				2FA4573D36131DD3CDA26CCC /* glm.svg in Resources */,
 				FD93F43BB910DAAD2E8571B3 /* grok.svg in Resources */,
 				563509D89AB9BF876DD5F6CE /* hermes.svg in Resources */,
 				347A46B387C70D49DC91DAA1 /* kilo.svg in Resources */,
 				D4229158D4ABEAF416E9B0D4 /* kimi.svg in Resources */,
 				67FF0F9ECDC8086E43011BA7 /* kiro.svg in Resources */,
+				83FD6B4060B963A4C71AAA23 /* mimo.svg in Resources */,
+				6446B1F80536E65A510CD67F /* minimax.svg in Resources */,
 				E24828ABBE0F085D952957AA /* openclaw.svg in Resources */,
 				9296DA73CB97F5E8DABB1F08 /* opencode.svg in Resources */,
 				B46E624E79A30F1B0B72E060 /* qoder.png in Resources */,
+				985366007F540D744B1A62FC /* qwen.svg in Resources */,
 				13A280D2AB0B9FD6CBA5E8DA /* trae.png in Resources */,
 				8AB637CE1DF29AC4BDB9CDC9 /* windsurf.svg in Resources */,
 				4C8352C3B6296FA992BC28C7 /* workbuddy.png in Resources */,
@@ -526,7 +538,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.7;
+				MARKETING_VERSION = 0.1.9;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -614,7 +626,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.7;
+				MARKETING_VERSION = 0.1.9;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
