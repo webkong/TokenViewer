@@ -189,7 +189,11 @@ final class UpdateChecker: ObservableObject {
     // MARK: - Network
 
     private func fetchLatest() async throws -> ReleaseInfo {
-        let url = URL(string: "https://api.github.com/repos/\(Self.repo)/releases/latest")!
+        // Don't trust GitHub's `/releases/latest` pointer: it depends on the
+        // `make_latest` flag, excludes prereleases, and can lag right after a
+        // publish. Instead list releases and pick the highest semver ourselves
+        // so we always offer the genuinely newest published version.
+        let url = URL(string: "https://api.github.com/repos/\(Self.repo)/releases?per_page=30")!
         var req = URLRequest(url: url)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         req.setValue("TokenViewer/\(currentVersion)", forHTTPHeaderField: "User-Agent")
@@ -198,16 +202,28 @@ final class UpdateChecker: ObservableObject {
         guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
             throw URLError(.badServerResponse)
         }
-        let json = try JSONDecoder().decode(GitHubRelease.self, from: data)
-        let version = json.tagName.trimmingCharacters(in: .whitespaces)
-            .replacingOccurrences(of: #"^[vV]"#, with: "", options: .regularExpression)
-        guard !version.isEmpty else { throw URLError(.cannotParseResponse) }
-        let releaseURL = json.htmlURL ?? URL(string: "https://github.com/\(Self.repo)/releases/latest")!
+        let releases = try JSONDecoder().decode([GitHubRelease].self, from: data)
+        // Highest version among published (non-draft, non-prerelease) releases.
+        let best = releases
+            .filter { !($0.draft ?? false) && !($0.prerelease ?? false) }
+            .map { (release: $0, version: Self.normalizeVersion($0.tagName)) }
+            .filter { !$0.version.isEmpty }
+            .max(by: { isNewer($1.version, than: $0.version) })
+        guard let best else { throw URLError(.cannotParseResponse) }
+
+        let json = best.release
+        let version = best.version
+        let releaseURL = json.htmlURL ?? URL(string: "https://github.com/\(Self.repo)/releases/tag/\(json.tagName)")!
         let pkgURL = json.assets.first { $0.browserDownloadURL.pathExtension.lowercased() == "pkg" }?.browserDownloadURL
             ?? json.assets.first { $0.browserDownloadURL.pathExtension.lowercased() == "dmg" }?.browserDownloadURL
         let trimmedNotes = json.body?.trimmingCharacters(in: .whitespacesAndNewlines)
         let notes = (trimmedNotes?.isEmpty == false) ? trimmedNotes! : L10n.shared.noReleaseNotesAvailable
         return ReleaseInfo(version: version, releaseURL: releaseURL, pkgURL: pkgURL, notes: notes)
+    }
+
+    private static func normalizeVersion(_ tag: String) -> String {
+        tag.trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: #"^[vV]"#, with: "", options: .regularExpression)
     }
 
     private func isNewer(_ a: String, than b: String) -> Bool {
@@ -229,11 +245,14 @@ private struct GitHubRelease: Decodable {
     let htmlURL: URL?
     let body: String?
     let assets: [Asset]
+    let draft: Bool?
+    let prerelease: Bool?
     struct Asset: Decodable {
         let browserDownloadURL: URL
         private enum CodingKeys: String, CodingKey { case browserDownloadURL = "browser_download_url" }
     }
     private enum CodingKeys: String, CodingKey {
         case tagName = "tag_name"; case htmlURL = "html_url"; case body; case assets
+        case draft; case prerelease
     }
 }

@@ -434,7 +434,7 @@ push_release() {
       [[ -f "$PKG_PATH" ]] && assets+=("$PKG_PATH")
       [[ -f "$PKG_ALIAS_PATH" ]] && assets+=("$PKG_ALIAS_PATH")
       gh release create "$RELEASE_TAG" "${assets[@]}" \
-        --repo "$GITHUB_RELEASE_REPO" \
+        --repo "$GITHUB_RELEASE_REPO" --latest \
         --title "$APP_DISPLAY_NAME $VERSION" --notes-file "$notes_file"
     fi
     rm -f "$notes_file"
