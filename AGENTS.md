@@ -75,6 +75,22 @@ Swift wraps these in `CoreBridge`; JSON is exchanged across the boundary and dec
 
 `normalize_kiro_model` preserves real versions (`claude-sonnet-4.6`, `claude-opus-4.8`, …). `kiro-agent` is the **fallback model bucket** for usage that can't be attributed to a specific model — keep it in the model breakdown, don't filter it out.
 
+## Agents: usage parsers vs. limits cards
+
+An agent can have **two independent integrations**, and they don't always coexist:
+
+1. **Usage parser** — registered in `core/src/parsers/mod.rs::all_parsers()`; reads local logs and reports consumed tokens.
+2. **Limits card** — a `fetch<Name>()` in `macos/TokenViewer/Services/LimitsService.swift`; queries the product's account/usage API to show a quota window + reset countdown.
+
+Two groups result:
+
+- **Canonical (14)** — have a limits card (parser optional): Claude Code, Codex, Cursor, Kiro, GitHub Copilot, Kimi, Antigravity, Zed, Trae, Windsurf, Qoder, CodeBuddy, WorkBuddy, Gemini. These are commercial subscription products with a queryable quota (some via the cockpit-tools account cache). **Trae / Windsurf / Qoder have *only* a limits card, no usage parser.**
+- **Parser-only (11)** — usage parser but no limits card: OpenCode, OpenClaw, Hermes, Grok, RooCode, KiloCode, Kilo CLI, Goose, OhMyPi, Pi, Craft.
+
+**Why parser-only have no limits card:** a limits card needs a queryable "subscription quota + reset" endpoint. These tools are mostly open-source / bring-your-own-key / router agents (OpenCode, OpenClaw, RooCode, KiloCode, Kilo CLI, Goose, Craft, Pi, OhMyPi) or direct-API providers (Grok, Hermes). They have no proprietary subscription of their own — the real quota belongs to whatever upstream API key the user configured (OpenAI / Anthropic / OpenRouter / …), so there's nothing for TokenViewer to query. Only local-log token usage is available.
+
+> `all_parsers()` actually has 23 entries: the 11 parser-only + 11 canonical-with-parser + `everycode` (folded into the Codex brand/icon, not listed separately).
+
 ## Adding a new provider parser
 1. Create `core/src/parsers/<name>.rs` with `pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>>`.
 2. Reuse `utils.rs` helpers; produce 30-min-bucketed `UsageRecord`s with `source = "<name>"`.
