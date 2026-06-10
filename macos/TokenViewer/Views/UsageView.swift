@@ -63,12 +63,26 @@ struct UsageView: View {
 
                     Picker("Range", selection: $viewModel.selectedRange) {
                         ForEach(UsageViewModel.TimeRange.allCases, id: \.self) { range in
-                            Text(range.rawValue).tag(range)
+                            Text(range.localizedTitle).tag(range)
                         }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .onChange(of: viewModel.selectedRange) { viewModel.refresh() }
+
+                    if viewModel.selectedRange == .custom {
+                        HStack(spacing: 12) {
+                            DatePicker(l10n.rangeFrom, selection: $viewModel.customFrom,
+                                       in: ...viewModel.customTo, displayedComponents: .date)
+                            DatePicker(l10n.rangeTo, selection: $viewModel.customTo,
+                                       in: viewModel.customFrom...Date(), displayedComponents: .date)
+                            Spacer()
+                        }
+                        .datePickerStyle(.compact)
+                        .font(.system(size: 12))
+                        .onChange(of: viewModel.customFrom) { viewModel.refresh() }
+                        .onChange(of: viewModel.customTo) { viewModel.refresh() }
+                    }
 
                     if let s = viewModel.summary {
                         // Overview
@@ -77,7 +91,7 @@ struct UsageView: View {
 
                         // Trend (hero, full width)
                         if !viewModel.dailyUsage.isEmpty {
-                            TrendChartView(data: viewModel.dailyUsage, hourly: viewModel.selectedRange == .today)
+                            TrendChartView(data: viewModel.dailyUsage, hourly: viewModel.isHourlyView)
                         }
                         if !viewModel.heatmap.isEmpty {
                             HeatmapView(points: viewModel.heatmap)

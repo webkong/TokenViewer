@@ -37,6 +37,14 @@ final class L10n: ObservableObject {
     var usageTitle: String { isZh ? "用量" : "Usage" }
     var usageSubtitle: String { isZh ? "所有 AI 工具的 Token 消耗" : "Token consumption across all AI tools" }
     var syncNow: String { isZh ? "立即同步" : "Sync now" }
+    // Time range filter
+    var rangeToday: String { isZh ? "今天" : "Today" }
+    var rangeWeek: String { isZh ? "近 7 天" : "Week" }
+    var rangeMonth: String { isZh ? "近 30 天" : "Month" }
+    var rangeAll: String { isZh ? "全部" : "All" }
+    var rangeCustom: String { isZh ? "自定义" : "Custom" }
+    var rangeFrom: String { isZh ? "起始" : "From" }
+    var rangeTo: String { isZh ? "结束" : "To" }
     var today: String { isZh ? "今天" : "Today" }
     var sevenDays: String { isZh ? "7 天" : "7 Days" }
     var thirtyDays: String { isZh ? "30 天" : "30 Days" }

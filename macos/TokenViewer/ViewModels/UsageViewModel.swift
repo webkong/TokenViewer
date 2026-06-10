@@ -97,12 +97,33 @@ class UsageViewModel: ObservableObject {
     @Published var panelCards: [PanelCard] = []
     @Published var isLoading = false
     @Published var selectedRange: TimeRange = .week
+    /// Custom range bounds (local calendar days), used when selectedRange == .custom.
+    @Published var customFrom: Date = Calendar.current.date(byAdding: .day, value: -29, to: Calendar.current.startOfDay(for: Date())) ?? Date()
+    @Published var customTo: Date = Date()
 
     enum TimeRange: String, CaseIterable {
         case today = "Today"
         case week = "Week"
         case month = "Month"
         case all = "All"
+        case custom = "Custom"
+
+        var localizedTitle: String {
+            let l = L10n.shared
+            switch self {
+            case .today: return l.rangeToday
+            case .week: return l.rangeWeek
+            case .month: return l.rangeMonth
+            case .all: return l.rangeAll
+            case .custom: return l.rangeCustom
+            }
+        }
+    }
+
+    /// Use the hourly trend granularity for single-day windows.
+    var isHourlyView: Bool {
+        selectedRange == .today
+            || (selectedRange == .custom && Calendar.current.isDate(customFrom, inSameDayAs: customTo))
     }
 
     private let decoder = JSONDecoder()
@@ -148,7 +169,7 @@ class UsageViewModel: ObservableObject {
         refreshToken &+= 1
         let token = refreshToken
         let (from, to) = dateRange(for: selectedRange)
-        let useHourly = selectedRange == .today
+        let useHourly = isHourlyView
         Task.detached { [weak self] in
             let summaryData = CoreBridge.shared.querySummary(from: from, to: to)
             let dailyData = useHourly
@@ -259,6 +280,11 @@ class UsageViewModel: ObservableObject {
             from = Self.utcISO(for: cal.date(byAdding: .month, value: -1, to: todayStart)!)
         case .all:
             from = "2020-01-01T00:00:00Z"
+        case .custom:
+            // Inclusive [min(day) 00:00, max(day)+1 00:00); order-safe against inverted picks.
+            let lo = cal.startOfDay(for: min(customFrom, customTo))
+            let hi = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: max(customFrom, customTo)))!
+            return (Self.utcISO(for: lo), Self.utcISO(for: hi))
         }
         return (from, to)
         // Debug: print("dateRange(\(range)): from=\(from) to=\(to)")
