@@ -58,10 +58,9 @@ struct PopoverView: View {
         .onAppear { onHeightChange?(popoverHeight) }
         .onChange(of: popoverHeight) { onHeightChange?($0) }
         .onKeyPress(.escape) { onClose?(); return .handled }
-        .onAppear {
-            viewModel.sync()
-            limitsVM.refreshIfStale()
-        }
+        // NOTE: sync is triggered from StatusBarController.togglePopover (AppKit)
+        // because NSPopover reuses its NSHostingController and SwiftUI .onAppear
+        // does not reliably fire on subsequent opens.
     }
 
     // MARK: Header / Footer

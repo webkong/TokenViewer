@@ -44,6 +44,13 @@ final class StatusBarController {
             NSApp.activate(ignoringOtherApps: true)
             popover.contentViewController?.view.window?.level = .floating
             startEventMonitor()
+            // Trigger sync here (AppKit) rather than in PopoverView.onAppear:
+            // NSPopover reuses the same NSHostingController, so SwiftUI's
+            // onAppear does not reliably fire on subsequent opens. Throttled via
+            // syncIfStale so frequent reopens don't keep pulling; the panel's
+            // refresh button forces a sync.
+            UsageViewModel.shared.syncIfStale()
+            LimitsViewModel.shared.refreshIfStale()
         }
     }
 

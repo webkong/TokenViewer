@@ -148,6 +148,14 @@ class UsageViewModel: ObservableObject {
 
     private var syncTimer: Timer?
 
+    /// Timestamp of the last sync that actually ran. Used by `syncIfStale()`
+    /// to throttle the implicit sync triggered when the menu panel opens, so
+    /// rapidly reopening the panel doesn't re-parse on every open.
+    private var lastSyncedAt: Date?
+    /// Minimum gap between panel-open auto-syncs. The manual refresh button
+    /// bypasses this (calls `sync()` directly).
+    private static let syncStaleInterval: TimeInterval = 60
+
     /// (Re)start the local-sync timer from the user's syncFrequencyMinutes
     /// setting. 0 = manual only. Local parse is cheap, so a short interval is fine.
     func startAutoSync() {
@@ -224,6 +232,14 @@ class UsageViewModel: ObservableObject {
         ]
     }
 
+    /// Sync only if the last sync is older than `syncStaleInterval`. Used on
+    /// panel open so frequent reopens don't keep pulling. The manual refresh
+    /// button calls `sync()` directly to force a pull regardless.
+    func syncIfStale() {
+        let stale = lastSyncedAt.map { Date().timeIntervalSince($0) > Self.syncStaleInterval } ?? true
+        if stale { sync() }
+    }
+
     func sync() {
         guard !isLoading else { return }
         #if DEBUG
@@ -232,6 +248,7 @@ class UsageViewModel: ObservableObject {
         }
         #endif
         isLoading = true
+        lastSyncedAt = Date()
         let startTime = Date()
         Task.detached { [weak self] in
             _ = CoreBridge.shared.syncAll()
