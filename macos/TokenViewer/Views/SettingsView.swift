@@ -194,7 +194,7 @@ struct SettingsView: View {
                 ForEach(active) { p in
                     HStack(spacing: 8) {
                         ProviderIcon(source: p.source, size: 14)
-                        Text(p.source.capitalized).font(.system(size: 13, weight: .medium))
+                        Text(TVColor.sourceDisplayName(p.source)).font(.system(size: 13, weight: .medium))
                         Spacer()
                         Text(l10n.recordsCount(Int(p.record_count)))
                             .font(.system(size: 11, design: .monospaced))

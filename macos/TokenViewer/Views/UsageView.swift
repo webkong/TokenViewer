@@ -4,6 +4,39 @@ import SwiftUI
 enum TVColor {
     static let brand = Color(red: 0.02, green: 0.59, blue: 0.41) // #059669 emerald
 
+    static func sourceDisplayName(_ source: String) -> String {
+        switch source.lowercased() {
+        case "claude": return "Claude"
+        case "codex": return "Codex"
+        case "cursor": return "Cursor"
+        case "gemini": return "Gemini"
+        case "kiro": return "Kiro"
+        case "copilot": return "GitHub Copilot"
+        case "kimi": return "Kimi"
+        case "antigravity": return "Antigravity"
+        case "zed": return "Zed"
+        case "trae": return "Trae"
+        case "windsurf": return "Windsurf"
+        case "qoder": return "Qoder"
+        case "codebuddy": return "CodeBuddy"
+        case "workbuddy": return "WorkBuddy"
+        case "mimocode": return "MiMoCode"
+        case "goose": return "Goose"
+        case "hermes": return "Hermes"
+        case "grok": return "Grok"
+        case "opencode": return "OpenCode"
+        case "openclaw": return "OpenClaw"
+        case "roocode": return "RooCode"
+        case "kilocode": return "KiloCode"
+        case "kilocli": return "KiloCLI"
+        case "ohmypi": return "OhMyPi"
+        case "pi": return "Pi"
+        case "craft": return "Craft"
+        case "everycode": return "EveryCode"
+        default: return source.capitalized
+        }
+    }
+
     static func provider(_ source: String) -> Color {
         switch source.lowercased() {
         case "claude", "codebuddy": return Color(red: 0.85, green: 0.46, blue: 0.34) // #d97757
@@ -362,7 +395,7 @@ private struct ProviderBreakdownView: View {
                 VStack(spacing: 5) {
                     HStack(spacing: 8) {
                         ProviderIcon(source: row.id, size: 14)
-                        Text(row.id.capitalized).font(.system(size: 13, weight: .medium))
+                        Text(TVColor.sourceDisplayName(row.id)).font(.system(size: 13, weight: .medium))
                         Spacer()
                         Text(tvFormatCost(row.cost))
                             .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)

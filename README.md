@@ -6,7 +6,7 @@
 
 ### Know exactly how many tokens you're spending — across every AI coding tool
 
-A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects token counts and costs from **23 AI coding tools**, aggregates them locally, and surfaces real usage trends in a beautiful dashboard. No cloud account, no Node.js, no browser — just a tiny native app.
+A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects token counts and costs from **24 AI coding tools**, aggregates them locally, and surfaces real usage trends in a beautiful dashboard. No cloud account, no Node.js, no browser — just a tiny native app.
 
 [![Release](https://img.shields.io/github/v/release/webkong/TokenViewer?color=059669&label=Download)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer.dmg)
 [![Platform](https://img.shields.io/badge/Platform-macOS%2014%2B-lightgrey?logo=apple&logoColor=white)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer.dmg)
@@ -55,7 +55,7 @@ A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects tok
 
 ## ✨ Features
 
-- 🔌 **23 AI tools out of the box** — Claude Code, Codex, Kiro, Cursor, GitHub Copilot, Gemini CLI, Opencode, Roocode, Kilo Code, Zed, Goose, Grok, Kimi, Craft, OpenClaw, Hermes, Antigravity, CodeBuddy, WorkBuddy, OhMyPi, Pi, KiloCLI, EveryCode
+- 🔌 **24 AI tools out of the box** — Claude Code, Codex, Kiro, Cursor, GitHub Copilot, Gemini CLI, Opencode, Roocode, Kilo Code, Zed, Goose, Grok, Kimi, Craft, OpenClaw, Hermes, Antigravity, CodeBuddy, WorkBuddy, OhMyPi, Pi, KiloCLI, EveryCode, MiMoCode
 - 🏠 **100% local** — Token data never leaves your machine. No account, no API keys.
 - 🚀 **Zero config** — Reads existing log files your tools already produce. Nothing installed into those tools.
 - 📊 **Beautiful dashboard** — Usage trends, model breakdown, cost analysis, provider breakdown, daily detail table
@@ -120,6 +120,7 @@ A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects tok
 | **OhMyPi** | `~/.omp/agent/sessions/**/*.jsonl` | Passive reader |
 | **Pi** | `~/.pi/agent/sessions/**/*.jsonl` | Passive reader |
 | **KiloCLI** | `~/.local/share/kilo/kilo.db` | SQLite reader |
+| **MiMoCode** | `~/.local/share/mimocode/mimocode.db` | SQLite reader (message table) |
 
 > All integrations are **passive readers** — TokenViewer only reads files your tools already produce. Nothing is installed into those tools.
 

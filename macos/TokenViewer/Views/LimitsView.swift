@@ -77,7 +77,7 @@ private struct ProviderLimitCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 ProviderIcon(source: provider.name, size: 16)
-                Text(provider.name.capitalized).font(.system(size: 15, weight: .semibold))
+                Text(TVColor.sourceDisplayName(provider.name)).font(.system(size: 15, weight: .semibold))
                 if let plan = provider.planLabel {
                     Text(plan)
                         .font(.system(size: 10, weight: .medium))

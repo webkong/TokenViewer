@@ -1,6 +1,6 @@
 # AGENTS.md — TokenViewer
 
-Native macOS menu-bar app that tracks AI token usage & cost across 23 coding tools. Local-first: all data in `~/.tokenviewer/data.db`, no cloud, no account.
+Native macOS menu-bar app that tracks AI token usage & cost across 24 coding tools. Local-first: all data in `~/.tokenviewer/data.db`, no cloud, no account.
 
 - **Stack**: Rust core (parsing + SQLite + pricing) ⟷ C FFI ⟷ SwiftUI macOS app
 - **Brand color**: emerald `#059669`
@@ -89,7 +89,7 @@ Two groups result:
 
 **Why parser-only have no limits card:** a limits card needs a queryable "subscription quota + reset" endpoint. These tools are mostly open-source / bring-your-own-key / router agents (OpenCode, OpenClaw, RooCode, KiloCode, Kilo CLI, Goose, Craft, Pi, OhMyPi) or direct-API providers (Grok, Hermes). They have no proprietary subscription of their own — the real quota belongs to whatever upstream API key the user configured (OpenAI / Anthropic / OpenRouter / …), so there's nothing for TokenViewer to query. Only local-log token usage is available.
 
-> `all_parsers()` actually has 23 entries: the 11 parser-only + 11 canonical-with-parser + `everycode` (folded into the Codex brand/icon, not listed separately).
+> `all_parsers()` actually has 24 entries: the 11 parser-only + 11 canonical-with-parser + `everycode` (folded into the Codex brand/icon, not listed separately) + `mimocode`.
 
 ## Adding a new provider parser
 1. Create `core/src/parsers/<name>.rs` with `pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>>`.

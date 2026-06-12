@@ -6,7 +6,7 @@
 
 ### 清楚知道你在每个 AI 编程工具上花了多少 Token
 
-一款用 **SwiftUI + Rust** 构建的原生 macOS 菜单栏应用，自动收集 **23 个 AI 编程工具**的 Token 用量和费用，在本地聚合后呈现在精美的仪表盘中。无需云端账号、无需 Node.js、无需浏览器——只是一个小巧的原生应用。
+一款用 **SwiftUI + Rust** 构建的原生 macOS 菜单栏应用，自动收集 **24 个 AI 编程工具**的 Token 用量和费用，在本地聚合后呈现在精美的仪表盘中。无需云端账号、无需 Node.js、无需浏览器——只是一个小巧的原生应用。
 
 [![Release](https://img.shields.io/github/v/release/webkong/TokenViewer?color=059669&label=下载)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer.dmg)
 [![Platform](https://img.shields.io/badge/平台-macOS%2014%2B-lightgrey?logo=apple&logoColor=white)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer.dmg)
@@ -55,7 +55,7 @@
 
 ## ✨ 功能特性
 
-- 🔌 **开箱支持 23 个工具** — Claude Code、Codex、Kiro、Cursor、GitHub Copilot、Gemini CLI、Opencode、Roocode、Kilo Code、Zed、Goose、Grok、Kimi、Craft、OpenClaw、Hermes、Antigravity、CodeBuddy、WorkBuddy、OhMyPi、Pi、KiloCLI、EveryCode
+- 🔌 **开箱支持 24 个工具** — Claude Code、Codex、Kiro、Cursor、GitHub Copilot、Gemini CLI、Opencode、Roocode、Kilo Code、Zed、Goose、Grok、Kimi、Craft、OpenClaw、Hermes、Antigravity、CodeBuddy、WorkBuddy、OhMyPi、Pi、KiloCLI、EveryCode、MiMoCode
 - 🏠 **100% 本地** — Token 数据绝不离开你的设备，无账号，无 API Key
 - 🚀 **零配置** — 读取工具已有的日志文件，无需在这些工具中安装任何东西
 - 📊 **精美仪表盘** — 用量趋势、模型分布、费用分析、工具分布、每日明细表
@@ -93,7 +93,7 @@
 
 ---
 
-## 🔌 支持的工具（23 个）
+## 🔌 支持的工具（24 个）
 
 | 工具 | 数据来源 | 方式 |
 |------|---------|------|
@@ -120,6 +120,7 @@
 | **OhMyPi** | `~/.omp/agent/sessions/**/*.jsonl` | 被动读取 |
 | **Pi** | `~/.pi/agent/sessions/**/*.jsonl` | 被动读取 |
 | **KiloCLI** | `~/.local/share/kilo/kilo.db` | SQLite 读取 |
+| **MiMoCode** | `~/.local/share/mimocode/mimocode.db` | SQLite 读取（message 表） |
 
 > 所有集成均为**被动读取**——TokenViewer 只读取这些工具已有的文件，不向工具安装任何东西。
 
@@ -150,14 +151,14 @@ TokenViewer 可以显示 9 个工具的实时配额用量和重置倒计时：
 ## 🏗️ 工作原理
 
 ```
-AI 工具日志  →  23 个 Rust 解析器  →  SQLite (~/.tokenviewer/data.db)
+AI 工具日志  →  24 个 Rust 解析器  →  SQLite (~/.tokenviewer/data.db)
                                               ↓
                                  FFI (tt_sync / tt_query_*)
                                               ↓
                         SwiftUI 视图 ← CoreBridge ← UsageViewModel
 ```
 
-- **Rust 核心** (`core/`) — 23 个解析器、SQLite 存储、定价引擎，编译为 `libtokenviewer_core.a`
+- **Rust 核心** (`core/`) — 24 个解析器、SQLite 存储、定价引擎，编译为 `libtokenviewer_core.a`
 - **SwiftUI 应用** (`macos/`) — 菜单栏状态图标、弹出面板、完整仪表盘窗口
 - **增量同步** — 每个解析器在 SQLite 中存储文件偏移量游标。下次同步只读新增字节。解析器并行运行（rayon）。mtime 未变的文件完全跳过。
 

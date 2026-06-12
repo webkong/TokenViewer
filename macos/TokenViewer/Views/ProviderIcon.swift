@@ -55,11 +55,12 @@ struct ProviderIcon: View {
         "openclaw": "openclaw", "cursor": "cursor", "deepseek": "deepseek", "grok": "grok", "kimi": "kimi",
         "minimax": "minimax", "qwen": "qwen", "glm": "glm", "mimo": "mimo",
         "copilot": "copilot", "hermes": "hermes", "kilocli": "kilo", "kilo-cli": "kilo", "kilocode": "kilo",
+        "mimocode": "mimo",
         "qoder": "qoder", "trae": "trae", "windsurf": "windsurf", "zed": "zed", "workbuddy": "workbuddy",
     ]
 
     /// Logos drawn with `currentColor` (monochrome) — tint to adapt to light/dark.
-    private static let monoLogos: Set<String> = ["copilot", "cursor", "grok", "kimi", "kiro", "kiro-ide", "mimo"]
+    private static let monoLogos: Set<String> = ["copilot", "cursor", "grok", "kimi", "kiro", "kiro-ide", "mimo", "mimocode"]
 
     var body: some View {
         if let img = logoImage() {

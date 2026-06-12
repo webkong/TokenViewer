@@ -279,7 +279,7 @@ private struct CompactProviderLimitCard: View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
                 ProviderIcon(source: provider.name, size: 13)
-                Text(provider.name.capitalized)
+                Text(TVColor.sourceDisplayName(provider.name))
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
                 if let plan = provider.planLabel {

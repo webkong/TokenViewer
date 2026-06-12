@@ -48,6 +48,7 @@ enum LimitsVisibilityStore {
         case "qoder": return "Qoder"
         case "codebuddy": return "CodeBuddy"
         case "workbuddy": return "WorkBuddy"
+        case "mimocode": return "MiMoCode"
         default:
             return source.capitalized
         }
