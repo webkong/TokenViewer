@@ -20,31 +20,31 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
 
     let conn = Connection::open(&db_path)?;
 
-    // last_timestamp stores the max time_created (epoch ms) we've seen
-    let last_ms: i64 = cursor.last_timestamp
+    // last_rowid stores the max rowid we've seen (more reliable than time_created)
+    let last_rowid: i64 = cursor.last_timestamp
         .as_deref()
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
 
-    let sql = "SELECT id, time_created, data FROM message \
-               WHERE time_created > ?1 \
-               ORDER BY time_created ASC";
+    let sql = "SELECT rowid, time_created, data FROM message \
+               WHERE rowid > ?1 \
+               ORDER BY rowid ASC";
 
     let mut stmt = conn.prepare(sql)?;
-    let rows = stmt.query_map([last_ms], |row| {
+    let rows = stmt.query_map([last_rowid], |row| {
         Ok((
-            row.get::<_, String>(0)?,
+            row.get::<_, i64>(0)?,
             row.get::<_, i64>(1)?,
             row.get::<_, String>(2)?,
         ))
     })?;
 
-    let mut max_ms = last_ms;
+    let mut max_rowid = last_rowid;
 
     for row in rows.flatten() {
-        let (_id, time_created, data_str) = row;
-        if time_created > max_ms {
-            max_ms = time_created;
+        let (rowid, time_created, data_str) = row;
+        if rowid > max_rowid {
+            max_rowid = rowid;
         }
 
         let v: serde_json::Value = match serde_json::from_str(&data_str) {
@@ -71,8 +71,9 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
         let input = tokens.get("input").and_then(|x| x.as_u64()).unwrap_or(0);
         let output = tokens.get("output").and_then(|x| x.as_u64()).unwrap_or(0);
         let reasoning = tokens.get("reasoning").and_then(|x| x.as_u64()).unwrap_or(0);
-        let cache_read = tokens.get("cache_read").and_then(|x| x.as_u64()).unwrap_or(0);
-        let cache_write = tokens.get("cache_write").and_then(|x| x.as_u64()).unwrap_or(0);
+        let cache = tokens.get("cache");
+        let cache_read = cache.and_then(|c| c.get("read")).and_then(|x| x.as_u64()).unwrap_or(0);
+        let cache_write = cache.and_then(|c| c.get("write")).and_then(|x| x.as_u64()).unwrap_or(0);
         let total = input + output + reasoning + cache_read + cache_write;
 
         if total == 0 {
@@ -85,6 +86,9 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
             continue;
         }
 
+        // mimocode: input = non-cached input, cache.read = cumulative context (not incremental)
+        // TokenViewer: input_tokens = non-cached input, cached_input_tokens = cache hits
+        // Note: total_tokens should NOT include cache.read to avoid double-counting
         all_records.push(UsageRecord {
             id: None,
             hour_start,
@@ -95,11 +99,11 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
             cached_input_tokens: cache_read,
             cache_creation_input_tokens: cache_write,
             reasoning_output_tokens: reasoning,
-            total_tokens: total,
+            total_tokens: input + output + reasoning,
             conversation_count: 0,
         });
     }
 
-    cursor.last_timestamp = Some(max_ms.to_string());
+    cursor.last_timestamp = Some(max_rowid.to_string());
     Ok((aggregate_records(all_records), cursor.to_json()))
 }

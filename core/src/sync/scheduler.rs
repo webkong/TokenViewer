@@ -4,13 +4,6 @@ use std::path::Path;
 use crate::parsers;
 use crate::storage::Database;
 
-const SOURCES: &[&str] = &[
-    "claude", "codex", "cursor", "gemini", "kiro", "opencode", "openclaw",
-    "everycode", "hermes", "copilot", "kimi", "grok", "antigravity",
-    "roocode", "kilocode", "kilocli", "zed", "goose", "ohmypi", "pi",
-    "craft", "codebuddy",
-];
-
 pub struct SyncResult {
     pub providers_synced: u32,
     pub records_added: u32,
@@ -19,7 +12,7 @@ pub struct SyncResult {
 
 pub fn sync_all(db: &Database, home_dir: &Path) -> SyncResult {
     let mut cursors = HashMap::new();
-    for &source in SOURCES {
+    for source in parsers::all_parser_sources() {
         if let Ok(Some(c)) = db.get_cursor(source) {
             cursors.insert(source.to_string(), c.cursor_data);
         }

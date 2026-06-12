@@ -6,11 +6,14 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rusqlite::Connection;
 use tokenviewer_core::parsers::{codex, parse_all, workbuddy};
+use tokenviewer_core::storage::Database;
+use tokenviewer_core::sync::sync_all;
 
 #[derive(Debug, Clone)]
 struct Expectation {
     model: &'static str,
     total_tokens: u64,
+    conversation_count: u32,
 }
 
 #[test]
@@ -22,30 +25,31 @@ fn provider_parser_matrix_matches_reference_shapes() {
     let results = parse_all(&home, &cursors);
     let by_source: HashMap<String, _> = results.into_iter().map(|r| (r.source.clone(), r)).collect();
 
-    let cases: [(&str, Expectation); 23] = [
-        ("claude", Expectation { model: "claude-3-7-sonnet", total_tokens: 58 }),
-        ("codex", Expectation { model: "openai", total_tokens: 18 }),
-        ("cursor", Expectation { model: "cursor-1", total_tokens: 20 }),
-        ("gemini", Expectation { model: "gemini-2.5-pro", total_tokens: 37 }),
-        ("kiro", Expectation { model: "kiro-agent", total_tokens: 20 }),
-        ("opencode", Expectation { model: "gpt-4.1-mini", total_tokens: 22 }),
-        ("openclaw", Expectation { model: "claude-4", total_tokens: 15 }),
-        ("everycode", Expectation { model: "openai", total_tokens: 18 }),
-        ("hermes", Expectation { model: "hermes-3", total_tokens: 25 }),
-        ("copilot", Expectation { model: "gpt-4.1", total_tokens: 30 }),
-        ("kimi", Expectation { model: "kimi-for-coding", total_tokens: 36 }),
-        ("grok", Expectation { model: "grok-build", total_tokens: 40 }),
-        ("antigravity", Expectation { model: "gemini-2.5-flash", total_tokens: 14 }),
-        ("roocode", Expectation { model: "provider:anthropic", total_tokens: 26 }),
-        ("kilocode", Expectation { model: "provider:anthropic", total_tokens: 26 }),
-        ("kilocli", Expectation { model: "gpt-4o-mini", total_tokens: 22 }),
-        ("zed", Expectation { model: "claude-opus-4.1", total_tokens: 14 }),
-        ("goose", Expectation { model: "gpt-5", total_tokens: 25 }),
-        ("ohmypi", Expectation { model: "omp-unknown", total_tokens: 19 }),
-        ("pi", Expectation { model: "pi-unknown", total_tokens: 19 }),
-        ("craft", Expectation { model: "craft-1", total_tokens: 20 }),
-        ("codebuddy", Expectation { model: "codebuddy-2", total_tokens: 37 }),
-        ("workbuddy", Expectation { model: "workbuddy-quota", total_tokens: 400 }),
+    let cases: [(&str, Expectation); 24] = [
+        ("claude", Expectation { model: "claude-3-7-sonnet", total_tokens: 58, conversation_count: 0 }),
+        ("codex", Expectation { model: "openai", total_tokens: 18, conversation_count: 1 }),
+        ("cursor", Expectation { model: "cursor-1", total_tokens: 20, conversation_count: 1 }),
+        ("gemini", Expectation { model: "gemini-2.5-pro", total_tokens: 37, conversation_count: 1 }),
+        ("kiro", Expectation { model: "kiro-agent", total_tokens: 20, conversation_count: 1 }),
+        ("opencode", Expectation { model: "gpt-4.1-mini", total_tokens: 22, conversation_count: 1 }),
+        ("openclaw", Expectation { model: "claude-4", total_tokens: 15, conversation_count: 1 }),
+        ("everycode", Expectation { model: "openai", total_tokens: 18, conversation_count: 1 }),
+        ("hermes", Expectation { model: "hermes-3", total_tokens: 25, conversation_count: 1 }),
+        ("copilot", Expectation { model: "gpt-4.1", total_tokens: 30, conversation_count: 1 }),
+        ("kimi", Expectation { model: "kimi-for-coding", total_tokens: 36, conversation_count: 1 }),
+        ("grok", Expectation { model: "grok-build", total_tokens: 40, conversation_count: 1 }),
+        ("antigravity", Expectation { model: "gemini-2.5-flash", total_tokens: 14, conversation_count: 1 }),
+        ("roocode", Expectation { model: "provider:anthropic", total_tokens: 26, conversation_count: 1 }),
+        ("kilocode", Expectation { model: "provider:anthropic", total_tokens: 26, conversation_count: 1 }),
+        ("kilocli", Expectation { model: "gpt-4o-mini", total_tokens: 22, conversation_count: 1 }),
+        ("zed", Expectation { model: "claude-opus-4.1", total_tokens: 14, conversation_count: 1 }),
+        ("goose", Expectation { model: "gpt-5", total_tokens: 25, conversation_count: 1 }),
+        ("ohmypi", Expectation { model: "omp-unknown", total_tokens: 19, conversation_count: 1 }),
+        ("pi", Expectation { model: "pi-unknown", total_tokens: 19, conversation_count: 1 }),
+        ("craft", Expectation { model: "craft-1", total_tokens: 20, conversation_count: 1 }),
+        ("codebuddy", Expectation { model: "codebuddy-2", total_tokens: 37, conversation_count: 1 }),
+        ("workbuddy", Expectation { model: "workbuddy-quota", total_tokens: 400, conversation_count: 1 }),
+        ("mimocode", Expectation { model: "mimo-auto", total_tokens: 18, conversation_count: 0 }),
     ];
 
     assert_eq!(by_source.len(), cases.len(), "expected one result per registered provider");
@@ -68,7 +72,7 @@ fn provider_parser_matrix_matches_reference_shapes() {
         assert_eq!(record.source, expected_record_source, "source mismatch for {source}");
         assert_eq!(record.model, expected.model, "model mismatch for {source}");
         assert_eq!(record.total_tokens, expected.total_tokens, "token mismatch for {source}");
-        assert_eq!(record.conversation_count, 1, "conversation count mismatch for {source}");
+        assert_eq!(record.conversation_count, expected.conversation_count, "conversation count mismatch for {source}");
     }
 }
 
@@ -144,6 +148,59 @@ fn workbuddy_parser_falls_back_to_quota_snapshot() {
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].model, "workbuddy-quota");
     assert_eq!(records[0].total_tokens, 375);
+}
+
+#[test]
+fn mimocode_sync_reuses_saved_cursor() {
+    let home = temp_home();
+    init_mimocode_db(&home.join(".local/share/mimocode/mimocode.db"));
+
+    let db = Database::open(&home.join("tokenviewer.db")).expect("open test db");
+
+    let first = sync_all(&db, &home);
+    assert!(first.errors.is_empty(), "first sync errors: {:?}", first.errors);
+
+    let second = sync_all(&db, &home);
+    assert!(second.errors.is_empty(), "second sync errors: {:?}", second.errors);
+
+    let rows = db
+        .aggregate_by_model("2025-01-01T00:00:00Z", "2025-01-01T01:00:00Z")
+        .expect("aggregate usage");
+    let mimocode = rows
+        .iter()
+        .find(|r| r.source == "mimocode" && r.model == "mimo-auto")
+        .expect("mimocode aggregate");
+
+    assert_eq!(mimocode.total_tokens, 18);
+    assert_eq!(mimocode.input_tokens, 10);
+    assert_eq!(mimocode.output_tokens, 6);
+    assert_eq!(mimocode.reasoning_output_tokens, 2);
+}
+
+#[test]
+fn workbuddy_sync_reuses_saved_cursor() {
+    let home = temp_home();
+    seed_workbuddy_fixture(&home);
+
+    let db = Database::open(&home.join("tokenviewer.db")).expect("open test db");
+
+    let first = sync_all(&db, &home);
+    assert!(first.errors.is_empty(), "first sync errors: {:?}", first.errors);
+
+    let second = sync_all(&db, &home);
+    assert!(second.errors.is_empty(), "second sync errors: {:?}", second.errors);
+
+    let rows = db
+        .aggregate_by_model("2025-01-01T00:00:00Z", "2026-02-01T00:00:00Z")
+        .expect("aggregate usage");
+    let workbuddy = rows
+        .iter()
+        .find(|r| r.source == "workbuddy" && r.model == "workbuddy-quota")
+        .expect("workbuddy aggregate");
+
+    assert_eq!(workbuddy.total_tokens, 400);
+    assert_eq!(workbuddy.input_tokens, 400);
+    assert_eq!(workbuddy.conversation_count, 1);
 }
 
 fn temp_home() -> PathBuf {
@@ -319,6 +376,12 @@ fn seed_provider_fixtures(home: &Path) {
         r#"{"type":"message","role":"assistant","uuid":"cb-1","providerData":{"model":"codebuddy-2","rawUsage":{"prompt_tokens":20,"completion_tokens":10,"prompt_tokens_details":{"cached_tokens":2},"completion_tokens_details":{"reasoning_tokens":4},"cache_read_input_tokens":1,"cache_creation_input_tokens":3}},"timestamp":1735690080000}"#,
     );
 
+    seed_workbuddy_fixture(home);
+
+    init_mimocode_db(&home.join(".local/share/mimocode/mimocode.db"));
+}
+
+fn seed_workbuddy_fixture(home: &Path) {
     write_text(
         &home.join(".antigravity_cockpit/workbuddy_accounts.json"),
         r#"{"version":"1.0","accounts":[{"id":"workbuddy_fixture","email":"wb@example.com","last_used":1735690200}]}"#,
@@ -352,7 +415,6 @@ fn seed_provider_fixtures(home: &Path) {
   }
 }"#,
     );
-
 }
 
 fn platform_path(macos: &str, linux: &str, windows: &str) -> String {
@@ -474,6 +536,32 @@ fn init_goose_db(db_path: &Path) {
             25_i64,
             11_i64,
             9_i64
+        ],
+    )
+    .unwrap();
+}
+
+fn init_mimocode_db(db_path: &Path) {
+    if let Some(parent) = db_path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    let conn = Connection::open(db_path).unwrap();
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS message (
+            id TEXT PRIMARY KEY,
+            time_created INTEGER NOT NULL,
+            data TEXT NOT NULL
+        );
+        "#,
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT OR REPLACE INTO message (id, time_created, data) VALUES (?1, ?2, ?3)",
+        rusqlite::params![
+            "mimocode-1",
+            1735689720000_i64,
+            r#"{"role":"assistant","modelID":"mimo-auto","tokens":{"input":10,"output":6,"reasoning":2,"cache":{"read":1,"write":3}}}"#
         ],
     )
     .unwrap();

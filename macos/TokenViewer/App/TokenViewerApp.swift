@@ -36,6 +36,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if lastVersion != currentVersion {
             _ = CoreBridge.shared.rebuildAll()
             UserDefaults.standard.set(currentVersion, forKey: "lastDataVersion")
+            migrateLimitsVisibility()
+        }
+    }
+
+    private func migrateLimitsVisibility() {
+        let key = "limitsVisibleSources"
+        guard let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty else { return }
+        let current = Set(existing.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) })
+        let all = Set(LimitsVisibilityStore.allSources)
+        let missing = all.subtracting(current)
+        if !missing.isEmpty {
+            let updated = existing + "," + missing.sorted().joined(separator: ",")
+            UserDefaults.standard.set(updated, forKey: key)
         }
     }
 

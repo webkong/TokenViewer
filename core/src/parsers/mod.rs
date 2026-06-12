@@ -69,6 +69,10 @@ fn all_parsers() -> Vec<(&'static str, ParserFn)> {
     ]
 }
 
+pub fn all_parser_sources() -> Vec<&'static str> {
+    all_parsers().into_iter().map(|(source, _)| source).collect()
+}
+
 /// Parse all providers in parallel. `cursors` maps source name -> cursor JSON string.
 pub fn parse_all(home_dir: &Path, cursors: &HashMap<String, String>) -> Vec<ParseResult> {
     all_parsers()
