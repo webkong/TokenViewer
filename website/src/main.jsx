@@ -14,7 +14,7 @@ const copy = {
     htmlLang: "en",
     pageTitle: "TokenViewer - AI Token Usage Tracker for macOS",
     pageDescription:
-      "TokenViewer is a free, native macOS menu-bar app that tracks your AI token usage and costs across 23 providers — Claude, Codex, Kiro, Cursor, Copilot and more. Local-first, no cloud required.",
+      "TokenViewer is a free, native macOS menu-bar app that tracks your AI token usage and costs across 24 providers — Claude, Codex, Kiro, Cursor, Copilot, MiMoCode and more. Local-first, no cloud required.",
     pageKeywords:
       "AI token tracker, token usage macOS, Claude token counter, Codex usage, Kiro token, AI cost tracker, menu bar app macOS",
     brandHome: "TokenViewer home",
@@ -30,10 +30,10 @@ const copy = {
     hero: {
       title: "Track your AI token usage, all in one place",
       description:
-        "TokenViewer sits in your menu bar and quietly tracks token usage and costs across 23 AI coding tools. See where your tokens go — today, this week, or over time.",
+        "TokenViewer sits in your menu bar and quietly tracks token usage and costs across 24 AI coding tools. See where your tokens go — today, this week, or over time.",
       primary: "Download for macOS",
       secondary: "See features",
-      proof: ["Free", "23 providers", "Local-first"],
+      proof: ["Free", "24 providers", "Local-first"],
       previewLabel: "TokenViewer menu-bar panel preview",
     },
     features: [
@@ -64,7 +64,7 @@ const copy = {
       ],
     },
     providers: {
-      title: "23 supported providers",
+      title: "24 supported providers",
       description:
         "TokenViewer reads local data from the AI tools you already use — no API keys or logins required.",
       list: [
@@ -72,7 +72,7 @@ const copy = {
         "Gemini CLI", "Opencode", "Roocode", "Kilo Code", "Zed",
         "Goose", "Grok", "Kimi", "Craft", "OpenClaw",
         "Hermes", "Antigravity", "CodeBuddy", "WorkBuddy", "OhMyPi", "Pi",
-        "KiloCLI", "EveryCode",
+        "KiloCLI", "EveryCode", "MiMoCode",
       ],
     },
     footer: {
@@ -84,7 +84,7 @@ const copy = {
     htmlLang: "zh-CN",
     pageTitle: "TokenViewer - macOS AI Token 用量追踪器",
     pageDescription:
-      "TokenViewer 是一款免费的原生 macOS 菜单栏应用，追踪 23 个 AI 工具的 Token 用量与费用 — 包括 Claude、Codex、Kiro、Cursor、Copilot 等。本地优先，无需云端。",
+      "TokenViewer 是一款免费的原生 macOS 菜单栏应用，追踪 24 个 AI 工具的 Token 用量与费用 — 包括 Claude、Codex、Kiro、Cursor、Copilot、MiMoCode 等。本地优先，无需云端。",
     pageKeywords:
       "AI Token 追踪, Token 用量 macOS, Claude Token 统计, Codex 用量, Kiro Token, AI 费用追踪, macOS 菜单栏应用",
     brandHome: "TokenViewer 官网首页",
@@ -100,10 +100,10 @@ const copy = {
     hero: {
       title: "追踪你的 AI Token 用量，一览无余",
       description:
-        "TokenViewer 静默驻守在菜单栏，实时统计 23 个 AI 编程工具的 Token 用量与费用。今天用了多少、这周花了多少，一目了然。",
+        "TokenViewer 静默驻守在菜单栏，实时统计 24 个 AI 编程工具的 Token 用量与费用。今天用了多少、这周花了多少，一目了然。",
       primary: "下载 macOS 版本",
       secondary: "查看功能",
-      proof: ["永久免费", "支持 23 个工具", "本地优先"],
+      proof: ["永久免费", "支持 24 个工具", "本地优先"],
       previewLabel: "TokenViewer 菜单栏面板预览",
     },
     features: [
@@ -134,7 +134,7 @@ const copy = {
       ],
     },
     providers: {
-      title: "支持 23 个工具",
+      title: "支持 24 个工具",
       description:
         "TokenViewer 直接读取你已使用工具的本地数据——无需 API Key，无需登录。",
       list: [
@@ -142,7 +142,7 @@ const copy = {
         "Gemini CLI", "Opencode", "Roocode", "Kilo Code", "Zed",
         "Goose", "Grok", "Kimi", "Craft", "OpenClaw",
         "Hermes", "Antigravity", "CodeBuddy", "WorkBuddy", "OhMyPi", "Pi",
-        "KiloCLI", "EveryCode",
+        "KiloCLI", "EveryCode", "MiMoCode",
       ],
     },
     footer: {
@@ -340,6 +340,7 @@ const PROVIDER_LOGOS = {
   "Pi": null,
   "KiloCLI": "kilo",
   "EveryCode": "codex",
+  "MiMoCode": "mimo",
 };
 
 function ScreenshotRow() {

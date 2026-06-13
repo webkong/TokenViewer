@@ -151,14 +151,14 @@ Providers not installed show as greyed-out cards (configured providers sort to t
 ## 🏗️ How It Works
 
 ```
-AI Tool Logs  →  23 Rust Parsers  →  SQLite (~/.tokenviewer/data.db)
+AI Tool Logs  →  24 Rust Parsers  →  SQLite (~/.tokenviewer/data.db)
                                           ↓
                               FFI (tt_sync / tt_query_*)
                                           ↓
                      SwiftUI Views ← CoreBridge ← UsageViewModel
 ```
 
-- **Rust core** (`core/`) — 23 parsers, SQLite storage, pricing engine. Compiled to `libtokenviewer_core.a`.
+- **Rust core** (`core/`) — 24 parsers, SQLite storage, pricing engine. Compiled to `libtokenviewer_core.a`.
 - **SwiftUI app** (`macos/`) — Menu-bar status item, popover panel, full dashboard window.
 - **Incremental sync** — Each parser stores a file offset cursor in SQLite. On the next sync only new bytes are read. Parsers run in parallel (rayon). Files with unchanged mtime are skipped entirely.
 
