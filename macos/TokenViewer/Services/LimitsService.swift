@@ -105,18 +105,130 @@ enum LimitsService {
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let acc = accountId { req.setValue(acc, forHTTPHeaderField: "ChatGPT-Account-Id") }
 
-        guard let json = await getJSON(req), let rl = json["rate_limit"] as? [String: Any] else {
+        guard let json = await getJSON(req), json["rate_limit"] is [String: Any] else {
             return ProviderLimit(name: name, planLabel: plan, configured: true, error: "Request failed", subscriptionExpiresAt: subscriptionExpiresAt, windows: [])
         }
-        var windows: [LimitWindow] = []
-        for key in ["primary_window", "secondary_window"] {
-            guard let w = rl[key] as? [String: Any] else { continue }
-            let secs = (w["limit_window_seconds"] as? Int) ?? 0
-            let label = secs >= 604800 ? "Weekly" : (secs >= 18000 ? "5 Hour" : "Window")
-            let used = (w["used_percent"] as? Double) ?? Double(w["used_percent"] as? Int ?? 0)
-            windows.append(LimitWindow(label: label, usedPercent: used, resetAt: parseDate(w["reset_at"])))
-        }
+        let windows = codexLimitWindows(from: json)
         return ProviderLimit(name: name, planLabel: plan, configured: true, error: nil, subscriptionExpiresAt: subscriptionExpiresAt, windows: windows)
+    }
+
+    static func codexLimitWindows(from json: [String: Any]) -> [LimitWindow] {
+        guard let rl = json["rate_limit"] as? [String: Any] else { return [] }
+        var windows = codexStandardWindows(from: rl)
+        windows.append(contentsOf: codexSparkWindows(from: json["additional_rate_limits"]))
+        return windows
+    }
+
+    private enum CodexRateWindowKind: Equatable {
+        case session
+        case weekly
+    }
+
+    private static func codexStandardWindows(from rateLimit: [String: Any]) -> [LimitWindow] {
+        ["primary_window", "secondary_window"].compactMap { key in
+            guard let window = rateLimit[key] as? [String: Any],
+                  let usedPercent = codexUsedPercent(window) else { return nil }
+            let label = codexWindowLabel(for: codexWindowKind(window), fallback: "Window")
+            return LimitWindow(label: label, usedPercent: usedPercent, resetAt: parseDate(window["reset_at"]))
+        }
+    }
+
+    private static func codexSparkWindows(from additionalRateLimits: Any?) -> [LimitWindow] {
+        guard let entries = additionalRateLimits as? [[String: Any]] else { return [] }
+        var classified: [(CodexRateWindowKind, [String: Any])] = []
+        var fallbacks: [(CodexRateWindowKind, [String: Any])] = []
+
+        for entry in entries where codexIsSparkLimit(entry) {
+            guard let rateLimit = entry["rate_limit"] as? [String: Any] else { continue }
+            let primary = rateLimit["primary_window"] as? [String: Any]
+            let secondary = rateLimit["secondary_window"] as? [String: Any]
+            for window in [primary, secondary].compactMap({ $0 }) {
+                if let kind = codexWindowKind(window) {
+                    classified.append((kind, window))
+                }
+            }
+            fallbacks.append(contentsOf: codexSparkFallbackCandidates(primary: primary, secondary: secondary))
+        }
+
+        var session: [String: Any]?
+        var weekly: [String: Any]?
+        for (kind, window) in classified + fallbacks {
+            switch kind {
+            case .session where session == nil:
+                session = window
+            case .weekly where weekly == nil:
+                weekly = window
+            default:
+                break
+            }
+        }
+
+        return [
+            session.flatMap { codexWindow($0, label: "Spark 5h") },
+            weekly.flatMap { codexWindow($0, label: "Spark 7d") },
+        ].compactMap { $0 }
+    }
+
+    private static func codexIsSparkLimit(_ entry: [String: Any]) -> Bool {
+        [entry["limit_name"], entry["metered_feature"]].contains { value in
+            guard let raw = value as? String else { return false }
+            return raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().contains("spark")
+        }
+    }
+
+    private static func codexSparkFallbackCandidates(primary: [String: Any]?, secondary: [String: Any]?) -> [(CodexRateWindowKind, [String: Any])] {
+        let primaryKind = primary.flatMap(codexWindowKind)
+        let secondaryKind = secondary.flatMap(codexWindowKind)
+        let primaryDurationMissing = primary?["limit_window_seconds"] == nil
+
+        if primaryKind != nil || secondaryKind != nil {
+            var out: [(CodexRateWindowKind, [String: Any])] = []
+            if primaryKind == nil, let primary, secondaryKind == .weekly {
+                out.append((.session, primary))
+            }
+            if primaryKind == nil, primaryDurationMissing, let primary, secondaryKind == .session {
+                out.append((.weekly, primary))
+            }
+            if secondaryKind == nil, let secondary, primaryKind == .weekly {
+                out.append((.session, secondary))
+            }
+            if secondaryKind == nil, let secondary, primaryKind == .session {
+                out.append((.weekly, secondary))
+            }
+            return out
+        }
+
+        var out: [(CodexRateWindowKind, [String: Any])] = []
+        if let primary { out.append((.session, primary)) }
+        if let secondary { out.append((.weekly, secondary)) }
+        return out
+    }
+
+    private static func codexWindow(_ window: [String: Any], label: String) -> LimitWindow? {
+        guard let usedPercent = codexUsedPercent(window) else { return nil }
+        return LimitWindow(label: label, usedPercent: usedPercent, resetAt: parseDate(window["reset_at"]))
+    }
+
+    private static func codexUsedPercent(_ window: [String: Any]) -> Double? {
+        numeric(window["used_percent"]).map { min(max($0.rounded(), 0), 100) }
+    }
+
+    private static func codexWindowKind(_ window: [String: Any]) -> CodexRateWindowKind? {
+        guard let seconds = numeric(window["limit_window_seconds"]) else { return nil }
+        if seconds == 18_000 { return .session }
+        if seconds == 604_800 { return .weekly }
+        return nil
+    }
+
+    private static func codexWindowLabel(for kind: CodexRateWindowKind?, fallback: String) -> String {
+        switch kind {
+        case .session:
+            return "5 Hour"
+        case .weekly:
+            return "Weekly"
+        case nil:
+            return fallback
+        }
     }
 
     // MARK: Copilot (apps.json → GitHub API)
@@ -471,7 +583,7 @@ enum LimitsService {
         var comps = URLComponents(string: "https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27")!
         comps.queryItems = [URLQueryItem(name: "timezone_offset_min", value: "\(-TimeZone.current.secondsFromGMT() / 60)")]
         guard let url = comps.url else { return (nil, nil) }
-        var req = codexSubscriptionRequest(url: url, accessToken: accessToken, accountId: nil, targetPath: "/backend-api/accounts/check/v4-2023-04-27")
+        let req = codexSubscriptionRequest(url: url, accessToken: accessToken, accountId: nil, targetPath: "/backend-api/accounts/check/v4-2023-04-27")
         guard let json = await getJSON(req) else { return (nil, nil) }
         return parseCodexAccountCheckSubscription(json, preferredAccountId: accountId)
     }

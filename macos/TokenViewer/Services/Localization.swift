@@ -85,6 +85,7 @@ final class L10n: ObservableObject {
     func quotaResetsInDays(_ days: Int) -> String { isZh ? "\(days) 天后重置额度" : "Quota resets in \(dayCount(days))" }
     func subscriptionResetsInDays(_ days: Int) -> String { isZh ? "\(days) 天后重置订阅" : "Subscription resets in \(dayCount(days))" }
     func resetsInDays(_ days: Int) -> String { isZh ? "\(days) 天后重置" : "Resets in \(dayCount(days))" }
+    func resetsIn(_ value: String) -> String { isZh ? "\(value) 后重置" : "Resets in \(value)" }
     var refreshingLimits: String { isZh ? "正在刷新限额…" : "Refreshing limits…" }
     var refreshLimits: String { isZh ? "刷新限额" : "Refresh limits" }
     var notConfigured: String { isZh ? "未配置" : "Not configured" }
@@ -153,5 +154,19 @@ final class L10n: ObservableObject {
 
     private func dayCount(_ days: Int) -> String {
         days == 1 ? "1 day" : "\(days) days"
+    }
+
+    func countdownText(until date: Date) -> String {
+        let seconds = date.timeIntervalSince(Date())
+        if seconds <= 0 { return isZh ? "现在" : "now" }
+        if seconds < 3_600 {
+            let minutes = max(1, Int(ceil(seconds / 60)))
+            return isZh ? "\(minutes) 分钟" : (minutes == 1 ? "1 minute" : "\(minutes) minutes")
+        }
+        if seconds < 172_800 {
+            let hours = max(1, Int(ceil(seconds / 3_600)))
+            return isZh ? "\(hours) 小时" : (hours == 1 ? "1 hour" : "\(hours) hours")
+        }
+        return dayCount(max(1, Int(ceil(seconds / 86_400))))
     }
 }

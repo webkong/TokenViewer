@@ -347,7 +347,7 @@ private struct CompactLimitWindowRow: View {
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 if let reset = window.resetAt {
-                    Text(l10n.resetsInDays(reset.tvCountdownDaysFromNow))
+                    Text(l10n.resetsIn(l10n.countdownText(until: reset)))
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

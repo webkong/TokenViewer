@@ -179,7 +179,7 @@ private struct ResetInlineText: View {
     @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
-        Text(l10n.resetsInDays(date.tvCountdownDaysFromNow))
+        Text(l10n.resetsIn(l10n.countdownText(until: date)))
         .font(.system(size: 10))
         .foregroundStyle(.secondary)
     }
