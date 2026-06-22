@@ -53,7 +53,8 @@ enum LimitsService {
         async let qoder = fetchQoder()
         async let codebuddy = fetchCodebuddy()
         async let workbuddy = fetchWorkBuddy()
-        return await [claude, codex, copilot, kiro, cursor, gemini, kimi, antigravity, zed, trae, windsurf, qoder, codebuddy, workbuddy]
+        async let zcode = fetchZcode()
+        return await [claude, codex, copilot, kiro, cursor, gemini, kimi, antigravity, zed, trae, windsurf, qoder, codebuddy, workbuddy, zcode]
     }
 
     // MARK: Claude (Keychain → Anthropic OAuth usage API)
@@ -558,6 +559,116 @@ enum LimitsService {
             return workbuddyLimit(from: cached, configured: true)
         }
         return ProviderLimit(name: name, planLabel: "WorkBuddy", configured: true, error: "Request failed", windows: [])
+    }
+
+    // MARK: ZCode (智谱 / Z.ai coding agent — local config detection)
+
+    /// ZCode (智谱 / Z.ai coding agent) — queries the ZCode plan billing API
+    /// for live token quota + reset countdown.
+    ///
+    /// Auth: the active provider's `apiKey` in `~/.zcode/v2/config.json` is a
+    /// plaintext JWT that serves as the Bearer token for
+    /// `https://zcode.z.ai/api/v1/zcode-plan/billing/balance`.
+    ///
+    /// Response shape (per entitlement/model):
+    ///   { total_units, used_units, remaining_units, period_end (epoch secs) }
+    ///
+    /// Each balance entry becomes a `LimitWindow` (label = model show_name,
+    /// usedPercent = used/total, resetAt = period_end). When the plan has
+    /// expired or no balances are returned, the card falls back to showing the
+    /// plan name without progress bars.
+    static func fetchZcode() async -> ProviderLimit {
+        let name = "zcode"
+        let home = NSHomeDirectory()
+        let zcodeDir = "\(home)/.zcode"
+        guard FileManager.default.fileExists(atPath: zcodeDir) else {
+            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        }
+
+        // Read the active provider's JWT apiKey from config.json.
+        guard let cfg = readJSON("\(zcodeDir)/v2/config.json"),
+              let providers = cfg["provider"] as? [String: Any] else {
+            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        }
+
+        let bestProvider = providers
+            .compactMap { (id, value) -> (String, [String: Any])? in
+                guard let obj = value as? [String: Any] else { return nil }
+                return (id, obj)
+            }
+            .sorted { a, b in zcodeProviderScore(a.0, a.1) > zcodeProviderScore(b.0, b.1) }
+            .first
+
+        guard let (providerId, providerObj) = bestProvider else {
+            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        }
+
+        let plan = zcodePlanLabel(for: providerId, fallback: providerObj["name"] as? String)
+        let hasCliDb = FileManager.default.fileExists(atPath: "\(zcodeDir)/cli/db/db.sqlite")
+        let configured = plan != nil || hasCliDb
+
+        guard let options = providerObj["options"] as? [String: Any],
+              let token = options["apiKey"] as? String,
+              !token.isEmpty else {
+            return ProviderLimit(name: name, planLabel: plan, configured: configured, error: configured ? "No API key" : nil, windows: [])
+        }
+
+        // Query billing/balance.
+        var req = URLRequest(url: URL(string: "https://zcode.z.ai/api/v1/zcode-plan/billing/balance?app_version=3.1.1")!)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        guard let json = await getJSON(req) else {
+            return ProviderLimit(name: name, planLabel: plan, configured: true, error: "Request failed", windows: [])
+        }
+
+        // Response: { code: 0, data: { balances: [...] } }
+        let dataObj = json["data"] as? [String: Any] ?? json
+        let balances = (dataObj["balances"] as? [[String: Any]])
+            ?? (json["balances"] as? [[String: Any]])
+            ?? []
+
+        var windows: [LimitWindow] = []
+        for b in balances {
+            let label = (b["show_name"] as? String) ?? "Usage"
+            let used = numeric(b["used_units"]) ?? 0
+            let total = numeric(b["total_units"]) ?? 0
+            let pct = total > 0 ? (used / total * 100) : 0
+            let resetAt = parseDate(b["period_end"])
+            windows.append(LimitWindow(label: label, usedPercent: pct, resetAt: resetAt))
+        }
+
+        // If no balances returned (plan expired / not entitled), still show the
+        // card with plan label so the user knows ZCode is installed.
+        if windows.isEmpty {
+            return ProviderLimit(name: name, planLabel: plan, configured: true, error: "No active quota", windows: [])
+        }
+
+        return ProviderLimit(name: name, planLabel: plan, configured: true, error: nil, windows: windows)
+    }
+
+    private static func zcodeProviderScore(_ id: String, _ obj: [String: Any]) -> Int {
+        let enabled = (obj["enabled"] as? Bool) ?? false
+        let hasKey = !((obj["options"] as? [String: Any])?["apiKey"] as? String ?? "").isEmpty
+        let idL = id.lowercased()
+        var s = 0
+        if enabled { s += 4 }
+        if hasKey { s += 2 }
+        if idL.contains("start-plan") { s += 3 }
+        else if idL.contains("coding-plan") { s += 2 }
+        else if idL.contains("bigmodel") || idL.contains("zai") { s += 1 }
+        return s
+    }
+
+    /// Map a ZCode provider id (e.g. `builtin:bigmodel-start-plan`) to a short,
+    /// user-facing plan label.
+    private static func zcodePlanLabel(for providerId: String, fallback: String?) -> String? {
+        let id = providerId.lowercased()
+        if id.contains("start-plan") { return "Start Plan" }
+        if id.contains("coding-plan") { return "Coding Plan" }
+        if id.contains("bigmodel") { return "BigModel API" }
+        if id.contains("zai") { return "Z.ai API" }
+        return planLabel(fallback, "ZCode")
     }
 
     // MARK: Codex subscription expiry

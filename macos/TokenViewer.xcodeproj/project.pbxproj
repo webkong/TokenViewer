@@ -45,6 +45,7 @@
 		C410EC5A0E53CD4A11C75B0C /* LimitsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60B4862C0D6C9FD2ED147837 /* LimitsView.swift */; };
 		C9BFDB1C206AF7EEF99C44DE /* antigravity.svg in Resources */ = {isa = PBXBuildFile; fileRef = E979605B67613F9CBB276006 /* antigravity.svg */; };
 		D4229158D4ABEAF416E9B0D4 /* kimi.svg in Resources */ = {isa = PBXBuildFile; fileRef = F13B30FF8F49D9B8D59A4CEA /* kimi.svg */; };
+		D68B0091B06B68C32A0C6F3C /* zcode.png in Resources */ = {isa = PBXBuildFile; fileRef = 8BC3B1136F019135F53788F3 /* zcode.png */; };
 		D7259DB34E937DF03535BE06 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F69660CE5393741209A39863 /* UpdateChecker.swift */; };
 		DC768A9ABEBD114D9E0FA787 /* codebuddy.svg in Resources */ = {isa = PBXBuildFile; fileRef = 93435E21A3AF9517E145BB82 /* codebuddy.svg */; };
 		E2157A36CA184475536923C0 /* claude-code.svg in Resources */ = {isa = PBXBuildFile; fileRef = 2CDA4DFDC1A93996F495C246 /* claude-code.svg */; };
@@ -89,6 +90,7 @@
 		7C710A80148201C51072D6D0 /* TokenViewer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TokenViewer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		84BE470DCBCD6A12C98E60D6 /* AppLogo.svg */ = {isa = PBXFileReference; path = AppLogo.svg; sourceTree = "<group>"; };
 		88494BAD929D52E39664A618 /* codex.svg */ = {isa = PBXFileReference; path = codex.svg; sourceTree = "<group>"; };
+		8BC3B1136F019135F53788F3 /* zcode.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = zcode.png; sourceTree = "<group>"; };
 		8D14FAF94B0269C9C56E5E5D /* TokenViewer-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TokenViewer-Bridging-Header.h"; sourceTree = "<group>"; };
 		93435E21A3AF9517E145BB82 /* codebuddy.svg */ = {isa = PBXFileReference; path = codebuddy.svg; sourceTree = "<group>"; };
 		95B0617E9C570C731BB0961A /* LimitsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitsViewModel.swift; sourceTree = "<group>"; };
@@ -247,6 +249,7 @@
 				9FCDFF3B030DCF4A5536E67E /* trae.png */,
 				D4FE6EC826BF3B2F1F94086F /* windsurf.svg */,
 				CBE87DC9C12F91D7599987EC /* workbuddy.png */,
+				8BC3B1136F019135F53788F3 /* zcode.png */,
 				498F1C2839F90B67CC4C6110 /* zed.png */,
 			);
 			path = "brand-logos";
@@ -365,6 +368,7 @@
 				13A280D2AB0B9FD6CBA5E8DA /* trae.png in Resources */,
 				8AB637CE1DF29AC4BDB9CDC9 /* windsurf.svg in Resources */,
 				4C8352C3B6296FA992BC28C7 /* workbuddy.png in Resources */,
+				D68B0091B06B68C32A0C6F3C /* zcode.png in Resources */,
 				00C008DCFCAFC8835E1DDA43 /* zed.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

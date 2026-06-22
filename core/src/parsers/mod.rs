@@ -23,6 +23,7 @@ pub mod craft;
 pub mod codebuddy;
 pub mod workbuddy;
 pub mod mimocode;
+pub mod zcode;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -66,6 +67,7 @@ fn all_parsers() -> Vec<(&'static str, ParserFn)> {
         ("codebuddy", codebuddy::parse),
         ("workbuddy", workbuddy::parse),
         ("mimocode", mimocode::parse),
+        ("zcode", zcode::parse),
     ]
 }
 

@@ -43,4 +43,9 @@ pub static PRICING_DATA: &[PricingEntry] = &[
     PricingEntry { model: "hy3-preview", pricing: ModelPricing { input: 0.2365, output: 0.9459, cache_read: 0.0887, cache_write: 0.0 } },
     PricingEntry { model: "hy3-preview-agent", pricing: ModelPricing { input: 0.2365, output: 0.9459, cache_read: 0.0887, cache_write: 0.0 } },
     PricingEntry { model: "codebuddy-agent", pricing: ModelPricing { input: 0.2365, output: 0.9459, cache_read: 0.0887, cache_write: 0.0 } },
+    // GLM-5 family (ZCode / Z.ai / BigModel). Approximate BigModel API rates
+    // (USD/M tokens); zcode routes these through its Coding Plan subscription,
+    // so real cost to the user is the flat plan fee — these are reference rates.
+    PricingEntry { model: "glm-5.2", pricing: ModelPricing { input: 0.07, output: 0.21, cache_read: 0.014, cache_write: 0.0 } },
+    PricingEntry { model: "glm-5-turbo", pricing: ModelPricing { input: 0.04, output: 0.12, cache_read: 0.008, cache_write: 0.0 } },
 ];

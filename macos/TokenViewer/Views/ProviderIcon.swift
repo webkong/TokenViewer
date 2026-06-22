@@ -27,6 +27,10 @@ struct ProviderIcon: View {
     private var resolvedSource: String {
         let m = (modelName ?? "").lowercased()
         let s = source.lowercased()
+        // Branded products that use another vendor's models under the hood —
+        // always show the product's own logo, not the underlying model's.
+        // ZCode uses GLM models but should display the ZCode brand.
+        if s == "zcode" { return "zcode" }
         if m.hasPrefix("claude") { return "claude" }
         if m.hasPrefix("provider:anthropic") || m == "anthropic" { return "claude" }
         if m.hasPrefix("gpt-") || m.hasPrefix("o1") || m.hasPrefix("o3") || m.hasPrefix("o4") || m.hasPrefix("o5") || m.hasPrefix("codex") || m == "openai" || m.hasPrefix("provider:openai") {
@@ -57,6 +61,7 @@ struct ProviderIcon: View {
         "copilot": "copilot", "hermes": "hermes", "kilocli": "kilo", "kilo-cli": "kilo", "kilocode": "kilo",
         "mimocode": "mimo",
         "qoder": "qoder", "trae": "trae", "windsurf": "windsurf", "zed": "zed", "workbuddy": "workbuddy",
+        "zcode": "zcode",
     ]
 
     /// Logos drawn with `currentColor` (monochrome) — tint to adapt to light/dark.

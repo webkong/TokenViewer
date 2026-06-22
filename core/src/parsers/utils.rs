@@ -75,13 +75,15 @@ pub fn file_mtime_bucket(path: &Path) -> String {
     now_bucket()
 }
 
-/// File modification time as epoch seconds.
+/// File modification time as a nanosecond-resolution monotonic-ish stamp.
+/// The value is still stored in `u64` so existing cursor state remains valid,
+/// but it distinguishes multiple writes inside the same second.
 pub fn file_mtime_secs(path: &Path) -> u64 {
     fs::metadata(path)
         .ok()
         .and_then(|m| m.modified().ok())
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs())
+        .map(|d| d.as_secs().saturating_mul(1_000_000_000) + u64::from(d.subsec_nanos()))
         .unwrap_or(0)
 }
 
@@ -112,7 +114,7 @@ pub struct FileCursor {
     /// Per-key seen IDs for dedup (capped).
     #[serde(default)]
     pub seen_ids: Vec<String>,
-    /// Per-file last mtime (epoch secs) for skip-if-unchanged optimization.
+    /// Per-file last mtime stamp for skip-if-unchanged optimization.
     #[serde(default)]
     pub mtimes: HashMap<String, u64>,
     /// Per-file inode at the time `offset` was recorded. If the inode changes
@@ -127,7 +129,7 @@ pub struct FileCursor {
     /// metadata across incremental reads.
     #[serde(default)]
     pub last_providers: HashMap<String, String>,
-    /// Per-directory mtime (epoch secs) — skip re-glob if dir unchanged.
+    /// Per-directory mtime stamp — skip re-glob if dir unchanged.
     #[serde(default)]
     pub dir_mtimes: HashMap<String, u64>,
     /// Cached file lists per directory pattern.
@@ -141,6 +143,12 @@ pub struct FileCursor {
     /// request timestamp (epoch ms). Turns at/below this are already counted.
     #[serde(default)]
     pub kiro_cli_conv_ts: HashMap<String, i64>,
+    /// zcode incremental watermark: max processed started_at (epoch ms) and
+    /// its tie-breaker id. Kept separate so other parsers do not pollute it.
+    #[serde(default)]
+    pub zcode_last_started_at: i64,
+    #[serde(default)]
+    pub zcode_last_id: Option<String>,
 }
 
 impl FileCursor {

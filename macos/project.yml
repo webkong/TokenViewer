@@ -7,8 +7,8 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "0.1.14"
-    CURRENT_PROJECT_VERSION: 10014
+    MARKETING_VERSION: "0.1.15"
+    CURRENT_PROJECT_VERSION: 10015
     SWIFT_VERSION: "5.9"
 
 targets:

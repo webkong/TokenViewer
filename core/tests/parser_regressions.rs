@@ -25,7 +25,7 @@ fn provider_parser_matrix_matches_reference_shapes() {
     let results = parse_all(&home, &cursors);
     let by_source: HashMap<String, _> = results.into_iter().map(|r| (r.source.clone(), r)).collect();
 
-    let cases: [(&str, Expectation); 24] = [
+    let cases: [(&str, Expectation); 25] = [
         ("claude", Expectation { model: "claude-3-7-sonnet", total_tokens: 58, conversation_count: 0 }),
         ("codex", Expectation { model: "openai", total_tokens: 18, conversation_count: 1 }),
         ("cursor", Expectation { model: "cursor-1", total_tokens: 20, conversation_count: 1 }),
@@ -50,6 +50,7 @@ fn provider_parser_matrix_matches_reference_shapes() {
         ("codebuddy", Expectation { model: "codebuddy-2", total_tokens: 37, conversation_count: 1 }),
         ("workbuddy", Expectation { model: "workbuddy-quota", total_tokens: 400, conversation_count: 1 }),
         ("mimocode", Expectation { model: "mimo-auto", total_tokens: 18, conversation_count: 0 }),
+        ("zcode", Expectation { model: "GLM-5.2", total_tokens: 21, conversation_count: 0 }),
     ];
 
     assert_eq!(by_source.len(), cases.len(), "expected one result per registered provider");
@@ -74,6 +75,103 @@ fn provider_parser_matrix_matches_reference_shapes() {
         assert_eq!(record.total_tokens, expected.total_tokens, "token mismatch for {source}");
         assert_eq!(record.conversation_count, expected.conversation_count, "conversation count mismatch for {source}");
     }
+}
+
+#[test]
+fn zcode_running_rows_are_reprocessed_after_completion() {
+    let home = temp_home();
+    let db_path = home.join(".zcode/cli/db/db.sqlite");
+    init_zcode_schema(&db_path);
+    insert_zcode_row(
+        &db_path,
+        "zcode-completed",
+        "req-zcode-completed",
+        "sess-zcode-1",
+        "main_turn",
+        "builtin:bigmodel-start-plan",
+        "GLM-5.2",
+        "completed",
+        1735689600000_i64,
+        10,
+        6,
+        2,
+        3,
+        1,
+    );
+    insert_zcode_row(
+        &db_path,
+        "zcode-running",
+        "req-zcode-running",
+        "sess-zcode-1",
+        "main_turn",
+        "builtin:bigmodel-start-plan",
+        "GLM-5.2",
+        "running",
+        1735689660000_i64,
+        7,
+        4,
+        1,
+        2,
+        0,
+    );
+
+    let (first_records, cursor_json) = tokenviewer_core::parsers::zcode::parse(&home, None).expect("first zcode parse");
+    assert_eq!(first_records.len(), 1);
+    assert_eq!(first_records[0].total_tokens, 21);
+
+    update_zcode_row_status(&db_path, "zcode-running", "completed");
+
+    let (second_records, _) = tokenviewer_core::parsers::zcode::parse(&home, Some(&cursor_json)).expect("second zcode parse");
+    assert_eq!(second_records.len(), 1);
+    assert_eq!(second_records[0].total_tokens, 14);
+}
+
+#[test]
+fn zcode_same_millisecond_rows_use_id_tiebreaker() {
+    let home = temp_home();
+    let db_path = home.join(".zcode/cli/db/db.sqlite");
+    init_zcode_schema(&db_path);
+    insert_zcode_row(
+        &db_path,
+        "zcode-1",
+        "req-zcode-1",
+        "sess-zcode-1",
+        "main_turn",
+        "builtin:bigmodel-start-plan",
+        "GLM-5.2",
+        "completed",
+        1735689600000_i64,
+        10,
+        6,
+        2,
+        3,
+        1,
+    );
+
+    let (first_records, cursor_json) = tokenviewer_core::parsers::zcode::parse(&home, None).expect("first zcode parse");
+    assert_eq!(first_records.len(), 1);
+    assert_eq!(first_records[0].total_tokens, 21);
+
+    insert_zcode_row(
+        &db_path,
+        "zcode-2",
+        "req-zcode-2",
+        "sess-zcode-1",
+        "main_turn",
+        "builtin:bigmodel-start-plan",
+        "GLM-5.2",
+        "completed",
+        1735689600000_i64,
+        4,
+        3,
+        1,
+        2,
+        0,
+    );
+
+    let (second_records, _) = tokenviewer_core::parsers::zcode::parse(&home, Some(&cursor_json)).expect("second zcode parse");
+    assert_eq!(second_records.len(), 1);
+    assert_eq!(second_records[0].total_tokens, 10);
 }
 
 #[test]
@@ -379,6 +477,8 @@ fn seed_provider_fixtures(home: &Path) {
     seed_workbuddy_fixture(home);
 
     init_mimocode_db(&home.join(".local/share/mimocode/mimocode.db"));
+
+    init_zcode_db(&home.join(".zcode/cli/db/db.sqlite"));
 }
 
 fn seed_workbuddy_fixture(home: &Path) {
@@ -563,6 +663,123 @@ fn init_mimocode_db(db_path: &Path) {
             1735689720000_i64,
             r#"{"role":"assistant","modelID":"mimo-auto","tokens":{"input":10,"output":6,"reasoning":2,"cache":{"read":1,"write":3}}}"#
         ],
+    )
+    .unwrap();
+}
+
+fn init_zcode_db(db_path: &Path) {
+    init_zcode_schema(db_path);
+    insert_zcode_row(
+        db_path,
+        "zcode-1",
+        "req-zcode-1",
+        "sess-zcode-1",
+        "main_turn",
+        "builtin:bigmodel-start-plan",
+        "GLM-5.2",
+        "completed",
+        1735689600000_i64, // 2025-01-01 00:00:00 UTC (epoch ms)
+        10,
+        6,
+        2,
+        3,
+        1,
+    );
+    // …plus a zero-token error row in the same bucket, which the parser must skip.
+    insert_zcode_row(
+        db_path,
+        "zcode-2",
+        "req-zcode-2",
+        "sess-zcode-1",
+        "main_turn",
+        "builtin:bigmodel-start-plan",
+        "GLM-5.2",
+        "error",
+        1735689600000_i64,
+        0,
+        0,
+        0,
+        0,
+        0,
+    );
+}
+
+fn init_zcode_schema(db_path: &Path) {
+    if let Some(parent) = db_path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    let conn = Connection::open(db_path).unwrap();
+    // Faithful subset of the real `model_usage` schema — the columns the zcode
+    // parser reads plus the NOT-NULL-no-default ones. FKs are off by default in
+    // rusqlite, so no `session` row is required.
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS model_usage (
+            id TEXT PRIMARY KEY,
+            logical_request_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            query_source TEXT NOT NULL,
+            provider_id TEXT NOT NULL,
+            model_id TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('running','completed','error','cancelled')),
+            started_at INTEGER NOT NULL,
+            input_tokens INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+            cache_creation_input_tokens INTEGER NOT NULL DEFAULT 0,
+            cache_read_input_tokens INTEGER NOT NULL DEFAULT 0
+        );
+        "#,
+    )
+    .unwrap();
+}
+
+fn insert_zcode_row(
+    db_path: &Path,
+    id: &str,
+    logical_request_id: &str,
+    session_id: &str,
+    query_source: &str,
+    provider_id: &str,
+    model_id: &str,
+    status: &str,
+    started_at: i64,
+    input_tokens: i64,
+    output_tokens: i64,
+    reasoning_tokens: i64,
+    cache_creation_input_tokens: i64,
+    cache_read_input_tokens: i64,
+) {
+    let conn = Connection::open(db_path).unwrap();
+    conn.execute(
+        "INSERT OR REPLACE INTO model_usage \
+         (id, logical_request_id, session_id, query_source, provider_id, model_id, status, started_at, \
+          input_tokens, output_tokens, reasoning_tokens, cache_creation_input_tokens, cache_read_input_tokens) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+        rusqlite::params![
+            id,
+            logical_request_id,
+            session_id,
+            query_source,
+            provider_id,
+            model_id,
+            status,
+            started_at,
+            input_tokens,
+            output_tokens,
+            reasoning_tokens,
+            cache_creation_input_tokens,
+            cache_read_input_tokens,
+        ],
+    )
+    .unwrap();
+}
+
+fn update_zcode_row_status(db_path: &Path, id: &str, status: &str) {
+    let conn = Connection::open(db_path).unwrap();
+    conn.execute(
+        "UPDATE model_usage SET status = ?1 WHERE id = ?2",
+        rusqlite::params![status, id],
     )
     .unwrap();
 }

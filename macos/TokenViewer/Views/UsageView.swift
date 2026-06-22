@@ -21,6 +21,7 @@ enum TVColor {
         case "codebuddy": return "CodeBuddy"
         case "workbuddy": return "WorkBuddy"
         case "mimocode": return "MiMoCode"
+        case "zcode": return "ZCode"
         case "goose": return "Goose"
         case "hermes": return "Hermes"
         case "grok": return "Grok"
@@ -46,6 +47,7 @@ enum TVColor {
         case "kimi": return Color(red: 0.65, green: 0.55, blue: 0.98) // violet
         case "kiro": return brand
         case "cursor": return Color(red: 0.55, green: 0.36, blue: 0.96) // purple
+        case "zcode": return Color(red: 0.31, green: 0.36, blue: 0.96) // #4f5cf5 indigo (Z.ai/BigModel)
         case "grok": return Color(red: 0.45, green: 0.45, blue: 0.5)
         default: return Color(red: 0.3, green: 0.7, blue: 0.55)
         }
