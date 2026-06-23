@@ -31,6 +31,8 @@ final class StatusBarController {
             )
         )
         hostedController?.preferredContentSize = NSSize(width: 420, height: 620)
+        hostedController?.view.wantsLayer = true
+        hostedController?.view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         popover.contentViewController = hostedController
         self.popover = popover
     }
@@ -42,7 +44,11 @@ final class StatusBarController {
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
-            popover.contentViewController?.view.window?.level = .floating
+            if let window = popover.contentViewController?.view.window {
+                window.level = .floating
+                window.isOpaque = true
+                window.backgroundColor = .windowBackgroundColor
+            }
             startEventMonitor()
             // Trigger sync here (AppKit) rather than in PopoverView.onAppear:
             // NSPopover reuses the same NSHostingController, so SwiftUI's

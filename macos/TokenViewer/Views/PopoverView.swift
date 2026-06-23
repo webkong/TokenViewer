@@ -55,6 +55,7 @@ struct PopoverView: View {
             footer
         }
         .frame(width: 420, height: popoverHeight)
+        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear { onHeightChange?(popoverHeight) }
         .onChange(of: popoverHeight) { onHeightChange?($0) }
         .onKeyPress(.escape) { onClose?(); return .handled }

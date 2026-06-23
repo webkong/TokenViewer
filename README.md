@@ -6,7 +6,7 @@
 
 ### Know exactly how many tokens you're spending — across every AI coding tool
 
-A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects token counts and costs from **24 AI coding tools**, aggregates them locally, and surfaces real usage trends in a beautiful dashboard. No cloud account, no Node.js, no browser — just a tiny native app.
+A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects token counts and costs from **25 AI coding tools**, aggregates them locally, and surfaces real usage trends in a beautiful dashboard. No cloud account, no Node.js, no browser — just a tiny native app.
 
 [![Release](https://img.shields.io/github/v/release/webkong/TokenViewer?color=059669&label=Download)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer.dmg)
 [![Platform](https://img.shields.io/badge/Platform-macOS%2014%2B-lightgrey?logo=apple&logoColor=white)](https://github.com/webkong/TokenViewer/releases/latest/download/TokenViewer.dmg)
@@ -55,7 +55,7 @@ A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects tok
 
 ## ✨ Features
 
-- 🔌 **24 AI tools out of the box** — Claude Code, Codex, Kiro, Cursor, GitHub Copilot, Gemini CLI, Opencode, Roocode, Kilo Code, Zed, Goose, Grok, Kimi, Craft, OpenClaw, Hermes, Antigravity, CodeBuddy, WorkBuddy, OhMyPi, Pi, KiloCLI, EveryCode, MiMoCode
+- 🔌 **25 AI tools out of the box** — Claude Code, Codex, Kiro, Cursor, GitHub Copilot, Gemini CLI, Opencode, Roocode, Kilo Code, Zed, Goose, Grok, Kimi, Craft, OpenClaw, Hermes, Antigravity, CodeBuddy, WorkBuddy, OhMyPi, Pi, KiloCLI, EveryCode, MiMoCode, ZCode
 - 🏠 **100% local** — Token data never leaves your machine. No account, no API keys.
 - 🚀 **Zero config** — Reads existing log files your tools already produce. Nothing installed into those tools.
 - 📊 **Beautiful dashboard** — Usage trends, model breakdown, cost analysis, provider breakdown, daily detail table
@@ -99,6 +99,7 @@ A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects tok
 |------|-------------|--------|
 | **Claude Code** | `~/.claude/projects/*.jsonl` | Passive reader |
 | **Codex** | `~/.codex/sessions/**/rollout-*.jsonl` | Passive reader |
+| **ZCode** | `~/.zcode/cli/db/db.sqlite` | SQLite reader (`model_usage` table) |
 | **Kiro CLI** | `~/.kiro/sessions/cli/*.json` + `.jsonl` | Session file reader + char-based token estimate |
 | **Kiro IDE** | `~/Library/.../kiro.kiroagent/dev_data/` | SQLite + JSONL |
 | **GitHub Copilot** | `~/.copilot/otel/*.jsonl` | OpenTelemetry file reader |
@@ -151,14 +152,14 @@ Providers not installed show as greyed-out cards (configured providers sort to t
 ## 🏗️ How It Works
 
 ```
-AI Tool Logs  →  24 Rust Parsers  →  SQLite (~/.tokenviewer/data.db)
+AI Tool Logs  →  25 Rust Parsers  →  SQLite (~/.tokenviewer/data.db)
                                           ↓
                               FFI (tt_sync / tt_query_*)
                                           ↓
                      SwiftUI Views ← CoreBridge ← UsageViewModel
 ```
 
-- **Rust core** (`core/`) — 24 parsers, SQLite storage, pricing engine. Compiled to `libtokenviewer_core.a`.
+- **Rust core** (`core/`) — 25 parsers, SQLite storage, pricing engine. Compiled to `libtokenviewer_core.a`.
 - **SwiftUI app** (`macos/`) — Menu-bar status item, popover panel, full dashboard window.
 - **Incremental sync** — Each parser stores a file offset cursor in SQLite. On the next sync only new bytes are read. Parsers run in parallel (rayon). Files with unchanged mtime are skipped entirely.
 

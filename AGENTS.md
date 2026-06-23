@@ -8,22 +8,40 @@ Native macOS menu-bar app that tracks AI token usage & cost across 24 coding too
 
 ## Build / Run / Test
 
+All commands run from repo root. `rtk` is the Rust toolchain wrapper; `DEVELOPER_DIR` must point at Xcode.app (not Command Line Tools).
+
 ```bash
 # Build Rust core + Swift app, then launch (the everyday loop)
-bash run.sh                 # add --skip-sync to launch without auto-sync
+# Add --skip-sync to launch without auto-sync (faster, when you only changed UI)
+PATH="/opt/homebrew/opt/rustup/bin:$PATH" DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer rtk bash run.sh --skip-sync
 
-# Rust only
-cd core && cargo build --release --target aarch64-apple-darwin
-cd core && cargo test                       # unit + tests/integration.rs
+# Same but also re-sync all parsers (use when Rust core changed)
+PATH="/opt/homebrew/opt/rustup/bin:$PATH" DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer rtk bash run.sh
 
-# Swift only (from macos/)
-cd macos && xcodebuild -scheme TokenViewer -configuration Release build
+# Rust tests (unit + integration)
+PATH="/opt/homebrew/opt/rustup/bin:$PATH" rtk cargo test --lib --tests
+
+# Swift tests
+PATH="/opt/homebrew/opt/rustup/bin:$PATH" DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer rtk xcodebuild test \
+  -project macos/TokenViewer.xcodeproj -scheme TokenViewer -destination 'platform=macOS'
 ```
 
-- After ANY change, run `bash run.sh` and confirm `BUILD SUCCEEDED`.
+- After ANY code change, run the appropriate `bash run.sh` variant and confirm `BUILD SUCCEEDED`. The build output lands at `DerivedData/Build/Products/Release/TokenViewer.app` — **this is the canonical test path**, do NOT use `dist/` for local testing.
+- For packaging a distributable installer (.pkg/.dmg), use `script/release.sh` (see Release section below). That outputs to `dist/release/` and is for releases only.
 - The Xcode project is generated from `macos/project.yml` via `xcodegen generate` (run after adding/removing Swift files). `project.pbxproj` is committed.
 - The Swift target `-force_load`s the static lib at `core/target/aarch64-apple-darwin/release/libtokenviewer_core.a` (a preBuildScript also rebuilds it). Always build the Rust target `aarch64-apple-darwin` — plain `cargo build` output is NOT linked by the app.
 - Deployment target macOS 14.0, Swift 5.9.
+
+### Agent workflow after code changes
+
+When the agent (you) modifies Rust or Swift source:
+
+1. **Decide scope**:
+   - Only Swift UI/limits card changed → `bash run.sh --skip-sync` (fast).
+   - Rust parser/core changed → `bash run.sh` (full re-sync) AND `rtk cargo test --lib --tests`.
+2. **Confirm `BUILD SUCCEEDED`** before reporting done.
+3. **Launch for user testing** — the app auto-launches at the end of `run.sh`. Tell the user the app is ready at `DerivedData/Build/Products/Release/TokenViewer.app`.
+4. **Do NOT** proactively build `.pkg`/`.dmg` unless the user explicitly asks for a distributable installer. Local testing uses the `DerivedData` build directly.
 
 ## Layout
 
@@ -75,6 +93,11 @@ Swift wraps these in `CoreBridge`; JSON is exchanged across the boundary and dec
 
 `normalize_kiro_model` preserves real versions (`claude-sonnet-4.6`, `claude-opus-4.8`, …). `kiro-agent` is the **fallback model bucket** for usage that can't be attributed to a specific model — keep it in the model breakdown, don't filter it out.
 
+### ZCode (智谱 / Z.ai coding agent — 1 data source)
+1. `~/.zcode/cli/db/db.sqlite` table `model_usage` — one row per model request with a full token breakdown (`input_tokens`, `output_tokens`, `reasoning_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`), epoch-ms `started_at`, `model_id` (e.g. `GLM-5.2`), `provider_id` (e.g. `builtin:bigmodel-start-plan`), and `status`.
+
+ZCode's `input_tokens` already EXCLUDES cache-read hits (it's the non-cached prompt portion), so `total_tokens = input + output + reasoning + cache_creation` — `cache_read` is informational only and must not be added (matches mimocode's no-double-count convention). Rows with zero billable tokens (rate-limited `status='error'` before generation) and `status='running'` (incomplete) are skipped. Incremental via `started_at` (epoch-ms) watermark + `mark_seen` dedup on the text PK `id`. The limits card (`fetchZcode`) is install-detection only: the BigModel/Z.ai subscription quota isn't queryable client-side (`~/.zcode/v2/credentials.json` is AES-encrypted by ZCode, no public quota endpoint), so — like Antigravity — it surfaces the active plan label from `~/.zcode/v2/config.json` with an informational "Quota via BigModel account" note.
+
 ## Agents: usage parsers vs. limits cards
 
 An agent can have **two independent integrations**, and they don't always coexist:
@@ -84,12 +107,12 @@ An agent can have **two independent integrations**, and they don't always coexis
 
 Two groups result:
 
-- **Canonical (14)** — have a limits card (parser optional): Claude Code, Codex, Cursor, Kiro, GitHub Copilot, Kimi, Antigravity, Zed, Trae, Windsurf, Qoder, CodeBuddy, WorkBuddy, Gemini. These are commercial subscription products with a queryable quota (some via the cockpit-tools account cache). **Trae / Windsurf / Qoder have *only* a limits card, no usage parser.**
+- **Canonical (15)** — have a limits card (parser optional): Claude Code, Codex, Cursor, Kiro, GitHub Copilot, Kimi, Antigravity, Zed, Trae, Windsurf, Qoder, CodeBuddy, WorkBuddy, Gemini, ZCode. These are commercial subscription products with a queryable quota (some via the cockpit-tools account cache). **Trae / Windsurf / Qoder have *only* a limits card, no usage parser.**
 - **Parser-only (11)** — usage parser but no limits card: OpenCode, OpenClaw, Hermes, Grok, RooCode, KiloCode, Kilo CLI, Goose, OhMyPi, Pi, Craft.
 
 **Why parser-only have no limits card:** a limits card needs a queryable "subscription quota + reset" endpoint. These tools are mostly open-source / bring-your-own-key / router agents (OpenCode, OpenClaw, RooCode, KiloCode, Kilo CLI, Goose, Craft, Pi, OhMyPi) or direct-API providers (Grok, Hermes). They have no proprietary subscription of their own — the real quota belongs to whatever upstream API key the user configured (OpenAI / Anthropic / OpenRouter / …), so there's nothing for TokenViewer to query. Only local-log token usage is available.
 
-> `all_parsers()` actually has 24 entries: the 11 parser-only + 11 canonical-with-parser + `everycode` (folded into the Codex brand/icon, not listed separately) + `mimocode`.
+> `all_parsers()` actually has 25 entries: the 11 parser-only + 12 canonical-with-parser + `everycode` (folded into the Codex brand/icon, not listed separately) + `mimocode`.
 
 ## Adding a new provider parser
 1. Create `core/src/parsers/<name>.rs` with `pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>>`.
