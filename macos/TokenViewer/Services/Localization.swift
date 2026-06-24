@@ -152,6 +152,30 @@ final class L10n: ObservableObject {
     var cancel: String { isZh ? "取消" : "Cancel" }
     var about: String { isZh ? "关于" : "About" }
 
+    // MARK: - Skill Manager
+    var skills: String { isZh ? "技能" : "Skills" }
+    var skillSearchPlaceholder: String { isZh ? "搜索技能…" : "Search skills…" }
+    var skillFilter: String { isZh ? "筛选" : "Filter" }
+    var skillFetch: String { isZh ? "刷新" : "Fetch" }
+    var skillOrganize: String { isZh ? "整理" : "Organize" }
+    var skillRestore: String { isZh ? "还原" : "Restore" }
+    var skillDelete: String { isZh ? "删除" : "Delete" }
+    var skillAgents: String { isZh ? "代理" : "Agents" }
+    var skillSync: String { isZh ? "同步" : "Sync" }
+    var skillSettings: String { isZh ? "设置" : "Settings" }
+    var skillAll: String { isZh ? "全部" : "All" }
+    var skillOperationFailed: String { isZh ? "技能操作失败" : "Skill operation failed" }
+    var skillDeleteConfirm: String { isZh ? "确认删除此技能？此操作不可撤销。" : "Are you sure you want to delete this skill? This cannot be undone." }
+    var skillNoSkills: String { isZh ? "暂无技能" : "No skills" }
+    var skillNoSkillsDesc: String { isZh ? "在 ~/.agents/skills 目录下添加技能目录（包含 SKILL.md）即可显示。" : "Add skill directories (with SKILL.md) under ~/.agents/skills to see them here." }
+    var agentName: String { isZh ? "名称" : "Name" }
+    var agentSkillsPath: String { isZh ? "技能路径" : "Skills Path" }
+    var linkStrategy: String { isZh ? "链接策略" : "Link Strategy" }
+    var addAgent: String { isZh ? "添加代理" : "Add Agent" }
+    var refresh: String { isZh ? "刷新" : "Refresh" }
+    var pull: String { isZh ? "拉取" : "Pull" }
+    var push: String { isZh ? "推送" : "Push" }
+
     private func dayCount(_ days: Int) -> String {
         days == 1 ? "1 day" : "\(days) days"
     }

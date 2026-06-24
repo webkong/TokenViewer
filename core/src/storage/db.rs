@@ -18,6 +18,11 @@ impl Database {
         Ok(db)
     }
 
+    /// Access the underlying connection for use by skills module.
+    pub fn conn(&self) -> &Connection {
+        &self.conn
+    }
+
     fn migrate(&self) -> SqlResult<()> {
         let version: i32 = self.conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
@@ -379,6 +384,42 @@ impl Database {
             "SELECT COUNT(*) FROM usage WHERE source = ?1",
             params![source],
             |row| row.get(0),
+        )
+    }
+
+    pub fn migrate_skills_schema(&self) -> SqlResult<()> {
+        self.conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS skills_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS skills_agents (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                skills_path TEXT NOT NULL,
+                link_strategy TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                is_builtin INTEGER NOT NULL DEFAULT 0,
+                icon_name TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS skills_links (
+                skill_id TEXT NOT NULL,
+                agent_id TEXT NOT NULL,
+                target_path TEXT NOT NULL,
+                link_path TEXT NOT NULL,
+                link_strategy TEXT NOT NULL,
+                updated_at TEXT DEFAULT (datetime('now')),
+                PRIMARY KEY (skill_id, agent_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS skills_git_config (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );"
         )
     }
 }

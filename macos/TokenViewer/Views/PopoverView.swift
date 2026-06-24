@@ -98,6 +98,13 @@ struct PopoverView: View {
             Button(action: { onOpenMainWindow?() }) {
                 Label(l10n.dashboard, systemImage: "macwindow").font(.system(size: 11, weight: .medium))
             }.buttonStyle(.plain).foregroundColor(TVColor.brand)
+            Button(action: {
+                mainWindowTab = "skills"
+                onOpenMainWindow?()
+            }) {
+                Label(l10n.skills, systemImage: "puzzlepiece.extension")
+                    .font(.system(size: 11, weight: .medium))
+            }.buttonStyle(.plain).foregroundColor(.secondary)
             Spacer()
             Button(action: { NSApplication.shared.terminate(nil) }) {
                 Label(l10n.quit, systemImage: "power").font(.system(size: 11)).foregroundColor(.secondary)

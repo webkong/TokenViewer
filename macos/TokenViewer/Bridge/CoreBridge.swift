@@ -59,7 +59,7 @@ final class CoreBridge: @unchecked Sendable {
 
     /// Run an FFI call on the serial queue, copy the returned C string into Data,
     /// and free it. Returns nil if the handle is gone or the call returns null.
-    private func call(_ body: (OpaquePointer) -> UnsafeMutablePointer<CChar>?) -> Data? {
+    func call(_ body: (OpaquePointer) -> UnsafeMutablePointer<CChar>?) -> Data? {
         queue.sync {
             guard let h = handle, let ptr = body(h) else { return nil }
             defer { tt_free_string(ptr) }

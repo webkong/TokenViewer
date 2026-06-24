@@ -21,12 +21,16 @@ struct ProviderIcon: View {
     var modelName: String? = nil
     var size: CGFloat = 16
 
+    private var normalizedSource: String {
+        source.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
     /// Derive the icon source from model name first (overrides the source field
     /// when a model clearly belongs to a different provider, e.g. claude-* used
     /// via Codex CLI should still show the Claude logo).
     private var resolvedSource: String {
         let m = (modelName ?? "").lowercased()
-        let s = source.lowercased()
+        let s = normalizedSource
         // Branded products that use another vendor's models under the hood —
         // always show the product's own logo, not the underlying model's.
         // ZCode uses GLM models but should display the ZCode brand.
@@ -48,7 +52,7 @@ struct ProviderIcon: View {
         if m.hasPrefix("glm") || m.hasPrefix("chatglm") || m.hasPrefix("provider:zhipu") { return "glm" }
         if m.hasPrefix("mimo") || m.hasPrefix("provider:xiaomi") { return "mimo" }
         if Self.logoMap[s] != nil { return s }
-        return source
+        return normalizedSource
     }
 
     /// Map a source/model provider to its bundled logo file name (without extension).
@@ -91,13 +95,21 @@ struct ProviderIcon: View {
 
     private func logoImage() -> NSImage? {
         guard let name = Self.logoMap[resolvedSource.lowercased()] else { return nil }
+        if let img = NSImage(named: NSImage.Name(name)) {
+            if img.size.width <= 1 || img.size.height <= 1 {
+                img.size = NSSize(width: 64, height: 64)
+            }
+            if Self.monoLogos.contains(name) { img.isTemplate = true }
+            return img
+        }
         for ext in ["svg", "png"] {
             guard let url = Bundle.main.url(forResource: name, withExtension: ext),
-                  let img = NSImage(contentsOf: url)
-            else { continue }
-            // SVGs load with a 1x1 intrinsic size; give the vector a real size so
-            // it rasterizes crisply at Retina scale.
-            img.size = NSSize(width: 64, height: 64)
+                  let img = NSImage(contentsOf: url) else { continue }
+            if img.size.width <= 1 || img.size.height <= 1 {
+                // SVGs often load with a 1x1 intrinsic size; give vectors a real
+                // size so they rasterize crisply at Retina scale.
+                img.size = NSSize(width: 64, height: 64)
+            }
             if Self.monoLogos.contains(name) { img.isTemplate = true }
             return img
         }

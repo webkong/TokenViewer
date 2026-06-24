@@ -4,8 +4,12 @@ import SwiftUI
 enum TVColor {
     static let brand = Color(red: 0.02, green: 0.59, blue: 0.41) // #059669 emerald
 
+    private static func normalizedSource(_ source: String) -> String {
+        source.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
     static func sourceDisplayName(_ source: String) -> String {
-        switch source.lowercased() {
+        switch normalizedSource(source) {
         case "claude": return "Claude"
         case "codex": return "Codex"
         case "cursor": return "Cursor"
@@ -34,12 +38,12 @@ enum TVColor {
         case "pi": return "Pi"
         case "craft": return "Craft"
         case "everycode": return "EveryCode"
-        default: return source.capitalized
+        default: return source.trimmingCharacters(in: .whitespacesAndNewlines).capitalized
         }
     }
 
     static func provider(_ source: String) -> Color {
-        switch source.lowercased() {
+        switch normalizedSource(source) {
         case "claude", "codebuddy": return Color(red: 0.85, green: 0.46, blue: 0.34) // #d97757
         case "codex", "everycode": return Color(red: 0.23, green: 0.51, blue: 0.96) // #3b82f6
         case "opencode", "openclaw": return Color(red: 0.96, green: 0.62, blue: 0.04) // #f59e0b

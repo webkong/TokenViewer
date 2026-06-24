@@ -11,6 +11,10 @@ struct MainWindowView: View {
                 .tag("usage")
                 .tabItem { Label(l10n.usage, systemImage: "chart.bar.fill") }
 
+            SkillManagerView()
+                .tag("skills")
+                .tabItem { Label(l10n.skills, systemImage: "puzzlepiece.extension.fill") }
+
             LimitsView(viewModel: LimitsViewModel.shared)
                 .tag("limits")
                 .tabItem { Label(l10n.limits, systemImage: "gauge.with.dots.needle.50percent") }
