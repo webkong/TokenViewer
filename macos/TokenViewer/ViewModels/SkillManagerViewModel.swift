@@ -5,12 +5,29 @@ final class SkillManagerViewModel: ObservableObject {
     static let shared = SkillManagerViewModel()
 
     @Published private(set) var skills: [SkillEntry] = []
-    @Published private(set) var agents: [SkillAgent] = []
+    @Published private(set) var providers: [SkillProvider] = []
     @Published var selectedFilter: String = "all"
+
+    /// Providers enabled in Settings (defaults to claude, codex, opencode).
+    var visibleProviders: [SkillProvider] {
+        let enabled = enabledProviderSet
+        return providers.filter { enabled.contains($0.source) }
+    }
+
+    private var enabledProviderSet: Set<String> {
+        guard let raw = UserDefaults.standard.string(forKey: "skillsEnabledProviders"),
+              let data = raw.data(using: .utf8),
+              let arr = try? JSONDecoder().decode([String].self, from: data)
+        else { return ["claude", "codex", "opencode"] }
+        return Set(arr)
+    }
     @Published var searchText: String = ""
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var gitChanges: [SkillGitChange] = []
+    @Published var gitStatusAhead: Int = 0
+    @Published var gitStatusBehind: Int = 0
+    @Published var gitStatusBranch: String? = nil
 
     private let decoder = JSONDecoder()
 
@@ -29,7 +46,7 @@ final class SkillManagerViewModel: ObservableObject {
             await MainActor.run {
                 self.isLoading = false
                 self.skills = (try? self.decode([SkillEntry].self, from: skillsData)) ?? []
-                self.agents = (try? self.decode([SkillAgent].self, from: agentsData)) ?? []
+                self.providers = (try? self.decode([SkillProvider].self, from: agentsData)) ?? []
             }
         }
     }
@@ -41,8 +58,25 @@ final class SkillManagerViewModel: ObservableObject {
                 || skill.manifest.description.localizedCaseInsensitiveContains(searchText)
 
             guard selectedFilter != "all" else { return matchesSearch }
-            return matchesSearch && skill.manifest.compatibleAgents.contains(selectedFilter)
+            // Match agent filter against compatible_agents (normalized canonical names)
+            let compat = skill.manifest.compatibleAgents
+            return matchesSearch && (compat.contains(selectedFilter) || compat.contains(canonicalAgentName(for: selectedFilter)))
         }
+    }
+
+    /// Map a canonical source name to possible skill-manifest agent names.
+    private func canonicalAgentName(for source: String) -> String {
+        source == "claude" ? "claude-code" : source
+    }
+
+    /// Check if a skill is linked (via symlink) to a given agent.
+    func isSkillLinked(skillID: String, agentID: String) -> Bool {
+        providers.first(where: { $0.source == agentID })?.linkedSkills.contains(skillID) == true
+    }
+
+    /// Get the source agent for a skill (the first agent that claims it as linked).
+    func sourceAgent(for skillID: String) -> String? {
+        providers.first(where: { $0.linkedSkills.contains(skillID) })?.source
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from data: Data?) throws -> T {
@@ -56,17 +90,17 @@ final class SkillManagerViewModel: ObservableObject {
         runSkillCommand(skillID: skill.id, call: CoreBridge.shared.skillsDelete)
     }
 
-    func organize(skill: SkillEntry) {
-        runSkillCommand(skillID: skill.id, call: CoreBridge.shared.skillsOrganize)
+    func organize(skill: SkillEntry, agentID: String? = nil) {
+        runSkillCommand(skillID: skill.id, agentID: agentID, call: CoreBridge.shared.skillsOrganize)
     }
 
-    func restore(skill: SkillEntry) {
-        runSkillCommand(skillID: skill.id, call: CoreBridge.shared.skillsRestore)
+    func restore(skill: SkillEntry, agentID: String? = nil) {
+        runSkillCommand(skillID: skill.id, agentID: agentID, call: CoreBridge.shared.skillsRestore)
     }
 
-    func removeCustomAgent(_ agentID: String) {
+    func resetProvider(_ source: String) {
         Task.detached {
-            let payload = try? JSONEncoder().encode(["agent_id": agentID])
+            let payload = try? JSONEncoder().encode(["source": source])
             let resultData = payload.flatMap(CoreBridge.shared.skillsRemoveCustomAgent)
 
             await MainActor.run {
@@ -75,7 +109,7 @@ final class SkillManagerViewModel: ObservableObject {
                    result.ok {
                     self.refresh()
                 } else {
-                    self.errorMessage = "Failed to remove agent"
+                    self.errorMessage = "Failed to reset provider"
                 }
             }
         }
@@ -91,7 +125,7 @@ final class SkillManagerViewModel: ObservableObject {
                    result.ok {
                     self.refresh()
                 } else {
-                    self.errorMessage = "Failed to add agent"
+                    self.errorMessage = "Failed to save provider config"
                 }
             }
         }
@@ -102,8 +136,11 @@ final class SkillManagerViewModel: ObservableObject {
             let data = CoreBridge.shared.skillsGitStatus()
             await MainActor.run {
                 if let data,
-                   let status = try? JSONDecoder().decode(SkillGitStatus.self, from: data) {
+                   let status = try? self.decoder.decode(SkillGitStatus.self, from: data) {
                     self.gitChanges = status.changes
+                    self.gitStatusAhead = status.ahead
+                    self.gitStatusBehind = status.behind
+                    self.gitStatusBranch = status.branch
                 }
             }
         }
@@ -118,6 +155,14 @@ final class SkillManagerViewModel: ObservableObject {
         }
     }
 
+    func linkSkill(skillID: String, agentID: String) {
+        runSkillCommand(skillID: skillID, agentID: agentID, call: CoreBridge.shared.skillsLink)
+    }
+
+    func unlinkSkill(skillID: String, agentID: String) {
+        runSkillCommand(skillID: skillID, agentID: agentID, call: CoreBridge.shared.skillsUnlink)
+    }
+
     func pushSkills() {
         Task.detached {
             _ = CoreBridge.shared.skillsGitPush()
@@ -127,9 +172,11 @@ final class SkillManagerViewModel: ObservableObject {
         }
     }
 
-    private func runSkillCommand(skillID: String, call: @escaping (Data) -> Data?) {
+    private func runSkillCommand(skillID: String, agentID: String? = nil, call: @escaping (Data) -> Data?) {
         Task.detached {
-            let payload = try? JSONEncoder().encode(["skill_id": skillID])
+            var dict: [String: String] = ["skill_id": skillID]
+            if let agentID { dict["agent_id"] = agentID }
+            let payload = try? JSONEncoder().encode(dict)
             let resultData = payload.flatMap(call)
 
             await MainActor.run {

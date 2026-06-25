@@ -14,7 +14,6 @@ chrono = { version = "0.4", features = ["serde"] }
 glob = "0.3"
 rayon = "1.10"
 git2 = { version = "0.19", features = ["ssh"] }
-notify = { version = "6", features = ["macos_kqueue"] }
 walkdir = "2"
 dirs = "5"
 uuid = { version = "1", features = ["v4"] }

@@ -22,13 +22,15 @@ char* _Nullable tt_skills_list_agents(CoreHandle* _Nullable handle);
 char* _Nullable tt_skills_organize(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_delete(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_restore(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_skills_link(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_skills_unlink(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_git_status(CoreHandle* _Nullable handle);
 char* _Nullable tt_skills_git_pull(CoreHandle* _Nullable handle);
 char* _Nullable tt_skills_git_push(CoreHandle* _Nullable handle);
 char* _Nullable tt_skills_git_connectivity(CoreHandle* _Nullable handle);
 char* _Nullable tt_skills_add_custom_agent(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_remove_custom_agent(CoreHandle* _Nullable handle, const char* _Nonnull json);
-char* _Nullable tt_skills_watch_start(CoreHandle* _Nullable handle);
-void tt_skills_watch_stop(CoreHandle* _Nullable handle);
+char* _Nullable tt_skills_get_config(CoreHandle* _Nullable handle);
+char* _Nullable tt_skills_set_git_config(CoreHandle* _Nullable handle, const char* _Nonnull json);
 
 #endif

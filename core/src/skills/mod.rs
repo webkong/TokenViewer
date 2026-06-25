@@ -1,31 +1,34 @@
-pub mod agent_registry;
 pub mod git_engine;
 pub mod models;
+pub mod provider_config;
 pub mod scanner;
 pub mod storage;
 pub mod symlink;
-pub mod watcher;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
 
 use crate::storage::Database;
 
-use self::agent_registry::AgentRegistry;
 use self::git_engine::GitEngine;
+use self::provider_config::ProviderSkillsRegistry;
 use self::scanner::Scanner;
 use self::symlink::SymlinkManager;
-use self::watcher::SkillWatcher;
 
 pub struct SkillsCore {
-    pub registry: AgentRegistry,
+    pub registry: ProviderSkillsRegistry,
     pub scanner: Scanner,
     pub symlink: SymlinkManager,
     pub git: Option<GitEngine>,
-    pub watcher: Option<SkillWatcher>,
     pub config_dir: PathBuf,
     pub source_root: PathBuf,
     pub known_skill_ids: HashSet<String>,
+    /// Git auth token (set by FFI, stored in memory for the session).
+    pub git_token: Option<String>,
+    /// Git remote URL (set by FFI).
+    pub git_remote_url: Option<String>,
+    /// Git platform: "github", "gitlab", or "custom".
+    pub git_platform: Option<String>,
 }
 
 impl SkillsCore {
@@ -34,7 +37,7 @@ impl SkillsCore {
 
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
         let config_dir = home.join(".agents");
-        let registry = AgentRegistry::new(&config_dir).map_err(|e| e.to_string())?;
+        let registry = ProviderSkillsRegistry::new(&config_dir).map_err(|e| e.to_string())?;
         let scanner = Scanner::new(source_root.clone());
         let symlink = SymlinkManager::new(source_root.clone());
         let git = GitEngine::open(&source_root).ok();
@@ -51,10 +54,12 @@ impl SkillsCore {
             scanner,
             symlink,
             git,
-            watcher: None,
             config_dir,
             source_root,
             known_skill_ids,
+            git_token: None,
+            git_remote_url: None,
+            git_platform: None,
         })
     }
 
@@ -71,16 +76,16 @@ impl SkillsCore {
     pub fn organize_skill(&self, skill_id: &str, agent_id: &str) -> Result<(), String> {
         let agent = self.registry.find(agent_id)
             .ok_or_else(|| format!("Agent not found: {}", agent_id))?;
-        self.symlink.organize_skill(agent, skill_id)
+        self.symlink.organize_skill(&agent, skill_id)
     }
 
     pub fn restore_skill(&self, skill_id: &str, agent_id: &str) -> Result<(), String> {
         let agent = self.registry.find(agent_id)
             .ok_or_else(|| format!("Agent not found: {}", agent_id))?;
         let other_linked: Vec<String> = self.registry.all().iter()
-            .filter(|a| a.id != agent_id && a.linked_skills.contains(&skill_id.to_string()))
-            .map(|a| a.id.clone())
+            .filter(|a| a.source != agent_id && a.linked_skills.contains(&skill_id.to_string()))
+            .map(|a| a.source.clone())
             .collect();
-        self.symlink.restore_skill(skill_id, agent, &other_linked)
+        self.symlink.restore_skill(skill_id, &agent, &other_linked)
     }
 }

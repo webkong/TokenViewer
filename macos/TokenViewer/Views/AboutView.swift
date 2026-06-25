@@ -4,6 +4,8 @@ struct AboutView: View {
     @ObservedObject private var updater = UpdateChecker.shared
     @ObservedObject private var l10n = L10n.shared
     @State private var autoDownloadVersion: String?
+    @State private var showAgents = false
+    @State private var allProviders: [SkillProvider] = []
 
     private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
 
@@ -31,6 +33,60 @@ struct AboutView: View {
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundStyle(TVColor.brand)
+                    }
+                }
+
+                // Supported agents
+                SettingsCard(title: "支持的 Agent") {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Button {
+                            withAnimation { showAgents.toggle() }
+                        } label: {
+                            HStack {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "rectangle.stack.fill")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.secondary)
+                                    Text("\(allProviders.count) 个 AI 编程工具")
+                                        .font(.system(size: 13))
+                                }
+                                Spacer()
+                                HStack(spacing: 12) {
+                                    HStack(spacing: 4) {
+                                        Circle().fill(.green).frame(width: 6, height: 6)
+                                        Text("\(limitsCount) 支持限额").font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Text("·").foregroundStyle(.tertiary)
+                                    HStack(spacing: 4) {
+                                        Circle().fill(.secondary).frame(width: 6, height: 6)
+                                        Text("\(otherCount) 其他").font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Image(systemName: showAgents ? "chevron.up" : "chevron.down")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        if showAgents {
+                            Divider().padding(.vertical, 6)
+                            // Limits agents
+                            Text("带限额订阅").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                            FlowLayout(itemSpacing: 6, rowSpacing: 6) {
+                                ForEach(allProviders.filter(\.hasLimits)) { p in
+                                    chip(p)
+                                }
+                            }
+                            Divider().padding(.vertical, 4)
+                            // Other agents
+                            Text("不带限额").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                            FlowLayout(itemSpacing: 6, rowSpacing: 6) {
+                                ForEach(allProviders.filter { !$0.hasLimits }) { p in
+                                    chip(p)
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -86,6 +142,35 @@ struct AboutView: View {
             autoDownloadVersion = availableVersion
             updater.install(autoTriggered: true)
         }
+        .onAppear {
+            loadProviders()
+        }
+    }
+
+    private func loadProviders() {
+        guard allProviders.isEmpty else { return }
+        Task.detached {
+            guard let data = CoreBridge.shared.skillsListAgents() else { return }
+            let decoder = JSONDecoder()
+            decoder.keyDecodingStrategy = .convertFromSnakeCase
+            let providers = (try? decoder.decode([SkillProvider].self, from: data)) ?? []
+            await MainActor.run { allProviders = providers }
+        }
+    }
+
+    private var limitsCount: Int { allProviders.filter(\.hasLimits).count }
+    private var otherCount: Int { allProviders.filter { !$0.hasLimits }.count }
+
+    private func chip(_ p: SkillProvider) -> some View {
+        HStack(spacing: 5) {
+            ProviderIcon(source: p.source, size: 16)
+            Text(TVColor.sourceDisplayName(p.source))
+                .font(.system(size: 12))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(Color(nsColor: .controlBackgroundColor), in: Capsule())
+        .overlay(Capsule().strokeBorder(.quaternary, lineWidth: 0.5))
     }
 
     private func row(_ label: String, _ value: String) -> some View {

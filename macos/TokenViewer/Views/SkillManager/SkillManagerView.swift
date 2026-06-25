@@ -2,68 +2,15 @@ import SwiftUI
 
 struct SkillManagerView: View {
     @StateObject private var viewModel = SkillManagerViewModel.shared
-    @State private var selectedPanel = "skills"
+    @State private var showSyncSheet = false
 
     var body: some View {
         VStack(spacing: 0) {
-            panelPicker
+            // Agent filter chips
+            agentFilterBar
             Divider()
-            switch selectedPanel {
-            case "agents":
-                AgentsListView(viewModel: viewModel)
-            case "sync":
-                SkillGitSyncView(viewModel: viewModel)
-            default:
-                skillsContent
-            }
-        }
-        .onAppear {
-            viewModel.refresh()
-            CoreBridge.shared.skillsWatchStart()
-        }
-        .onDisappear {
-            CoreBridge.shared.skillsWatchStop()
-        }
-    }
 
-    private var panelPicker: some View {
-        HStack(spacing: 0) {
-            Button { selectedPanel = "skills" } label: {
-                Label(L10n.shared.skills, systemImage: "puzzlepiece.extension")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(.borderless)
-            .background(selectedPanel == "skills" ? Color.accentColor.opacity(0.12) : Color.clear)
-            .contentShape(Rectangle())
-
-            Button { selectedPanel = "agents" } label: {
-                Label("Agents", systemImage: "rectangle.stack")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(.borderless)
-            .background(selectedPanel == "agents" ? Color.accentColor.opacity(0.12) : Color.clear)
-            .contentShape(Rectangle())
-
-            Button { selectedPanel = "sync" } label: {
-                Label("Sync", systemImage: "arrow.triangle.merge")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(.borderless)
-            .background(selectedPanel == "sync" ? Color.accentColor.opacity(0.12) : Color.clear)
-            .contentShape(Rectangle())
-        }
-        .padding(.horizontal, 8)
-        .padding(.top, 4)
-    }
-
-    @ViewBuilder
-    private var skillsContent: some View {
-        VStack(spacing: 0) {
-            toolbar
-            Divider()
+            // Skill list
             if viewModel.isLoading {
                 Spacer()
                 ProgressView()
@@ -74,29 +21,79 @@ struct SkillManagerView: View {
                 SkillListView(viewModel: viewModel)
             }
         }
-    }
-
-    private var toolbar: some View {
-        HStack(spacing: 12) {
-            TextField(L10n.shared.skillSearchPlaceholder, text: $viewModel.searchText)
-                .textFieldStyle(.roundedBorder)
-
-            Picker(L10n.shared.skillFilter, selection: $viewModel.selectedFilter) {
-                Text(L10n.shared.skillAll).tag("all")
-                ForEach(viewModel.agents) { agent in
-                    Text(agent.name).tag(agent.id)
-                }
-            }
-            .frame(width: 150)
-
-            Button {
-                viewModel.refresh()
-            } label: {
-                Label(L10n.shared.skillFetch, systemImage: "arrow.clockwise")
-            }
+        .onAppear { viewModel.refresh() }
+        .sheet(isPresented: $showSyncSheet) {
+            SkillGitSyncSheet(viewModel: viewModel)
         }
-        .padding(12)
     }
+
+    // MARK: - Agent Filter Bar
+
+    private var agentFilterBar: some View {
+        HStack(spacing: 8) {
+            // All agents chip
+            FilterChip(
+                icon: "square.grid.2x2",
+                label: L10n.shared.skillAll,
+                isSelected: viewModel.selectedFilter == "all",
+                action: { viewModel.selectedFilter = "all" }
+            )
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(viewModel.visibleProviders) { p in
+                        FilterChip(
+                            icon: nil,
+                            providerIcon: p.source,
+                            label: p.displayName,
+                            isSelected: viewModel.selectedFilter == p.source,
+                            action: { viewModel.selectedFilter = p.source }
+                        )
+                    }
+                }
+                .padding(.horizontal, 4)
+            }
+
+            Spacer(minLength: 6)
+
+            // Search field
+            HStack(spacing: 4) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                TextField("Search", text: $viewModel.searchText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .frame(width: 120)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.quinary, in: RoundedRectangle(cornerRadius: 6))
+
+            // Sync button
+            Button {
+                viewModel.refreshGitStatus()
+                showSyncSheet = true
+            } label: {
+                Image(systemName: "arrow.triangle.merge")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .buttonStyle(.borderless)
+            .help("Git Sync")
+
+            // Refresh button
+            Button { viewModel.refresh() } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.shared.skillFetch)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
+
+    // MARK: - Empty State
 
     private var emptyState: some View {
         VStack(spacing: 12) {
@@ -112,5 +109,43 @@ struct SkillManagerView: View {
                 .multilineTextAlignment(.center)
             Spacer()
         }
+    }
+}
+
+// MARK: - Filter Chip
+
+struct FilterChip: View {
+    var icon: String? = nil
+    var providerIcon: String? = nil
+    let label: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                if let name = providerIcon {
+                    ProviderIcon(source: name, size: 14)
+                } else if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 11, weight: .medium))
+                }
+                Text(label)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(isSelected ? Color.accentColor : Color(nsColor: .controlBackgroundColor))
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(isSelected ? Color.accentColor.opacity(0.3) : Color.secondary.opacity(0.15), lineWidth: 0.75)
+                    )
+            )
+            .foregroundStyle(isSelected ? .white : .primary)
+        }
+        .buttonStyle(.plain)
     }
 }

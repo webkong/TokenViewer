@@ -2,8 +2,8 @@ use std::fs;
 use std::os::unix::fs as unix_fs;
 use std::path::{Path, PathBuf};
 
-use crate::skills::agent_registry::expand_path;
-use crate::skills::models::{AgentConfig, LinkType};
+use crate::skills::provider_config::{expand_path, ProviderSkillsConfig};
+use crate::skills::models::LinkType;
 use crate::skills::scanner::Scanner;
 
 pub struct SymlinkManager {
@@ -18,7 +18,7 @@ impl SymlinkManager {
     /// Create a symlink for a specific skill to a specific agent.
     pub fn create_skill_link(
         &self,
-        agent: &AgentConfig,
+        agent: &ProviderSkillsConfig,
         skill_id: &str,
     ) -> Result<(), String> {
         let source = self.source_root.join(skill_id);
@@ -38,7 +38,7 @@ impl SymlinkManager {
     /// Remove a symlink for a specific skill from a specific agent.
     pub fn remove_skill_link(
         &self,
-        agent: &AgentConfig,
+        agent: &ProviderSkillsConfig,
         skill_id: &str,
     ) -> Result<(), String> {
         let target_base = expand_path(&agent.skills_path)?;
@@ -77,7 +77,7 @@ impl SymlinkManager {
     }
 
     /// Remove all symlinks for an agent (all linked skills).
-    pub fn remove_all_links(&self, agent: &AgentConfig) -> Result<(), String> {
+    pub fn remove_all_links(&self, agent: &ProviderSkillsConfig) -> Result<(), String> {
         let skill_ids: Vec<String> = agent.linked_skills.clone();
         for skill_id in &skill_ids {
             // Ignore individual errors during bulk removal
@@ -202,7 +202,7 @@ impl SymlinkManager {
     /// Organize a single skill: move from agent directory to source_root, create symlink at original location.
     pub fn organize_skill(
         &self,
-        agent: &AgentConfig,
+        agent: &ProviderSkillsConfig,
         skill_id: &str,
     ) -> Result<(), String> {
         let target_base = expand_path(&agent.skills_path)?;
@@ -244,7 +244,7 @@ impl SymlinkManager {
     /// Organize all skills from all agents: move real directories to source_root, leave symlinks.
     pub fn organize_all(
         &self,
-        agents: &[AgentConfig],
+        agents: &[ProviderSkillsConfig],
         scanner: &Scanner,
     ) -> Result<Vec<(String, String)>, String> {
         let mut organized = Vec::new();
@@ -272,10 +272,10 @@ impl SymlinkManager {
 
                 match self.organize_skill(agent, &skill.id) {
                     Ok(()) => {
-                        organized.push((skill.id.clone(), agent.id.clone()));
+                        organized.push((skill.id.clone(), agent.source.clone()));
                     }
                     Err(e) => {
-                        eprintln!("Failed to organize skill {} from {}: {}", skill.id, agent.id, e);
+                        eprintln!("Failed to organize skill {} from {}: {}", skill.id, agent.source, e);
                     }
                 }
             }
@@ -290,7 +290,7 @@ impl SymlinkManager {
     pub fn restore_skill(
         &self,
         skill_id: &str,
-        source_agent: &AgentConfig,
+        source_agent: &ProviderSkillsConfig,
         other_linked_agents: &[String],
     ) -> Result<(), String> {
         let source_dir = self.source_root.join(skill_id);
@@ -314,10 +314,10 @@ impl SymlinkManager {
 
         // Remove broken symlinks from other agents
         for agent_id in other_linked_agents {
-            if agent_id == &source_agent.id {
+            if agent_id == &source_agent.source {
                 continue;
             }
-            // We need to find the agent's skills path, but we don't have the full AgentConfig here.
+            // We need to find the agent's skills path, but we don't have the full ProviderSkillsConfig here.
             // Instead, we'll handle this in the FFI layer which has access to the registry.
         }
 
@@ -359,7 +359,7 @@ mod tests {
 
         let manager = SymlinkManager::new(source_root.clone());
 
-        let agent = AgentConfig::custom(
+        let agent = ProviderSkillsConfig::custom(
             "test-agent",
             "Test Agent",
             &target_base.to_string_lossy(),
@@ -391,7 +391,7 @@ mod tests {
 
         let manager = SymlinkManager::new(source_root);
 
-        let agent = AgentConfig::custom(
+        let agent = ProviderSkillsConfig::custom(
             "test-agent",
             "Test Agent",
             &target_base.to_string_lossy(),
@@ -424,7 +424,7 @@ mod tests {
 
         let manager = SymlinkManager::new(source_root);
 
-        let agent = AgentConfig::custom(
+        let agent = ProviderSkillsConfig::custom(
             "single-file-agent",
             "Single File Agent",
             &target_file.to_string_lossy(),
@@ -458,7 +458,7 @@ mod tests {
 
         let manager = SymlinkManager::new(source_root);
 
-        let agent = AgentConfig::custom(
+        let agent = ProviderSkillsConfig::custom(
             "test-agent",
             "Test Agent",
             &target_base.to_string_lossy(),

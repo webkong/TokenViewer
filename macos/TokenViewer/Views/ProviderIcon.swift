@@ -66,6 +66,8 @@ struct ProviderIcon: View {
         "mimocode": "mimo",
         "qoder": "qoder", "trae": "trae", "windsurf": "windsurf", "zed": "zed", "workbuddy": "workbuddy",
         "zcode": "zcode",
+        // Agents without dedicated icons — will use fallback colored circle
+        "roocode": "roocode", "goose": "goose", "ohmypi": "ohmypi", "pi": "pi", "craft": "craft",
     ]
 
     /// Logos drawn with `currentColor` (monochrome) — tint to adapt to light/dark.

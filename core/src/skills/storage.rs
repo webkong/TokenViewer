@@ -1,6 +1,6 @@
 use rusqlite::params;
 
-use crate::skills::models::{SkillEntry, OrganizedSkill};
+use crate::skills::models::SkillEntry;
 
 pub fn upsert_skills(db: &crate::storage::Database, skills: &[SkillEntry]) -> Result<(), String> {
     let conn = db.conn();
@@ -19,29 +19,33 @@ pub fn upsert_skills(db: &crate::storage::Database, skills: &[SkillEntry]) -> Re
             format!("skill:{}:name", skill.id),
             skill.manifest.name,
         ])
-        .map_err(|e| format!("Failed to upsert skill {}: {}", skill.id, e))?;
-        let _ = (tags_json, agents_json);
+        .map_err(|e| format!("Failed to upsert skill name {}: {}", skill.id, e))?;
+
+        stmt.execute(params![
+            format!("skill:{}:tags", skill.id),
+            tags_json,
+        ])
+        .map_err(|e| format!("Failed to upsert skill tags {}: {}", skill.id, e))?;
+
+        stmt.execute(params![
+            format!("skill:{}:agents", skill.id),
+            agents_json,
+        ])
+        .map_err(|e| format!("Failed to upsert skill agents {}: {}", skill.id, e))?;
+
+        stmt.execute(params![
+            format!("skill:{}:description", skill.id),
+            skill.manifest.description,
+        ])
+        .map_err(|e| format!("Failed to upsert skill description {}: {}", skill.id, e))?;
+
+        stmt.execute(params![
+            format!("skill:{}:version", skill.id),
+            skill.manifest.version,
+        ])
+        .map_err(|e| format!("Failed to upsert skill version {}: {}", skill.id, e))?;
     }
     Ok(())
-}
-
-pub fn get_all_skills(db: &crate::storage::Database) -> Result<Vec<OrganizedSkill>, String> {
-    let conn = db.conn();
-    let mut stmt = conn
-        .prepare("SELECT key, value FROM skills_settings WHERE key LIKE 'skill:%' ORDER BY key")
-        .map_err(|e| format!("Failed to prepare query: {}", e))?;
-
-    let rows = stmt
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
-        .map_err(|e| format!("Failed to query skills: {}", e))?;
-
-    let organized = Vec::new();
-    for row in rows {
-        let _ = row;
-    }
-    Ok(organized)
 }
 
 pub fn set_organized(db: &crate::storage::Database, skill_id: &str) -> Result<(), String> {

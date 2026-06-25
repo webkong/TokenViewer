@@ -25,15 +25,12 @@ extension CoreBridge {
         callSkills { tt_skills_git_connectivity($0) }
     }
 
-    func skillsWatchStart() -> Data? {
-        callSkills { tt_skills_watch_start($0) }
+    func skillsGetConfig() -> Data? {
+        callSkills { tt_skills_get_config($0) }
     }
 
-    func skillsWatchStop() {
-        _ = callSkills { ptr in
-            tt_skills_watch_stop(ptr)
-            return nil
-        }
+    func skillsSetGitConfig(_ payload: Data) -> Data? {
+        callSkillsWithJSON(payload) { tt_skills_set_git_config($0, $1) }
     }
 
     func skillsAddCustomAgent(_ payload: Data) -> Data? {
@@ -56,16 +53,22 @@ extension CoreBridge {
         callSkillsWithJSON(payload) { tt_skills_restore($0, $1) }
     }
 
+    func skillsLink(_ payload: Data) -> Data? {
+        callSkillsWithJSON(payload) { tt_skills_link($0, $1) }
+    }
+
+    func skillsUnlink(_ payload: Data) -> Data? {
+        callSkillsWithJSON(payload) { tt_skills_unlink($0, $1) }
+    }
+
     private func callSkills(_ body: @escaping (OpaquePointer) -> UnsafeMutablePointer<CChar>?) -> Data? {
         call(body)
     }
 
     private func callSkillsWithJSON(_ payload: Data, _ body: @escaping (OpaquePointer, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?) -> Data? {
-        call { handle in
-            payload.withUnsafeBytes { bytes in
-                guard let ptr = bytes.baseAddress?.assumingMemoryBound(to: CChar.self) else { return nil }
-                return body(handle, ptr)
-            }
+        guard let jsonStr = String(data: payload, encoding: .utf8) else { return nil }
+        return call { handle in
+            jsonStr.withCString { ptr in body(handle, ptr) }
         }
     }
 }

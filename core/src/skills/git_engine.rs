@@ -117,7 +117,7 @@ impl GitEngine {
         callbacks
     }
 
-    /// Get the current git status.
+    /// Get the current git status with branch info, ahead/behind, and pending changes.
     pub fn get_status(&self) -> Result<GitStatusInfo, String> {
         let statuses = self.repo.statuses(Some(
             StatusOptions::new()
@@ -126,8 +126,21 @@ impl GitEngine {
         ))
         .map_err(|e| format!("Failed to get status: {}", e))?;
 
-        if statuses.is_empty() {
-            return Ok(GitStatusInfo::idle());
+        // Get branch name
+        let branch = self.repo.head().ok()
+            .and_then(|h| h.shorthand().map(|s| s.to_string()));
+
+        // Get ahead/behind counts
+        let (ahead, behind) = self.ahead_behind().unwrap_or((0, 0));
+
+        // Collect pending changes
+        let changes = self.get_pending_changes().unwrap_or_default();
+        let has_changes = !changes.is_empty();
+
+        if statuses.is_empty() && !has_changes {
+            let mut info = GitStatusInfo::idle();
+            info.branch = branch;
+            return Ok(info);
         }
 
         let has_conflicts = statuses.iter().any(|s| {
@@ -137,11 +150,55 @@ impl GitEngine {
 
         if has_conflicts {
             let count = statuses.iter().filter(|s| s.status().contains(Status::CONFLICTED)).count();
-            return Ok(GitStatusInfo::conflicted(&format!("{} file(s) have merge conflicts", count)));
+            let mut info = GitStatusInfo::conflicted(&format!("{} file(s) have merge conflicts", count));
+            info.branch = branch;
+            info.ahead = ahead;
+            info.behind = behind;
+            info.has_changes = true;
+            info.changes = changes;
+            return Ok(info);
         }
 
         let modified_count = statuses.len();
-        Ok(GitStatusInfo::modified(&format!("{} file(s) modified", modified_count)))
+        let mut info = GitStatusInfo::modified(&format!("{} file(s) modified", modified_count));
+        info.branch = branch;
+        info.ahead = ahead;
+        info.behind = behind;
+        info.has_changes = true;
+        info.changes = changes;
+        Ok(info)
+    }
+
+    /// Compute ahead/behind counts vs the upstream tracking branch.
+    fn ahead_behind(&self) -> Result<(i32, i32), String> {
+        let head = match self.repo.head() {
+            Ok(h) => h,
+            Err(_) => return Ok((0, 0)),
+        };
+        let head_oid = match head.target() {
+            Some(oid) => oid,
+            None => return Ok((0, 0)),
+        };
+
+        // Try to resolve upstream branch
+        let upstream = match self.repo.branch_upstream_name(head.shorthand().unwrap_or("")) {
+            Ok(name) => name,
+            Err(_) => return Ok((0, 0)),
+        };
+
+        let upstream_ref = match self.repo.find_reference(&upstream.as_str().unwrap_or("")) {
+            Ok(r) => r,
+            Err(_) => return Ok((0, 0)),
+        };
+        let upstream_oid = match upstream_ref.target() {
+            Some(oid) => oid,
+            None => return Ok((0, 0)),
+        };
+
+        let (ahead, behind) = self.repo.graph_ahead_behind(head_oid, upstream_oid)
+            .map_err(|e| format!("Failed to compute ahead/behind: {}", e))?;
+
+        Ok((ahead as i32, behind as i32))
     }
 
     /// Get a list of pending changes (modified, added, deleted files).

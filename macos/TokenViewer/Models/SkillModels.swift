@@ -15,22 +15,16 @@ struct SkillEntry: Codable, Identifiable, Hashable {
     let installedAt: String
 }
 
-struct SkillAgent: Codable, Identifiable, Hashable {
-    let id: String
-    let name: String
+struct SkillProvider: Codable, Identifiable, Hashable {
+    let source: String
+    var id: String { source }
+    let displayName: String
     let skillsPath: String
     let linkType: String
-    let isBuiltin: Bool
     let isLinked: Bool
     let linkedSkills: [String]
-    let icon: String?
-    let exists: Bool
-}
-
-enum SkillLinkType: String {
-    case directory = "Directory"
-    case singleFile = "SingleFile"
-    case overlay = "Overlay"
+    let hasParser: Bool
+    let hasLimits: Bool
 }
 
 struct SkillOperationResult: Codable {

@@ -175,6 +175,8 @@ final class L10n: ObservableObject {
     var refresh: String { isZh ? "刷新" : "Refresh" }
     var pull: String { isZh ? "拉取" : "Pull" }
     var push: String { isZh ? "推送" : "Push" }
+    var skillsSourceRoot: String { isZh ? "技能根目录" : "Skills Source Root" }
+    var save: String { isZh ? "保存" : "Save" }
 
     private func dayCount(_ days: Int) -> String {
         days == 1 ? "1 day" : "\(days) days"

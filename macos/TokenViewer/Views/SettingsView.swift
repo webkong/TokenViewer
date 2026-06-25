@@ -11,7 +11,6 @@ struct SettingsView: View {
     @AppStorage("limitsVisibleSources") private var limitsVisibleSources = LimitsVisibilityStore.defaultsValue
     @State private var launchAtLogin = false
     @State private var showRebuildAlert = false
-    @State private var providers: [ProviderStatus] = []
     @ObservedObject private var theme = ThemeManager.shared
     @ObservedObject private var currency = CurrencyStore.shared
     @ObservedObject private var l10n = L10n.shared
@@ -32,7 +31,7 @@ struct SettingsView: View {
                 appearanceSection
                 panelSection
                 limitsSection
-                providersSection
+                skillsSection
                 dataSection
             }
             .padding(20)
@@ -42,9 +41,6 @@ struct SettingsView: View {
             if #available(macOS 13.0, *) {
                 launchAtLogin = SMAppService.mainApp.status == .enabled
             }
-            panelShowSummary = true
-            panelShowLimits = true
-            loadProviders()
         }
     }
 
@@ -126,10 +122,11 @@ struct SettingsView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             Divider()
-            FlowLayout(itemSpacing: 8, rowSpacing: 8) {
+            FlowLayout(itemSpacing: 6, rowSpacing: 6) {
                 ForEach(LimitsVisibilityStore.allSources, id: \.self) { source in
-                    panelChip(
-                        title: LimitsVisibilityStore.displayName(for: source),
+                    agentChip(
+                        source: source,
+                        label: LimitsVisibilityStore.displayName(for: source),
                         isSelected: visible.contains(source)
                     ) {
                         toggleLimitsVisibility(source)
@@ -182,33 +179,6 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: Providers
-
-    private var providersSection: some View {
-        SettingsCard(title: l10n.providers) {
-            let active = providers.filter { $0.record_count > 0 }
-            if active.isEmpty {
-                Text(l10n.noProviderData)
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-            } else {
-                ForEach(active) { p in
-                    HStack(spacing: 8) {
-                        ProviderIcon(source: p.source, size: 14)
-                        Text(TVColor.sourceDisplayName(p.source)).font(.system(size: 13, weight: .medium))
-                        Spacer()
-                        Text(l10n.recordsCount(Int(p.record_count)))
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
-                    if p.id != active.last?.id { Divider() }
-                }
-            }
-            Text(l10n.activeCount(active.count))
-                .font(.system(size: 11)).foregroundStyle(.tertiary)
-                .padding(.top, 2)
-        }
-    }
-
     // MARK: Data
 
     private var dataSection: some View {
@@ -252,14 +222,6 @@ struct SettingsView: View {
         }
     }
 
-    private func loadProviders() {
-        Task.detached {
-            let data = CoreBridge.shared.getProviderStatus()
-            let decoded = data.flatMap { try? JSONDecoder().decode([ProviderStatus].self, from: $0) } ?? []
-            await MainActor.run { providers = decoded }
-        }
-    }
-
     private func toggleLimitsVisibility(_ source: String) {
         var visible = LimitsVisibilityStore.visibleSet(from: limitsVisibleSources)
         if visible.contains(source) {
@@ -275,7 +237,6 @@ struct SettingsView: View {
         let borderColor: Color = isSelected
             ? TVColor.brand.opacity(0.22)
             : Color(nsColor: .separatorColor).opacity(0.55)
-
         return Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
@@ -285,31 +246,158 @@ struct SettingsView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(isSelected ? Color.white : .primary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 12).padding(.vertical, 8)
             .fixedSize(horizontal: true, vertical: true)
-            .background(
-                Capsule()
-                    .fill(fillColor)
-                    .overlay(
-                        Capsule().strokeBorder(
-                            borderColor,
-                            lineWidth: 0.75
-                        )
-                    )
-                    .shadow(color: isSelected ? TVColor.brand.opacity(0.14) : .clear, radius: 1.5, x: 0, y: 1)
-            )
+            .background(Capsule().fill(fillColor).overlay(Capsule().strokeBorder(borderColor, lineWidth: 0.75)))
         }
-        .buttonStyle(.plain)
-        .disabled(isLocked)
-        .opacity(isLocked ? 0.82 : 1.0)
-        .accessibilityLabel(title)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .buttonStyle(.plain).disabled(isLocked).opacity(isLocked ? 0.82 : 1.0)
     }
 
+    // Shared chip style for agent/provider selection with icon
+    private func agentChip(source: String? = nil, label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        let fillColor = isSelected ? Color.green.opacity(0.16) : Color(nsColor: .controlBackgroundColor)
+        let borderColor: Color = isSelected ? Color.green.opacity(0.35) : Color.secondary.opacity(0.15)
+        let textColor: Color = isSelected ? .green : .secondary
+
+        return Button(action: action) {
+            HStack(spacing: 5) {
+                if let s = source {
+                    ProviderIcon(source: s, size: 14)
+                }
+                Text(label)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(textColor)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(fillColor))
+            .overlay(Capsule().strokeBorder(borderColor, lineWidth: 0.75))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Skills
+
+    @State private var skillsSourceRoot: String = ""
+    @State private var skillProviders: [SkillProvider] = []
+    @AppStorage("skillsEnabledProviders") private var enabledProvidersJSON: String = "[\"claude\",\"codex\",\"opencode\"]"
+
+    private var enabledProviders: Set<String> {
+        guard let data = enabledProvidersJSON.data(using: .utf8),
+              let arr = try? JSONDecoder().decode([String].self, from: data)
+        else { return ["claude", "codex", "opencode"] }
+        return Set(arr)
+    }
+
+    private func toggleProvider(_ source: String) {
+        var set = enabledProviders
+        if set.contains(source) {
+            set.remove(source)
+        } else {
+            set.insert(source)
+        }
+        guard let data = try? JSONEncoder().encode(Array(set)),
+              let json = String(data: data, encoding: .utf8) else { return }
+        enabledProvidersJSON = json
+    }
+
+    private var skillsSection: some View {
+        SettingsCard(title: l10n.skills) {
+            // Source root
+            VStack(alignment: .leading, spacing: 6) {
+                Text(l10n.skillsSourceRoot).font(.system(size: 11, weight: .medium))
+                HStack {
+                    TextField("~/.agents/skills", text: $skillsSourceRoot)
+                        .textFieldStyle(.roundedBorder)
+                    Button(l10n.openInFinder) {
+                        let panel = NSOpenPanel()
+                        panel.canChooseDirectories = true
+                        panel.canChooseFiles = false
+                        if panel.runModal() == .OK, let url = panel.url {
+                            skillsSourceRoot = url.path
+                        }
+                    }
+                    .font(.system(size: 11))
+                }
+                HStack {
+                    Spacer()
+                    Button(l10n.save) {
+                        let payload: [String: String] = ["source_root": skillsSourceRoot.trimmingCharacters(in: .whitespaces)]
+                        if let data = try? JSONSerialization.data(withJSONObject: payload) {
+                            _ = CoreBridge.shared.skillsSetGitConfig(data)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+            }
+            .padding(.bottom, 6)
+
+            Divider()
+
+            // Agent participation — chip style
+            VStack(alignment: .leading, spacing: 6) {
+                Text("参与 Skills 管理的 Agent")
+                    .font(.system(size: 11, weight: .medium))
+                Text("启用的 Agent 将出现在 Skills 页面的筛选器中")
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+
+                if skillProviders.isEmpty {
+                    Text("Loading…").font(.system(size: 11)).foregroundStyle(.secondary)
+                } else {
+                    FlowLayout(itemSpacing: 6, rowSpacing: 6) {
+                        ForEach(skillProviders) { p in
+                            agentChip(
+                                source: p.source,
+                                label: TVColor.sourceDisplayName(p.source),
+                                isSelected: enabledProviders.contains(p.source)
+                            ) {
+                                toggleProvider(p.source)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear {
+            loadSkillsConfig()
+            skillProviders = SkillManagerViewModel.shared.providers
+        }
+        .onReceive(SkillManagerViewModel.shared.$providers) { providers in
+            skillProviders = providers
+        }
+    }
+
+    private func loadSkillsConfig() {
+        Task.detached {
+            guard let data = CoreBridge.shared.skillsGetConfig() else { return }
+            struct Config: Codable {
+                let sourceRoot: String
+            }
+            guard let config = try? JSONDecoder().decode(Config.self, from: data) else { return }
+            await MainActor.run {
+                skillsSourceRoot = config.sourceRoot
+            }
+        }
+    }
+
+    private func decodeEnabledProviders() -> Set<String> {
+        guard let data = enabledProvidersJSON.data(using: .utf8),
+              let arr = try? JSONDecoder().decode([String].self, from: data)
+        else { return ["claude", "codex", "opencode"] }
+        return Set(arr)
+    }
+
+    private func encodeEnabledProviders(_ providers: Set<String>) {
+        guard let data = try? JSONEncoder().encode(Array(providers)),
+              let json = String(data: data, encoding: .utf8)
+        else { return }
+        enabledProvidersJSON = json
+    }
 }
 
-private struct FlowLayout: Layout {
+struct FlowLayout: Layout {
     var itemSpacing: CGFloat
     var rowSpacing: CGFloat
 
@@ -386,6 +474,74 @@ struct SettingsCard<Content: View>: View {
                         .fill(Color(nsColor: .controlBackgroundColor))
                         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 0.5))
                 )
+        }
+    }
+
+    // MARK: - Provider Skills Row
+
+    fileprivate struct ProviderSkillsRow: View {
+        let provider: SkillProvider
+        let onSave: (String, String?, String?) -> Void
+        let onReset: (String) -> Void
+
+        @State private var skillsPath: String = ""
+        @State private var linkType: String = "Directory"
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    ProviderIcon(source: provider.source, size: 16)
+                    Text(TVColor.sourceDisplayName(provider.source))
+                        .font(.system(size: 12, weight: .medium))
+                        .frame(width: 100, alignment: .leading)
+                    Spacer()
+                }
+
+                HStack(spacing: 8) {
+                    Text("Path").font(.caption2).foregroundStyle(.secondary).frame(width: 30, alignment: .leading)
+                    TextField(provider.skillsPath, text: $skillsPath)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11))
+                        .disabled(provider.hasParser == false && skillsPath.isEmpty)
+                }
+
+                HStack(spacing: 8) {
+                    Text("Link").font(.caption2).foregroundStyle(.secondary).frame(width: 30, alignment: .leading)
+                    Picker("", selection: $linkType) {
+                        Text("Directory").tag("Directory")
+                        Text("Single File").tag("SingleFile")
+                        Text("Overlay").tag("Overlay")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .controlSize(.mini)
+
+                    Spacer()
+
+                    Button("Reset") {
+                        skillsPath = provider.skillsPath
+                        linkType = "Directory"
+                        onReset(provider.source)
+                    }
+                    .controlSize(.small)
+                    .font(.system(size: 10))
+                    .disabled(skillsPath == provider.skillsPath && linkType == "Directory")
+
+                    Button("Save") {
+                        let path = skillsPath.trimmingCharacters(in: .whitespaces)
+                        let pathVal: String? = path.isEmpty || path == provider.skillsPath ? nil : path
+                        let ltVal: String? = linkType == "Directory" ? nil : linkType
+                        onSave(provider.source, pathVal, ltVal)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .font(.system(size: 10))
+                }
+            }
+            .onAppear {
+                skillsPath = provider.skillsPath
+                linkType = provider.linkType
+            }
         }
     }
 }
