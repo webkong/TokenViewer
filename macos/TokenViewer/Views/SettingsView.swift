@@ -281,33 +281,43 @@ struct SettingsView: View {
     }
 
     // Shared chip style for agent/provider selection with icon
-    private func agentChip(source: String? = nil, label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+    private func agentChip(source: String? = nil, label: String, isSelected: Bool, isInstalled: Bool = true, action: @escaping () -> Void) -> some View {
         let fillColor = isSelected ? Color.green.opacity(0.16) : Color(nsColor: .controlBackgroundColor)
         let borderColor: Color = isSelected ? Color.green.opacity(0.35) : Color.secondary.opacity(0.15)
         let textColor: Color = isSelected ? .green : .secondary
+        let opacity: CGFloat = isInstalled ? 1.0 : 0.45
 
         return Button(action: action) {
             HStack(spacing: 5) {
                 if let s = source {
                     ProviderIcon(source: s, size: 14)
+                        .opacity(opacity)
                 }
                 Text(label)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(textColor)
                     .lineLimit(1)
+                if !isInstalled {
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                }
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
             .background(Capsule().fill(fillColor))
             .overlay(Capsule().strokeBorder(borderColor, lineWidth: 0.75))
+            .opacity(opacity)
         }
         .buttonStyle(.plain)
+        .help(isInstalled ? label : l10n.skillNotInstalled(label))
     }
 
     // MARK: Skills
 
     @State private var skillsSourceRoot: String = ""
     @State private var skillProviders: [SkillProvider] = []
+    @State private var agentInstallStatus: [String: Bool] = [:]
     @AppStorage("skillsEnabledProviders") private var enabledProvidersJSON: String = "[\"claude\",\"codex\",\"opencode\"]"
 
     private var enabledProviders: Set<String> {
@@ -383,10 +393,12 @@ struct SettingsView: View {
                 } else {
                     FlowLayout(itemSpacing: 6, rowSpacing: 6) {
                         ForEach(skillProviders) { p in
+                            let isInstalled = p.detectCmd == nil || (agentInstallStatus[p.source] ?? false)
                             agentChip(
                                 source: p.source,
                                 label: TVColor.sourceDisplayName(p.source),
-                                isSelected: enabledProviders.contains(p.source)
+                                isSelected: enabledProviders.contains(p.source),
+                                isInstalled: isInstalled
                             ) {
                                 toggleProvider(p.source)
                             }
@@ -408,7 +420,18 @@ struct SettingsView: View {
             let decoder = JSONDecoder()
             decoder.keyDecodingStrategy = .convertFromSnakeCase
             let providers = (try? decoder.decode([SkillProvider].self, from: data)) ?? []
-            await MainActor.run { skillProviders = providers }
+
+            // Detect which agents are installed (CLI on PATH)
+            var installMap: [String: Bool] = [:]
+            if let detectData = CoreBridge.shared.skillsDetectInstalled(),
+               let detected = try? JSONDecoder().decode([String: Bool].self, from: detectData) {
+                installMap = detected
+            }
+
+            await MainActor.run {
+                skillProviders = providers
+                agentInstallStatus = installMap
+            }
         }
     }
 

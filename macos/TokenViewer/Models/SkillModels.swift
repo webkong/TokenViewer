@@ -25,6 +25,8 @@ struct SkillProvider: Codable, Identifiable, Hashable {
     let linkedSkills: [String]
     let hasParser: Bool
     let hasLimits: Bool
+    let detectCmd: String?
+    var isInstalled: Bool = false
 }
 
 struct SkillOperationResult: Codable {

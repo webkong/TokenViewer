@@ -265,6 +265,7 @@ final class L10n: ObservableObject {
     var gitSaveConfigTip: String { isZh ? "保存 Git 远程地址、平台和访问令牌" : "Save the Git remote URL, platform, and access token" }
     var skillAgentParticipation: String { isZh ? "参与 Skills 管理的 Agent" : "Agents participating in Skills" }
     var skillAgentParticipationDesc: String { isZh ? "启用的 Agent 将出现在 Skills 页面的筛选器中" : "Enabled agents appear as filters on the Skills page" }
+    func skillNotInstalled(_ agent: String) -> String { isZh ? "\(agent) 未检测到安装" : "\(agent) not installed" }
     var skillsSourceRootPlaceholder: String { isZh ? "~/.agents/skills" : "~/.agents/skills" }
     var loading: String { isZh ? "加载中…" : "Loading…" }
     var menuBarSectionTitle: String { isZh ? "菜单栏" : "Menu Bar" }

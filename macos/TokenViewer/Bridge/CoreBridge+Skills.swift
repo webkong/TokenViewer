@@ -65,6 +65,10 @@ extension CoreBridge {
         callSkillsWithJSON(payload) { tt_skills_unlink($0, $1) }
     }
 
+    func skillsDetectInstalled() -> Data? {
+        callSkills { tt_skills_detect_installed($0) }
+    }
+
     private func callSkills(_ body: @escaping (OpaquePointer) -> UnsafeMutablePointer<CChar>?) -> Data? {
         call(body)
     }

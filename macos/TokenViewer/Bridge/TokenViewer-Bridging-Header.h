@@ -33,5 +33,6 @@ char* _Nullable tt_skills_add_custom_agent(CoreHandle* _Nullable handle, const c
 char* _Nullable tt_skills_remove_custom_agent(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_get_config(CoreHandle* _Nullable handle);
 char* _Nullable tt_skills_set_git_config(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_skills_detect_installed(CoreHandle* _Nullable handle);
 
 #endif

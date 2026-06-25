@@ -1040,6 +1040,22 @@ pub extern "C" fn tt_skills_get_config(handle: *mut CoreHandle) -> *mut c_char {
     to_json_cstring(&config)
 }
 
+/// Detect which agents are installed (CLI binary on PATH). Returns JSON map: {"claude": true, "codex": false, ...}
+///
+/// # Safety
+/// `handle` must be a valid pointer from `tt_init`, or null (returns null).
+#[no_mangle]
+pub extern "C" fn tt_skills_detect_installed(handle: *mut CoreHandle) -> *mut c_char {
+    let handle = match unsafe { handle.as_ref() } {
+        Some(h) => h,
+        None => return std::ptr::null_mut(),
+    };
+    let providers = handle.skills.registry.all();
+    let results: Vec<(String, bool)> = crate::skills::provider_config::detect_installed_agents(&providers);
+    let map: std::collections::HashMap<String, bool> = results.into_iter().collect();
+    to_json_cstring(&map)
+}
+
 // --- Helpers ---
 
 #[derive(serde::Deserialize, serde::Serialize)]

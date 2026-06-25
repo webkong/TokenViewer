@@ -20,6 +20,13 @@ pub struct ProviderSkillsConfig {
     /// Has subscription/quota tracking (limits panel).
     #[serde(default)]
     pub has_limits: bool,
+    /// CLI binary name for install detection (from Orca tui-agent-config.ts).
+    /// None means the agent has no standalone CLI (IDE/plugin-only).
+    #[serde(default)]
+    pub detect_cmd: Option<String>,
+    /// Whether the detect_cmd binary was found on PATH at last check.
+    #[serde(skip)]
+    pub is_installed: bool,
 }
 
 impl ProviderSkillsConfig {
@@ -34,6 +41,8 @@ impl ProviderSkillsConfig {
             linked_skills: Vec::new(),
             has_parser: false,
             has_limits: false,
+            detect_cmd: None,
+            is_installed: false,
         }
     }
 }
@@ -266,6 +275,33 @@ pub fn expand_path(raw: &str) -> Result<PathBuf, String> {
     }
 }
 
+/// Detect which agents are installed by checking if their detect_cmd is on PATH.
+/// Uses `which` (macOS/Linux) to check binary existence.
+/// Returns a list of (source, is_installed) pairs.
+pub fn detect_installed_agents(
+    providers: &[ProviderSkillsConfig],
+) -> Vec<(String, bool)> {
+    providers
+        .iter()
+        .map(|p| {
+            let installed = match &p.detect_cmd {
+                Some(cmd) => {
+                    std::process::Command::new("which")
+                        .arg(cmd)
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status()
+                        .map(|s| s.success())
+                        .unwrap_or(false)
+                }
+                // IDE/plugin-only agents (e.g. zed, trae, windsurf) — no CLI to detect
+                None => false,
+            };
+            (p.source.clone(), installed)
+        })
+        .collect()
+}
+
 /// Map aliases to canonical names. Pass through all others.
 pub fn canonical_source(name: &str) -> &str {
     match name {
@@ -338,6 +374,44 @@ fn builtin_providers() -> Vec<ProviderSkillsConfig> {
         ("omp", "OMP"),
     ]);
 
+    // CLI binary names for install detection (from Orca tui-agent-config.ts).
+    // Only agents with standalone CLI binaries have entries.
+    let detect_cmds: HashMap<&str, &str> = HashMap::from([
+        ("claude", "claude"),
+        ("codex", "codex"),
+        ("cursor", "cursor-agent"),
+        ("kiro", "kiro-cli"),
+        ("copilot", "copilot"),
+        ("kimi", "kimi"),
+        ("antigravity", "agy"),
+        ("gemini", "gemini"),
+        ("opencode", "opencode"),
+        ("openclaw", "openclaw"),
+        ("hermes", "hermes"),
+        ("grok", "grok"),
+        ("kilocode", "kilo"),
+        ("goose", "goose"),
+        ("pi", "pi"),
+        ("mimocode", "mimo"),
+        ("openclaude", "openclaude"),
+        ("devin", "devin"),
+        ("ante", "ante"),
+        ("autohand", "autohand"),
+        ("aider", "aider"),
+        ("amp", "amp"),
+        ("crush", "crush"),
+        ("aug", "auggie"),
+        ("cline", "cline"),
+        ("codebuff", "codebuff"),
+        ("command-code", "command-code"),
+        ("continue", "cn"),
+        ("droid", "droid"),
+        ("mistral-vibe", "vibe"),
+        ("qwen-code", "qwen-code"),
+        ("rovo", "rovo"),
+        ("omp", "omp"),
+    ]);
+
     // Source names with has_parser (the parser sources list)
     let parser_sources: std::collections::HashSet<&str> = std::collections::HashSet::from([
         "claude",
@@ -406,6 +480,7 @@ fn builtin_providers() -> Vec<ProviderSkillsConfig> {
         .map(|source| {
             let display_name = display_names.get(source).unwrap_or(&source).to_string();
             let has_parser = parser_sources.contains(source);
+            let detect_cmd = detect_cmds.get(source).map(|s| s.to_string());
             // Skills path: ~/.{source}/skills
             // For claude, the agent id is "claude-code" but we use "claude" as canonical
             let skills_dir = if source == "claude" {
@@ -423,6 +498,8 @@ fn builtin_providers() -> Vec<ProviderSkillsConfig> {
                 is_linked: false,
                 linked_skills: Vec::new(),
                 has_parser,
+                detect_cmd,
+                is_installed: false,
                 // Providers with subscription/quota tracking for the limits panel.
                 // Core rate-limit API fetchers (from Orca): claude, codex, gemini, opencode, kimi.
                 // TokenViewer additionally tracks: copilot, kiro, cursor, antigravity, zed,
