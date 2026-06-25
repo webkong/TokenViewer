@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use rayon::prelude::*;
+
 use crate::skills::models::LinkType;
 
 /// Canonical provider skills configuration.
@@ -25,7 +27,7 @@ pub struct ProviderSkillsConfig {
     #[serde(default)]
     pub detect_cmd: Option<String>,
     /// Whether the detect_cmd binary was found on PATH at last check.
-    #[serde(skip)]
+    #[serde(default)]
     pub is_installed: bool,
 }
 
@@ -275,31 +277,137 @@ pub fn expand_path(raw: &str) -> Result<PathBuf, String> {
     }
 }
 
-/// Detect which agents are installed by checking if their detect_cmd is on PATH.
-/// Uses `which` (macOS/Linux) to check binary existence.
-/// Returns a list of (source, is_installed) pairs.
-pub fn detect_installed_agents(
-    providers: &[ProviderSkillsConfig],
-) -> Vec<(String, bool)> {
+/// Detect which agents are installed. Two strategies:
+/// 1. CLI check: if detect_cmd is set, run `which <cmd>` (fast, ms-level)
+/// 2. Dir check: for agents without CLI (IDE/plugin), check if ~/.{source}/ exists
+pub fn detect_installed_agents(providers: &[ProviderSkillsConfig]) -> Vec<(String, bool)> {
     providers
-        .iter()
+        .par_iter()
         .map(|p| {
             let installed = match &p.detect_cmd {
-                Some(cmd) => {
-                    std::process::Command::new("which")
-                        .arg(cmd)
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
-                        .status()
-                        .map(|s| s.success())
-                        .unwrap_or(false)
-                }
-                // IDE/plugin-only agents (e.g. zed, trae, windsurf) — no CLI to detect
-                None => false,
+                Some(cmd) => is_command_on_path(cmd),
+                // No CLI — fall back to checking if the agent's config directory exists
+                None => is_agent_dir_present(&p.skills_path),
             };
             (p.source.clone(), installed)
         })
         .collect()
+}
+
+/// Check if an agent's config directory exists by looking at the parent of skills_path.
+/// skills_path is typically ~/.{source}/skills, so ~/.{source} is the config dir.
+fn is_agent_dir_present(skills_path: &str) -> bool {
+    let path = std::path::Path::new(skills_path);
+    // Go up one level from .../skills to check the agent's config dir
+    path.parent()
+        .map(|p| p.exists())
+        .unwrap_or(false)
+}
+
+/// Check if a command exists on PATH with a 3-second timeout.
+fn is_command_on_path(cmd: &str) -> bool {
+    let mut child = match std::process::Command::new("which")
+        .arg(cmd)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    // Wait with timeout — some `which` calls can hang on slow NFS/home mounts
+    let pid = child.id();
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return status.success(),
+            Ok(None) => {
+                if start.elapsed().as_secs() > 3 {
+                    // Kill stale process
+                    let _ = std::process::Command::new("kill")
+                        .arg("-9")
+                        .arg(pid.to_string())
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status();
+                    return false;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            Err(_) => return false,
+        }
+    }
+}
+
+// ── Install status cache ──
+
+/// Cache TTL in seconds (1 hour).
+const INSTALL_CACHE_TTL_SECS: u64 = 3600;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct InstallStatusCache {
+    updated_at: u64,
+    statuses: HashMap<String, bool>,
+}
+
+/// Load cached install status from disk. Returns None if expired or missing.
+fn load_install_cache(config_dir: &Path) -> Option<HashMap<String, bool>> {
+    let cache_path = config_dir.join("install_status.json");
+    let data = fs::read_to_string(&cache_path).ok()?;
+    let cache: InstallStatusCache = serde_json::from_str(&data).ok()?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    if now.saturating_sub(cache.updated_at) < INSTALL_CACHE_TTL_SECS {
+        Some(cache.statuses)
+    } else {
+        None
+    }
+}
+
+/// Save install status cache to disk.
+fn save_install_cache(config_dir: &Path, statuses: &HashMap<String, bool>) -> Result<(), String> {
+    fs::create_dir_all(config_dir).map_err(|e| format!("Failed to create config dir: {}", e))?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let cache = InstallStatusCache {
+        updated_at: now,
+        statuses: statuses.clone(),
+    };
+    let json = serde_json::to_string(&cache)
+        .map_err(|e| format!("Failed to serialize install cache: {}", e))?;
+    fs::write(config_dir.join("install_status.json"), json)
+        .map_err(|e| format!("Failed to write install cache: {}", e))
+}
+
+/// Detect installed agents with caching. Returns cached results if fresh (≤1h),
+/// otherwise runs parallel detection and saves to disk.
+/// Pass `force: true` to skip cache and re-detect.
+pub fn detect_installed_agents_cached(
+    config_dir: &Path,
+    providers: &[ProviderSkillsConfig],
+    force: bool,
+) -> Vec<(String, bool)> {
+    if !force {
+        if let Some(cached) = load_install_cache(config_dir) {
+            // Merge cached status with current provider list
+            return providers
+                .iter()
+                .map(|p| {
+                    let installed = cached.get(&p.source).copied().unwrap_or(false);
+                    (p.source.clone(), installed)
+                })
+                .collect();
+        }
+    }
+
+    let results = detect_installed_agents(providers);
+    let statuses: HashMap<String, bool> = results.iter().cloned().collect();
+    let _ = save_install_cache(config_dir, &statuses);
+    results
 }
 
 /// Map aliases to canonical names. Pass through all others.

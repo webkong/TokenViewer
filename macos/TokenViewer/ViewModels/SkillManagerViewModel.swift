@@ -11,7 +11,14 @@ final class SkillManagerViewModel: ObservableObject {
     /// Providers enabled in Settings (defaults to claude, codex, opencode).
     var visibleProviders: [SkillProvider] {
         let enabled = enabledProviderSet
-        return providers.filter { enabled.contains($0.source) }
+        return providers
+            .filter { enabled.contains($0.source) }
+            .sorted { lhs, rhs in
+                if lhs.isInstalled != rhs.isInstalled {
+                    return lhs.isInstalled && !rhs.isInstalled
+                }
+                return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+            }
     }
 
     private var enabledProviderSet: Set<String> {

@@ -11,6 +11,9 @@ Native macOS menu-bar app that tracks AI token usage & cost across 24 coding too
 All commands run from repo root. `rtk` is the Rust toolchain wrapper; `DEVELOPER_DIR` must point at Xcode.app (not Command Line Tools).
 
 ```bash
+# Build the local test app only (no launch, no dmg/pkg)
+PATH="/opt/homebrew/opt/rustup/bin:$PATH" DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer rtk bash build.sh
+
 # Build Rust core + Swift app, then launch (the everyday loop)
 # Add --skip-sync to launch without auto-sync (faster, when you only changed UI)
 PATH="/opt/homebrew/opt/rustup/bin:$PATH" DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer rtk bash run.sh --skip-sync
@@ -26,7 +29,8 @@ PATH="/opt/homebrew/opt/rustup/bin:$PATH" DEVELOPER_DIR=/Applications/Xcode.app/
   -project macos/TokenViewer.xcodeproj -scheme TokenViewer -destination 'platform=macOS'
 ```
 
-- After ANY code change, run the appropriate `bash run.sh` variant and confirm `BUILD SUCCEEDED`. The build output lands at `DerivedData/Build/Products/Release/TokenViewer.app` — **this is the canonical test path**, do NOT use `dist/` for local testing.
+- When the user asks to “打测试 app”, use `bash build.sh`. It builds Rust core + the Release Swift app without launching it. The output lands at `DerivedData/Build/Products/Release/TokenViewer.app` — **this is the canonical test path**, do NOT use `dist/` for local testing.
+- After ANY code change, run the appropriate `bash run.sh` variant when you need to launch and manually verify. For build-only validation, run `bash build.sh` and confirm `BUILD SUCCEEDED`.
 - For packaging a distributable installer (.pkg/.dmg), use `script/release.sh` (see Release section below). That outputs to `dist/release/` and is for releases only.
 - The Xcode project is generated from `macos/project.yml` via `xcodegen generate` (run after adding/removing Swift files). `project.pbxproj` is committed.
 - The Swift target `-force_load`s the static lib at `core/target/aarch64-apple-darwin/release/libtokenviewer_core.a` (a preBuildScript also rebuilds it). Always build the Rust target `aarch64-apple-darwin` — plain `cargo build` output is NOT linked by the app.

@@ -65,6 +65,7 @@ struct SettingsView: View {
             if #available(macOS 13.0, *) {
                 launchAtLogin = SMAppService.mainApp.status == .enabled
             }
+            loadSkillProviders()
         }
     }
 
@@ -147,13 +148,15 @@ struct SettingsView: View {
             Text(l10n.limitsVisibilityDesc)
                 .font(.system(size: 11, weight: .medium))
             FlowLayout(itemSpacing: 6, rowSpacing: 6) {
-                ForEach(LimitsVisibilityStore.allSources, id: \.self) { source in
+                ForEach(sortedMenuBarProviders) { provider in
+                    let isInstalled = agentInstallStatus[provider.source] ?? provider.isInstalled
                     agentChip(
-                        source: source,
-                        label: LimitsVisibilityStore.displayName(for: source),
-                        isSelected: visible.contains(source)
+                        source: provider.source,
+                        label: TVColor.sourceDisplayName(provider.source),
+                        isSelected: visible.contains(provider.source),
+                        isInstalled: isInstalled
                     ) {
-                        toggleLimitsVisibility(source)
+                        toggleLimitsVisibility(provider.source)
                     }
                 }
             }
@@ -392,8 +395,8 @@ struct SettingsView: View {
                     Text(l10n.loading).font(.system(size: 11)).foregroundStyle(.secondary)
                 } else {
                     FlowLayout(itemSpacing: 6, rowSpacing: 6) {
-                        ForEach(skillProviders) { p in
-                            let isInstalled = p.detectCmd == nil || (agentInstallStatus[p.source] ?? false)
+                        ForEach(sortedSkillProviders) { p in
+                            let isInstalled = agentInstallStatus[p.source] ?? p.isInstalled
                             agentChip(
                                 source: p.source,
                                 label: TVColor.sourceDisplayName(p.source),
@@ -413,25 +416,65 @@ struct SettingsView: View {
         }
     }
 
+    private var sortedSkillProviders: [SkillProvider] {
+        skillProviders.sorted { lhs, rhs in
+            let lhsInstalled = agentInstallStatus[lhs.source] ?? lhs.isInstalled
+            let rhsInstalled = agentInstallStatus[rhs.source] ?? rhs.isInstalled
+            if lhsInstalled != rhsInstalled {
+                return lhsInstalled && !rhsInstalled
+            }
+            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+        }
+    }
+
+    private var sortedMenuBarProviders: [SkillProvider] {
+        let providers = skillProviders.filter(\.hasLimits)
+        if providers.isEmpty {
+            return LimitsVisibilityStore.allSources.map { source in
+                SkillProvider(
+                    source: source,
+                    displayName: LimitsVisibilityStore.displayName(for: source),
+                    skillsPath: "",
+                    linkType: "Directory",
+                    isLinked: false,
+                    linkedSkills: [],
+                    hasParser: false,
+                    hasLimits: true,
+                    detectCmd: nil,
+                    isInstalled: false
+                )
+            }
+        }
+
+        return providers.sorted { lhs, rhs in
+            let lhsInstalled = agentInstallStatus[lhs.source] ?? lhs.isInstalled
+            let rhsInstalled = agentInstallStatus[rhs.source] ?? rhs.isInstalled
+            if lhsInstalled != rhsInstalled {
+                return lhsInstalled && !rhsInstalled
+            }
+            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+        }
+    }
+
     private func loadSkillProviders() {
         guard skillProviders.isEmpty else { return }
+        // Phase 1: load agent list immediately (fast, in-memory read)
         Task.detached {
             guard let data = CoreBridge.shared.skillsListAgents() else { return }
             let decoder = JSONDecoder()
             decoder.keyDecodingStrategy = .convertFromSnakeCase
             let providers = (try? decoder.decode([SkillProvider].self, from: data)) ?? []
-
-            // Detect which agents are installed (CLI on PATH)
+            await MainActor.run { skillProviders = providers }
+        }
+        // Phase 2: detect install status in background (cached → fast; fresh → ~2s)
+        Task.detached {
             var installMap: [String: Bool] = [:]
             if let detectData = CoreBridge.shared.skillsDetectInstalled(),
                let detected = try? JSONDecoder().decode([String: Bool].self, from: detectData) {
                 installMap = detected
             }
-
-            await MainActor.run {
-                skillProviders = providers
-                agentInstallStatus = installMap
-            }
+            let finalInstallMap = installMap
+            await MainActor.run { agentInstallStatus = finalInstallMap }
         }
     }
 

@@ -27,6 +27,57 @@ struct SkillProvider: Codable, Identifiable, Hashable {
     let hasLimits: Bool
     let detectCmd: String?
     var isInstalled: Bool = false
+
+    enum CodingKeys: String, CodingKey {
+        case source
+        case displayName
+        case skillsPath
+        case linkType
+        case isLinked
+        case linkedSkills
+        case hasParser
+        case hasLimits
+        case detectCmd
+        case isInstalled
+    }
+
+    init(
+        source: String,
+        displayName: String,
+        skillsPath: String,
+        linkType: String,
+        isLinked: Bool,
+        linkedSkills: [String],
+        hasParser: Bool,
+        hasLimits: Bool,
+        detectCmd: String?,
+        isInstalled: Bool = false
+    ) {
+        self.source = source
+        self.displayName = displayName
+        self.skillsPath = skillsPath
+        self.linkType = linkType
+        self.isLinked = isLinked
+        self.linkedSkills = linkedSkills
+        self.hasParser = hasParser
+        self.hasLimits = hasLimits
+        self.detectCmd = detectCmd
+        self.isInstalled = isInstalled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        source = try container.decode(String.self, forKey: .source)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        skillsPath = try container.decode(String.self, forKey: .skillsPath)
+        linkType = try container.decode(String.self, forKey: .linkType)
+        isLinked = try container.decode(Bool.self, forKey: .isLinked)
+        linkedSkills = try container.decode([String].self, forKey: .linkedSkills)
+        hasParser = try container.decode(Bool.self, forKey: .hasParser)
+        hasLimits = try container.decode(Bool.self, forKey: .hasLimits)
+        detectCmd = try container.decodeIfPresent(String.self, forKey: .detectCmd)
+        isInstalled = try container.decodeIfPresent(Bool.self, forKey: .isInstalled) ?? false
+    }
 }
 
 struct SkillOperationResult: Codable {

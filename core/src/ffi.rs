@@ -448,7 +448,28 @@ pub extern "C" fn tt_skills_list_agents(handle: *mut CoreHandle) -> *mut c_char 
         Some(h) => h,
         None => return std::ptr::null_mut(),
     };
-    let agents = handle.skills.registry.all();
+    let mut agents = handle.skills.registry.all();
+    let install_status: std::collections::HashMap<String, bool> =
+        crate::skills::provider_config::detect_installed_agents_cached(
+            &handle.skills.config_dir,
+            &agents,
+            false,
+        )
+        .into_iter()
+        .collect();
+    for agent in &mut agents {
+        agent.is_installed = install_status.get(&agent.source).copied().unwrap_or(false);
+    }
+    agents.sort_by(|a, b| {
+        b.is_installed
+            .cmp(&a.is_installed)
+            .then_with(|| {
+                a.display_name
+                    .to_lowercase()
+                    .cmp(&b.display_name.to_lowercase())
+            })
+            .then_with(|| a.source.cmp(&b.source))
+    });
     to_json_cstring(&agents)
 }
 
@@ -1051,7 +1072,12 @@ pub extern "C" fn tt_skills_detect_installed(handle: *mut CoreHandle) -> *mut c_
         None => return std::ptr::null_mut(),
     };
     let providers = handle.skills.registry.all();
-    let results: Vec<(String, bool)> = crate::skills::provider_config::detect_installed_agents(&providers);
+    let results: Vec<(String, bool)> =
+        crate::skills::provider_config::detect_installed_agents_cached(
+            &handle.skills.config_dir,
+            &providers,
+            false,
+        );
     let map: std::collections::HashMap<String, bool> = results.into_iter().collect();
     to_json_cstring(&map)
 }
