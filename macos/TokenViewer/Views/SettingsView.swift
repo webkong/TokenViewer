@@ -21,27 +21,56 @@ struct SettingsView: View {
         return "\(home)/.tokenviewer"
     }()
 
-    var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(l10n.settingsTitle)
-                    .font(.system(size: 24, weight: .bold))
+    @State private var selectedSection: String = "general"
 
-                generalSection
-                appearanceSection
-                panelSection
-                limitsSection
-                skillsSection
-                dataSection
+    var body: some View {
+        HStack(spacing: 0) {
+            // MARK: Sidebar
+            List(selection: $selectedSection) {
+                Section(l10n.settingsTitle) {
+                    sidebarItem(id: "general", title: l10n.general, icon: "gear")
+                    sidebarItem(id: "appearance", title: l10n.appearance, icon: "paintpalette")
+                    sidebarItem(id: "menuBar", title: l10n.menuBarSectionTitle, icon: "menubar.rectangle")
+                    sidebarItem(id: "skills", title: l10n.skills, icon: "puzzlepiece.extension")
+                    sidebarItem(id: "data", title: l10n.dataManagement, icon: "externaldrive")
+                }
             }
-            .padding(20)
+            .listStyle(.sidebar)
+            .frame(width: 200)
+
+            Divider()
+
+            // MARK: Content
+            ScrollViewReader { proxy in
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        generalSection.id("general")
+                        appearanceSection.id("appearance")
+                        menuBarSection.id("menuBar")
+                        skillsSection.id("skills")
+                        dataSection.id("data")
+                    }
+                    .padding(20)
+                }
+                .background(Color(nsColor: .windowBackgroundColor))
+                .onChange(of: selectedSection) { _, new in
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        proxy.scrollTo(new, anchor: .top)
+                    }
+                }
+            }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .clearInitialFocus(trigger: selectedSection)
         .onAppear {
             if #available(macOS 13.0, *) {
                 launchAtLogin = SMAppService.mainApp.status == .enabled
             }
         }
+    }
+
+    private func sidebarItem(id: String, title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .tag(id)
     }
 
     // MARK: Appearance
@@ -89,13 +118,15 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: Menu Bar Panel
+    // MARK: Menu Bar
 
-    private var panelSection: some View {
-        SettingsCard(title: l10n.menuBarPanel) {
+    private var menuBarSection: some View {
+        let visible = LimitsVisibilityStore.visibleSet(from: limitsVisibleSources)
+
+        return SettingsCard(title: l10n.menuBarSectionTitle) {
+            // Popover panels
             Text(l10n.menuBarPanelDesc)
-                .font(.system(size: 11)).foregroundStyle(.secondary)
-            Divider()
+                .font(.system(size: 11, weight: .medium))
             HStack(spacing: 8) {
                 panelChip(title: l10n.summary, isSelected: true, isLocked: true) {}
                 panelChip(title: l10n.limits, isSelected: true, isLocked: true) {}
@@ -109,19 +140,12 @@ struct SettingsView: View {
                     panelShowModels.toggle()
                 }
             }
-        }
-    }
 
-    // MARK: Limits
-
-    private var limitsSection: some View {
-        let visible = LimitsVisibilityStore.visibleSet(from: limitsVisibleSources)
-
-        return SettingsCard(title: l10n.menuBarLimitsCards) {
-            Text(l10n.limitsVisibilityDesc)
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
             Divider()
+
+            // Limits card agent visibility
+            Text(l10n.limitsVisibilityDesc)
+                .font(.system(size: 11, weight: .medium))
             FlowLayout(itemSpacing: 6, rowSpacing: 6) {
                 ForEach(LimitsVisibilityStore.allSources, id: \.self) { source in
                     agentChip(
@@ -154,17 +178,20 @@ struct SettingsView: View {
             HStack {
                 Text(l10n.syncFrequency).font(.system(size: 13))
                 Picker("", selection: $syncFrequency) {
-                    Text("2 min").tag(2)
-                    Text("5 min").tag(5)
-                    Text("15 min").tag(15)
-                    Text("30 min").tag(30)
-                    Text("1 hour").tag(60)
+                    Text(l10n.sync2min).tag(2)
+                    Text(l10n.sync5min).tag(5)
+                    Text(l10n.sync15min).tag(15)
+                    Text(l10n.sync30min).tag(30)
+                    Text(l10n.sync1hour).tag(60)
                     Text(l10n.manual).tag(0)
                 }
                 .pickerStyle(.menu).labelsHidden().frame(width: 100)
                 .onChange(of: syncFrequency) { UsageViewModel.shared.startAutoSync() }
                 Spacer()
-                Button(action: { AppSyncCoordinator.shared.syncAll() }) {
+                Button(action: {
+                    AppSyncCoordinator.shared.syncAll()
+                    ToastCenter.shared.success(l10n.toastSynced)
+                }) {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.system(size: 13))
                         .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
@@ -307,7 +334,7 @@ struct SettingsView: View {
             // Source root
             VStack(alignment: .leading, spacing: 6) {
                 Text(l10n.skillsSourceRoot).font(.system(size: 11, weight: .medium))
-                HStack {
+                HStack(spacing: 6) {
                     TextField("~/.agents/skills", text: $skillsSourceRoot)
                         .textFieldStyle(.roundedBorder)
                     Button(l10n.openInFinder) {
@@ -319,13 +346,21 @@ struct SettingsView: View {
                         }
                     }
                     .font(.system(size: 11))
-                }
-                HStack {
-                    Spacer()
                     Button(l10n.save) {
+                        AppFocus.clear()
                         let payload: [String: String] = ["source_root": skillsSourceRoot.trimmingCharacters(in: .whitespaces)]
                         if let data = try? JSONSerialization.data(withJSONObject: payload) {
-                            _ = CoreBridge.shared.skillsSetGitConfig(data)
+                            let resultData = CoreBridge.shared.skillsSetGitConfig(data)
+                            if let resultData,
+                               let result = try? JSONDecoder().decode(SkillOperationResult.self, from: resultData),
+                               result.ok {
+                                SkillManagerViewModel.shared.refresh()
+                                ToastCenter.shared.success(l10n.toastSaved)
+                            } else {
+                                ToastCenter.shared.error(l10n.toastSaveFailed)
+                            }
+                        } else {
+                            ToastCenter.shared.error(l10n.toastSaveFailed)
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -338,13 +373,13 @@ struct SettingsView: View {
 
             // Agent participation — chip style
             VStack(alignment: .leading, spacing: 6) {
-                Text("参与 Skills 管理的 Agent")
+                Text(l10n.skillAgentParticipation)
                     .font(.system(size: 11, weight: .medium))
-                Text("启用的 Agent 将出现在 Skills 页面的筛选器中")
+                Text(l10n.skillAgentParticipationDesc)
                     .font(.system(size: 10)).foregroundStyle(.secondary)
 
                 if skillProviders.isEmpty {
-                    Text("Loading…").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(l10n.loading).font(.system(size: 11)).foregroundStyle(.secondary)
                 } else {
                     FlowLayout(itemSpacing: 6, rowSpacing: 6) {
                         ForEach(skillProviders) { p in
@@ -362,10 +397,18 @@ struct SettingsView: View {
         }
         .onAppear {
             loadSkillsConfig()
-            skillProviders = SkillManagerViewModel.shared.providers
+            loadSkillProviders()
         }
-        .onReceive(SkillManagerViewModel.shared.$providers) { providers in
-            skillProviders = providers
+    }
+
+    private func loadSkillProviders() {
+        guard skillProviders.isEmpty else { return }
+        Task.detached {
+            guard let data = CoreBridge.shared.skillsListAgents() else { return }
+            let decoder = JSONDecoder()
+            decoder.keyDecodingStrategy = .convertFromSnakeCase
+            let providers = (try? decoder.decode([SkillProvider].self, from: data)) ?? []
+            await MainActor.run { skillProviders = providers }
         }
     }
 
@@ -375,7 +418,9 @@ struct SettingsView: View {
             struct Config: Codable {
                 let sourceRoot: String
             }
-            guard let config = try? JSONDecoder().decode(Config.self, from: data) else { return }
+            let decoder = JSONDecoder()
+            decoder.keyDecodingStrategy = .convertFromSnakeCase
+            guard let config = try? decoder.decode(Config.self, from: data) else { return }
             await MainActor.run {
                 skillsSourceRoot = config.sourceRoot
             }
@@ -519,6 +564,7 @@ struct SettingsCard<Content: View>: View {
                     Spacer()
 
                     Button("Reset") {
+                        AppFocus.clear()
                         skillsPath = provider.skillsPath
                         linkType = "Directory"
                         onReset(provider.source)
@@ -528,6 +574,7 @@ struct SettingsCard<Content: View>: View {
                     .disabled(skillsPath == provider.skillsPath && linkType == "Directory")
 
                     Button("Save") {
+                        AppFocus.clear()
                         let path = skillsPath.trimmingCharacters(in: .whitespaces)
                         let pathVal: String? = path.isEmpty || path == provider.skillsPath ? nil : path
                         let ltVal: String? = linkType == "Directory" ? nil : linkType

@@ -73,19 +73,31 @@ impl SkillsCore {
         Ok(())
     }
 
-    pub fn organize_skill(&self, skill_id: &str, agent_id: &str) -> Result<(), String> {
-        let agent = self.registry.find(agent_id)
+    pub fn organize_skill(&mut self, skill_id: &str, agent_id: &str) -> Result<(), String> {
+        let agent = self
+            .registry
+            .find(agent_id)
             .ok_or_else(|| format!("Agent not found: {}", agent_id))?;
-        self.symlink.organize_skill(&agent, skill_id)
+        self.symlink.organize_skill(&agent, skill_id)?;
+        self.registry.link_skill(agent_id, skill_id)?;
+        Ok(())
     }
 
-    pub fn restore_skill(&self, skill_id: &str, agent_id: &str) -> Result<(), String> {
-        let agent = self.registry.find(agent_id)
+    pub fn restore_skill(&mut self, skill_id: &str, agent_id: &str) -> Result<(), String> {
+        let agent = self
+            .registry
+            .find(agent_id)
             .ok_or_else(|| format!("Agent not found: {}", agent_id))?;
-        let other_linked: Vec<String> = self.registry.all().iter()
+        let other_linked: Vec<String> = self
+            .registry
+            .all()
+            .iter()
             .filter(|a| a.source != agent_id && a.linked_skills.contains(&skill_id.to_string()))
             .map(|a| a.source.clone())
             .collect();
-        self.symlink.restore_skill(skill_id, &agent, &other_linked)
+        self.symlink
+            .restore_skill(skill_id, &agent, &other_linked)?;
+        self.registry.unlink_skill(agent_id, skill_id)?;
+        Ok(())
     }
 }

@@ -1,7 +1,12 @@
-use crate::models::{ModelPricing, UsageRecord};
 use super::data::{PricingEntry, PRICING_DATA};
+use crate::models::{ModelPricing, UsageRecord};
 
-const ZERO_PRICING: ModelPricing = ModelPricing { input: 0.0, output: 0.0, cache_read: 0.0, cache_write: 0.0 };
+const ZERO_PRICING: ModelPricing = ModelPricing {
+    input: 0.0,
+    output: 0.0,
+    cache_read: 0.0,
+    cache_write: 0.0,
+};
 
 /// Look up pricing, returning `None` when the model is unknown so callers can
 /// distinguish "unpriced/unknown" from a genuine zero price.

@@ -1,11 +1,20 @@
-use std::path::Path;
 use serde_json::Value;
+use std::path::Path;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
-    parse_pi_session(home_dir, cursor_data, ".omp/agent/sessions", "ohmypi", "omp-unknown")
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+    parse_pi_session(
+        home_dir,
+        cursor_data,
+        ".omp/agent/sessions",
+        "ohmypi",
+        "omp-unknown",
+    )
 }
 
 /// Shared parser for ohmypi/pi session JSONL files.
@@ -28,7 +37,9 @@ pub fn parse_pi_session(
 
     for file in files {
         let key = file.to_string_lossy().to_string();
-        if !cursor.file_changed(&key) { continue; }
+        if !cursor.file_changed(&key) {
+            continue;
+        }
         let offset = cursor.get_offset(&key);
         let (lines, new_offset) = match read_lines_from_offset(&file, offset) {
             Ok(r) => r,
@@ -49,7 +60,12 @@ pub fn parse_pi_session(
     Ok((aggregate_records(all_records), cursor.to_json()))
 }
 
-fn parse_line(v: &Value, source: &str, default_model: &str, cursor: &mut FileCursor) -> Option<UsageRecord> {
+fn parse_line(
+    v: &Value,
+    source: &str,
+    default_model: &str,
+    cursor: &mut FileCursor,
+) -> Option<UsageRecord> {
     if v.get("type").and_then(|t| t.as_str()) != Some("message") {
         return None;
     }
@@ -68,17 +84,38 @@ fn parse_line(v: &Value, source: &str, default_model: &str, cursor: &mut FileCur
     let input = usage.get("input").and_then(|x| x.as_u64()).unwrap_or(0);
     let output = usage.get("output").and_then(|x| x.as_u64()).unwrap_or(0);
     let cached = usage.get("cacheRead").and_then(|x| x.as_u64()).unwrap_or(0);
-    let cache_creation = usage.get("cacheWrite").and_then(|x| x.as_u64()).unwrap_or(0);
-    let reasoning = usage.get("reasoningTokens").and_then(|x| x.as_u64()).unwrap_or(0);
-    let total = usage.get("totalTokens").and_then(|x| x.as_u64())
+    let cache_creation = usage
+        .get("cacheWrite")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0);
+    let reasoning = usage
+        .get("reasoningTokens")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0);
+    let total = usage
+        .get("totalTokens")
+        .and_then(|x| x.as_u64())
         .unwrap_or(input + output + cached + cache_creation + reasoning);
-    if total == 0 { return None; }
+    if total == 0 {
+        return None;
+    }
 
-    let model = msg.get("model").and_then(|m| m.as_str()).unwrap_or(default_model).to_string();
+    let model = msg
+        .get("model")
+        .and_then(|m| m.as_str())
+        .unwrap_or(default_model)
+        .to_string();
 
     // Timestamp: message.timestamp (ms) or entry.timestamp (ISO)
-    let bucket = msg.get("timestamp").and_then(|t| t.as_i64()).and_then(epoch_millis_to_bucket)
-        .or_else(|| v.get("timestamp").and_then(|t| t.as_str()).map(iso_to_bucket))
+    let bucket = msg
+        .get("timestamp")
+        .and_then(|t| t.as_i64())
+        .and_then(epoch_millis_to_bucket)
+        .or_else(|| {
+            v.get("timestamp")
+                .and_then(|t| t.as_str())
+                .map(iso_to_bucket)
+        })
         .unwrap_or_else(now_bucket);
 
     Some(UsageRecord {

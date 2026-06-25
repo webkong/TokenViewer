@@ -151,9 +151,16 @@ final class L10n: ObservableObject {
     var rebuildDone: String { isZh ? "数据重建完成，请稍后刷新查看。" : "Data rebuild complete. Refresh to view the latest data." }
     var cancel: String { isZh ? "取消" : "Cancel" }
     var about: String { isZh ? "关于" : "About" }
+    var aboutSupportedAgents: String { isZh ? "支持的 Agent" : "Supported Agents" }
+    func aboutAgentCount(_ n: Int) -> String { isZh ? "\(n) 个 AI 编程工具" : "\(n) AI coding tools" }
+    func aboutLimitsCount(_ n: Int) -> String { isZh ? "\(n) 支持限额" : "\(n) with limits" }
+    func aboutOtherCount(_ n: Int) -> String { isZh ? "\(n) 其他" : "\(n) other" }
+    var aboutWithLimits: String { isZh ? "带限额订阅" : "With Limits" }
+    var aboutWithoutLimits: String { isZh ? "不带限额" : "Without Limits" }
 
     // MARK: - Skill Manager
     var skills: String { isZh ? "技能" : "Skills" }
+    var skillsSubtitle: String { isZh ? "统一管理已选 Agent 的技能，并同步共享目录与各 Agent 目录中的链接状态。" : "Manage skills for selected agents, including shared skills and per-agent links." }
     var skillSearchPlaceholder: String { isZh ? "搜索技能…" : "Search skills…" }
     var skillFilter: String { isZh ? "筛选" : "Filter" }
     var skillFetch: String { isZh ? "刷新" : "Fetch" }
@@ -165,9 +172,10 @@ final class L10n: ObservableObject {
     var skillSettings: String { isZh ? "设置" : "Settings" }
     var skillAll: String { isZh ? "全部" : "All" }
     var skillOperationFailed: String { isZh ? "技能操作失败" : "Skill operation failed" }
+    var skillNoBatchTargets: String { isZh ? "没有可处理的技能" : "No eligible skills" }
     var skillDeleteConfirm: String { isZh ? "确认删除此技能？此操作不可撤销。" : "Are you sure you want to delete this skill? This cannot be undone." }
     var skillNoSkills: String { isZh ? "暂无技能" : "No skills" }
-    var skillNoSkillsDesc: String { isZh ? "在 ~/.agents/skills 目录下添加技能目录（包含 SKILL.md）即可显示。" : "Add skill directories (with SKILL.md) under ~/.agents/skills to see them here." }
+    var skillNoSkillsDesc: String { isZh ? "在技能根目录或已选 Agent 的 skills 目录下添加包含 SKILL.md 的目录即可显示。" : "Add directories with SKILL.md under the skills source root or any selected agent skills directory." }
     var agentName: String { isZh ? "名称" : "Name" }
     var agentSkillsPath: String { isZh ? "技能路径" : "Skills Path" }
     var linkStrategy: String { isZh ? "链接策略" : "Link Strategy" }
@@ -177,6 +185,115 @@ final class L10n: ObservableObject {
     var push: String { isZh ? "推送" : "Push" }
     var skillsSourceRoot: String { isZh ? "技能根目录" : "Skills Source Root" }
     var save: String { isZh ? "保存" : "Save" }
+    var toastSaved: String { isZh ? "保存成功" : "Saved" }
+    var toastSaveFailed: String { isZh ? "保存失败" : "Save failed" }
+    var toastRefreshed: String { isZh ? "刷新成功" : "Refreshed" }
+    var toastSynced: String { isZh ? "同步成功" : "Synced" }
+    var toastPulled: String { isZh ? "拉取成功" : "Pulled" }
+    var toastPushed: String { isZh ? "推送成功" : "Pushed" }
+    var toastDeleted: String { isZh ? "删除成功" : "Deleted" }
+    var toastOrganized: String { isZh ? "整理成功" : "Organized" }
+    var toastRestored: String { isZh ? "还原成功" : "Restored" }
+    var toastLinked: String { isZh ? "链接成功" : "Linked" }
+    var toastUnlinked: String { isZh ? "取消链接成功" : "Unlinked" }
+    var toastReset: String { isZh ? "重置成功" : "Reset" }
+
+    // MARK: - Skill Git Sync Sheet
+    var gitSync: String { isZh ? "Git 同步" : "Git Sync" }
+    var gitStatus: String { isZh ? "状态" : "Status" }
+    var gitBranch: String { isZh ? "分支" : "Branch" }
+    var gitAhead: String { isZh ? "领先" : "Ahead" }
+    var gitBehind: String { isZh ? "落后" : "Behind" }
+    var gitPlatform: String { isZh ? "平台" : "Platform" }
+    var gitCustomGit: String { isZh ? "自定义 Git" : "Custom Git" }
+    var gitAuthentication: String { isZh ? "认证" : "Authentication" }
+    var gitToken: String { isZh ? "令牌" : "Token" }
+    var gitPendingChanges: String { isZh ? "待处理变更" : "Pending Changes" }
+    var gitNoPendingChanges: String { isZh ? "没有待处理变更" : "No pending changes"}
+    var gitNoBranch: String { isZh ? "(无分支)" : "(no branch)" }
+    var gitRemoteFormat: String { isZh ? "远程: %@" : "Remote: %@" }
+    var gitSaveConfig: String { isZh ? "保存配置" : "Save Config" }
+    var gitDone: String { isZh ? "完成" : "Done" }
+    var gitTokenPlaceholder: String { "Personal access token" }
+    var gitRepository: String { isZh ? "仓库" : "Repository" }
+    func gitRepositoryDesc(_ provider: String) -> String { isZh ? "输入用于同步 skills 的 \(provider) 仓库地址。" : "Enter the \(provider) repository URL used to sync skills." }
+    var gitAuthorize: String { isZh ? "授权" : "Authorize" }
+    var gitAuthorizeTip: String { isZh ? "配置 Git 平台和访问令牌" : "Configure git provider and authorization" }
+    var gitConfigRequired: String { isZh ? "请先配置仓库地址和访问令牌" : "Configure repository URL and token first" }
+    var gitChecking: String { isZh ? "检查中…" : "Checking…" }
+    var gitConnected: String { isZh ? "已连接" : "Connected" }
+    var gitDisconnected: String { isZh ? "未连接" : "Disconnected" }
+    var gitUpToDate: String { isZh ? "已是最新" : "Up to Date" }
+    var gitChangesPending: String { isZh ? "有待提交变更" : "Changes Pending" }
+    var gitConflicts: String { isZh ? "存在冲突" : "Merge Conflicts" }
+    var gitPushing: String { isZh ? "推送中…" : "Pushing…" }
+    var gitPulling: String { isZh ? "拉取中…" : "Pulling…" }
+    var gitError: String { isZh ? "错误" : "Error" }
+    var gitNotConfigured: String { isZh ? "未配置" : "Not Configured" }
+    var gitAuthorization: String { isZh ? "授权" : "Authorization" }
+    var gitProvider: String { isZh ? "Git 平台" : "Git Provider" }
+    var gitTokenStoredLocally: String { isZh ? "令牌仅保存在本机，并只用于 git pull/push。" : "Token is stored locally and used only for git push/pull." }
+    var gitTokenScopes: String { isZh ? "需要权限: repo 读写" : "Required scopes: repo read/write" }
+    var gitTokenSaved: String { isZh ? "令牌已保存" : "Token saved" }
+    var gitRemoveToken: String { isZh ? "移除令牌" : "Remove Token" }
+    var gitUpdateToken: String { isZh ? "更新" : "Update" }
+    func gitTokenHelpTitle(_ provider: String) -> String { isZh ? "如何创建 \(provider) Token" : "How to create a \(provider) token" }
+    func gitTokenHelpStep1(_ provider: String) -> String { isZh ? "登录 \(provider) 并打开 Access Tokens 设置" : "Open Access Tokens settings in \(provider)" }
+    var gitTokenHelpStep2: String { isZh ? "创建新的个人访问令牌" : "Create a new personal access token" }
+    var gitTokenHelpStep3: String { isZh ? "选择仓库读写权限" : "Select repository read/write scopes" }
+    var gitTokenHelpStep4: String { isZh ? "复制令牌并粘贴到这里" : "Copy the token and paste it here" }
+
+    // MARK: - Skill Manager additional
+    var skillGlobalBadge: String { isZh ? "全局" : "Global" }
+    var skillNoAgentsEnabled: String { isZh ? "未启用任何 Agent" : "No agents enabled" }
+    var skillRefreshTip: String { isZh ? "重新扫描技能根目录和已启用 Agent 的 skills 目录" : "Rescan the skills source root and enabled agent skills folders" }
+    var skillGitSyncTip: String { isZh ? "打开 Git 同步面板，配置远程仓库并同步技能目录" : "Open Git Sync to configure a remote repository and sync skills" }
+    var skillOrganizeAllTip: String { isZh ? "把当前筛选结果中尚未整理的技能移动到共享技能根目录" : "Organize all eligible skills in the current filtered list into the shared source root" }
+    var skillRestoreAllTip: String { isZh ? "把当前筛选结果中已整理的技能还原到原始 Agent 目录" : "Restore all organized skills in the current filtered list to their original agent folders" }
+    var skillAllFilterTip: String { isZh ? "显示所有已启用 Agent 可见的技能" : "Show skills visible to all enabled agents" }
+    func skillAgentFilterTip(_ agent: String) -> String { isZh ? "只显示 \(agent) 相关的技能" : "Show skills related to \(agent)" }
+    func skillOrganizeTip(_ agent: String) -> String { isZh ? "把此技能整理到共享技能根目录，并为 \(agent) 保持链接" : "Move this skill into the shared source root and keep \(agent) linked" }
+    func skillRestoreTip(_ agent: String) -> String { isZh ? "把此技能从共享技能根目录还原到 \(agent) 的 skills 目录" : "Restore this skill from the shared source root into \(agent)'s skills folder" }
+    var skillDeleteTip: String { isZh ? "删除此技能目录。此操作不可撤销" : "Delete this skill directory. This cannot be undone" }
+    func skillLinkTip(_ agent: String) -> String { isZh ? "为 \(agent) 创建此技能的符号链接" : "Create a symlink for \(agent)" }
+    func skillUnlinkTip(_ agent: String) -> String { isZh ? "移除 \(agent) 的此技能符号链接" : "Remove the symlink for \(agent)" }
+    func skillSourceLinkTip(_ agent: String) -> String { isZh ? "此技能来源于 \(agent)，点击可为它创建共享目录链接" : "This skill originated in \(agent); click to create a shared-root link" }
+    var gitDoneTip: String { isZh ? "关闭 Git 同步面板" : "Close the Git Sync panel" }
+    var gitPullTip: String { isZh ? "从远程仓库拉取最新技能变更" : "Pull the latest skill changes from the remote repository" }
+    var gitPushTip: String { isZh ? "把本地技能变更推送到远程仓库" : "Push local skill changes to the remote repository" }
+    var gitRefreshStatusTip: String { isZh ? "刷新当前 Git 分支和待处理变更状态" : "Refresh the current branch and pending Git changes" }
+    var gitSaveConfigTip: String { isZh ? "保存 Git 远程地址、平台和访问令牌" : "Save the Git remote URL, platform, and access token" }
+    var skillAgentParticipation: String { isZh ? "参与 Skills 管理的 Agent" : "Agents participating in Skills" }
+    var skillAgentParticipationDesc: String { isZh ? "启用的 Agent 将出现在 Skills 页面的筛选器中" : "Enabled agents appear as filters on the Skills page" }
+    var skillsSourceRootPlaceholder: String { isZh ? "~/.agents/skills" : "~/.agents/skills" }
+    var loading: String { isZh ? "加载中…" : "Loading…" }
+    var menuBarSectionTitle: String { isZh ? "菜单栏" : "Menu Bar" }
+
+    // MARK: - Usage section headers
+    var usageDaily: String { isZh ? "每日用量" : "Daily Usage" }
+    var usageModels: String { isZh ? "模型" : "Models" }
+    var usageTokenBreakdown: String { isZh ? "Token 分解" : "Token Breakdown" }
+    var usageProviders: String { isZh ? "数据源" : "Providers" }
+    var usageActivity: String { isZh ? "活跃度" : "Activity" }
+    var usageDailyDetails: String { isZh ? "每日明细" : "Daily Details" }
+    func usageActiveDays(_ n: Int) -> String { isZh ? "\(n) 天活跃" : "\(n) active days" }
+
+    // MARK: - Sync frequency
+    var sync2min: String { "2 min" }
+    var sync5min: String { "5 min" }
+    var sync15min: String { "15 min" }
+    var sync30min: String { "30 min" }
+    var sync1hour: String { "1 hour" }
+
+    // MARK: - Provider settings
+    var pathLabel: String { "Path" }
+    var linkLabel: String { "Link" }
+    var linkDirectory: String { "Directory" }
+    var linkSingleFile: String { "Single File" }
+    var linkOverlay: String { "Overlay" }
+
+    // MARK: - App
+    var appName: String { "Token Viewer" }
 
     private func dayCount(_ days: Int) -> String {
         days == 1 ? "1 day" : "\(days) days"

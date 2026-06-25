@@ -1,11 +1,14 @@
+use serde_json::Value;
 use std::env;
 use std::path::Path;
-use serde_json::Value;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     let mut cursor = FileCursor::from_json(cursor_data);
     let mut files_vec = Vec::new();
 
@@ -32,7 +35,9 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
 
     for file in files_vec {
         let key = file.to_string_lossy().to_string();
-        if !cursor.file_changed(&key) { continue; }
+        if !cursor.file_changed(&key) {
+            continue;
+        }
         let offset = cursor.get_offset(&key);
         let (lines, new_offset) = match read_lines_from_offset(&file, offset) {
             Ok(r) => r,
@@ -71,13 +76,19 @@ fn get_attr_str<'a>(attrs: &'a Value, key: &str) -> Option<&'a str> {
 
 fn get_attr_int(attrs: &Value, key: &str) -> Option<u64> {
     if let Some(obj) = attrs.as_object() {
-        return obj.get(key).and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())));
+        return obj.get(key).and_then(|v| {
+            v.as_u64()
+                .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+        });
     }
     if let Some(arr) = attrs.as_array() {
         for item in arr {
             if item.get("key").and_then(|k| k.as_str()) == Some(key) {
                 let val = item.get("value")?;
-                return val.get("intValue").and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())));
+                return val.get("intValue").and_then(|v| {
+                    v.as_u64()
+                        .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+                });
             }
         }
     }
@@ -89,15 +100,28 @@ fn parse_otel_record(v: &Value, cursor: &mut FileCursor) -> Option<UsageRecord> 
 
     // Filter: gen_ai.operation.name == "chat" or name starts with "chat "
     let is_chat = get_attr_str(attrs, "gen_ai.operation.name") == Some("chat")
-        || v.get("name").and_then(|n| n.as_str()).map(|n| n.starts_with("chat ")).unwrap_or(false);
-    if !is_chat { return None; }
+        || v.get("name")
+            .and_then(|n| n.as_str())
+            .map(|n| n.starts_with("chat "))
+            .unwrap_or(false);
+    if !is_chat {
+        return None;
+    }
 
     // Dedup: traceId:spanId or record id
-    let dedup_key = match (v.get("traceId").and_then(|t| t.as_str()), v.get("spanId").and_then(|s| s.as_str())) {
+    let dedup_key = match (
+        v.get("traceId").and_then(|t| t.as_str()),
+        v.get("spanId").and_then(|s| s.as_str()),
+    ) {
         (Some(t), Some(s)) => format!("{}:{}", t, s),
-        _ => v.get("id").and_then(|i| i.as_str()).map(|s| format!("resp:{}", s))?,
+        _ => v
+            .get("id")
+            .and_then(|i| i.as_str())
+            .map(|s| format!("resp:{}", s))?,
     };
-    if !cursor.mark_seen(&dedup_key) { return None; }
+    if !cursor.mark_seen(&dedup_key) {
+        return None;
+    }
 
     let raw_input = get_attr_int(attrs, "gen_ai.usage.input_tokens").unwrap_or(0);
     let output = get_attr_int(attrs, "gen_ai.usage.output_tokens").unwrap_or(0);
@@ -108,7 +132,9 @@ fn parse_otel_record(v: &Value, cursor: &mut FileCursor) -> Option<UsageRecord> 
     // input = raw_input - min(cache_read, raw_input)
     let input = raw_input - cache_read.min(raw_input);
     let total = input + output + cache_read + cache_write + reasoning;
-    if total == 0 { return None; }
+    if total == 0 {
+        return None;
+    }
 
     let model = get_attr_str(attrs, "gen_ai.response.model")
         .or_else(|| get_attr_str(attrs, "gen_ai.request.model"))

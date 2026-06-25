@@ -1,10 +1,13 @@
-use std::path::Path;
 use rusqlite::Connection;
+use std::path::Path;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     let db_path = home_dir.join(".hermes/state.db");
     if !db_path.exists() {
         return Ok((vec![], cursor_data.unwrap_or("{}").to_string()));
@@ -42,9 +45,16 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
     })?;
 
     for row in rows.flatten() {
-        let (id, model, started_at, ended_at, input, output, cache_read, cache_write, reasoning) = row;
+        let (id, model, started_at, ended_at, input, output, cache_read, cache_write, reasoning) =
+            row;
 
-        let cur = [input as u64, output as u64, cache_read as u64, cache_write as u64, reasoning as u64];
+        let cur = [
+            input as u64,
+            output as u64,
+            cache_read as u64,
+            cache_write as u64,
+            reasoning as u64,
+        ];
         let delta = cursor.delta(&id, cur);
         let [d_in, d_out, d_cr, d_cw, d_reason] = delta;
 

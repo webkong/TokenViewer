@@ -33,6 +33,8 @@ struct SkillOperationResult: Codable {
 }
 
 struct SkillGitStatus: Codable {
+    let status: String?
+    let message: String?
     let branch: String?
     let ahead: Int
     let behind: Int

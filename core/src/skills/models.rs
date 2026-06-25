@@ -8,11 +8,17 @@ pub struct SkillCommandResult {
 
 impl SkillCommandResult {
     pub fn ok() -> Self {
-        Self { ok: true, error: None }
+        Self {
+            ok: true,
+            error: None,
+        }
     }
 
     pub fn error(message: impl Into<String>) -> Self {
-        Self { ok: false, error: Some(message.into()) }
+        Self {
+            ok: false,
+            error: Some(message.into()),
+        }
     }
 }
 
@@ -59,38 +65,68 @@ pub struct GitStatusInfo {
 impl GitStatusInfo {
     pub fn idle() -> Self {
         Self {
-            status: "idle".into(), message: None,
-            branch: None, ahead: 0, behind: 0, has_changes: false, changes: vec![],
+            status: "idle".into(),
+            message: None,
+            branch: None,
+            ahead: 0,
+            behind: 0,
+            has_changes: false,
+            changes: vec![],
         }
     }
     pub fn modified(message: &str) -> Self {
         Self {
-            status: "modified".into(), message: Some(message.into()),
-            branch: None, ahead: 0, behind: 0, has_changes: true, changes: vec![],
+            status: "modified".into(),
+            message: Some(message.into()),
+            branch: None,
+            ahead: 0,
+            behind: 0,
+            has_changes: true,
+            changes: vec![],
         }
     }
     pub fn conflicted(message: &str) -> Self {
         Self {
-            status: "conflicted".into(), message: Some(message.into()),
-            branch: None, ahead: 0, behind: 0, has_changes: true, changes: vec![],
+            status: "conflicted".into(),
+            message: Some(message.into()),
+            branch: None,
+            ahead: 0,
+            behind: 0,
+            has_changes: true,
+            changes: vec![],
         }
     }
     pub fn pushing() -> Self {
         Self {
-            status: "pushing".into(), message: None,
-            branch: None, ahead: 0, behind: 0, has_changes: false, changes: vec![],
+            status: "pushing".into(),
+            message: None,
+            branch: None,
+            ahead: 0,
+            behind: 0,
+            has_changes: false,
+            changes: vec![],
         }
     }
     pub fn synced() -> Self {
         Self {
-            status: "synced".into(), message: None,
-            branch: None, ahead: 0, behind: 0, has_changes: false, changes: vec![],
+            status: "synced".into(),
+            message: None,
+            branch: None,
+            ahead: 0,
+            behind: 0,
+            has_changes: false,
+            changes: vec![],
         }
     }
     pub fn error(message: &str) -> Self {
         Self {
-            status: "error".into(), message: Some(message.into()),
-            branch: None, ahead: 0, behind: 0, has_changes: false, changes: vec![],
+            status: "error".into(),
+            message: Some(message.into()),
+            branch: None,
+            ahead: 0,
+            behind: 0,
+            has_changes: false,
+            changes: vec![],
         }
     }
 }
@@ -106,4 +142,3 @@ pub struct GitConnectivity {
     pub status: String,
     pub message: Option<String>,
 }
-

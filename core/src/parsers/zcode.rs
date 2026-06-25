@@ -1,8 +1,8 @@
-use std::path::Path;
 use rusqlite::Connection;
+use std::path::Path;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
 /// ZCode (智谱 / Z.ai coding agent) usage parser.
 ///
@@ -26,7 +26,10 @@ use super::utils::*;
 /// Rows with zero billable tokens (e.g. requests that hit rate-limit before
 /// generating anything, `status = 'error'` with no usage) and rows still
 /// `status = 'running'` (incomplete) are skipped.
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     let mut all_records = Vec::new();
     let mut cursor = FileCursor::from_json(cursor_data);
 
@@ -61,22 +64,32 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
     let mut stmt = conn.prepare(sql)?;
     let rows = stmt.query_map((last_ts, last_id.as_str()), |row| {
         Ok((
-            row.get::<_, String>(0)?,       // id
-            row.get::<_, i64>(1)?,          // started_at (epoch ms)
-            row.get::<_, String>(2)?,       // model_id
-            row.get::<_, i64>(3)?,          // input_tokens
-            row.get::<_, i64>(4)?,          // output_tokens
-            row.get::<_, i64>(5)?,          // reasoning_tokens
-            row.get::<_, i64>(6)?,          // cache_creation_input_tokens
-            row.get::<_, i64>(7)?,          // cache_read_input_tokens
-            row.get::<_, String>(8)?,       // status
+            row.get::<_, String>(0)?, // id
+            row.get::<_, i64>(1)?,    // started_at (epoch ms)
+            row.get::<_, String>(2)?, // model_id
+            row.get::<_, i64>(3)?,    // input_tokens
+            row.get::<_, i64>(4)?,    // output_tokens
+            row.get::<_, i64>(5)?,    // reasoning_tokens
+            row.get::<_, i64>(6)?,    // cache_creation_input_tokens
+            row.get::<_, i64>(7)?,    // cache_read_input_tokens
+            row.get::<_, String>(8)?, // status
         ))
     })?;
 
     let mut blocked_by_running = false;
 
     for row in rows.flatten() {
-        let (id, started_at, model_id, input, output, reasoning, cache_creation, cache_read, status) = row;
+        let (
+            id,
+            started_at,
+            model_id,
+            input,
+            output,
+            reasoning,
+            cache_creation,
+            cache_read,
+            status,
+        ) = row;
 
         // Skip incomplete requests, but keep the cursor pinned before them so
         // the row can be replayed after it transitions to completed.
@@ -113,7 +126,11 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
             None => continue,
         };
 
-        let model = if model_id.is_empty() { "zcode-agent".to_string() } else { model_id };
+        let model = if model_id.is_empty() {
+            "zcode-agent".to_string()
+        } else {
+            model_id
+        };
 
         all_records.push(UsageRecord {
             id: None,
@@ -131,7 +148,11 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
     }
 
     cursor.zcode_last_started_at = last_ts;
-    cursor.zcode_last_id = if last_id.is_empty() { None } else { Some(last_id.clone()) };
+    cursor.zcode_last_id = if last_id.is_empty() {
+        None
+    } else {
+        Some(last_id.clone())
+    };
     cursor.last_timestamp = Some(last_ts.to_string());
     Ok((aggregate_records(all_records), cursor.to_json()))
 }

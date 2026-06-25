@@ -69,7 +69,7 @@ struct PopoverView: View {
     private var header: some View {
         HStack {
             ProviderIconLogo()
-            Text("Token Viewer").font(.system(size: 13, weight: .bold))
+            Text(l10n.appName).font(.system(size: 13, weight: .bold))
             Spacer()
             Button(action: { AppSyncCoordinator.shared.syncAll() }) {
                 Image(systemName: "arrow.triangle.2.circlepath")
@@ -116,7 +116,7 @@ struct PopoverView: View {
     private var loading: some View {
         VStack(spacing: 8) {
             ProgressView().scaleEffect(0.8)
-            Text("Loading…").font(.system(size: 11)).foregroundColor(.secondary)
+            Text(l10n.loading).font(.system(size: 11)).foregroundColor(.secondary)
         }.frame(maxWidth: .infinity).padding(.vertical, 40)
     }
 

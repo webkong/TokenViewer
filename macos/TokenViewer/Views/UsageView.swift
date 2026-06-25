@@ -38,6 +38,23 @@ enum TVColor {
         case "pi": return "Pi"
         case "craft": return "Craft"
         case "everycode": return "EveryCode"
+        case "openclaude": return "OpenClaude"
+        case "devin": return "Devin"
+        case "ante": return "Ante"
+        case "autohand": return "Autohand Code"
+        case "aider": return "Aider"
+        case "amp": return "Amp"
+        case "crush": return "Charm"
+        case "aug": return "Auggie"
+        case "cline": return "Cline"
+        case "codebuff": return "Codebuff"
+        case "command-code": return "Command Code"
+        case "continue": return "Continue"
+        case "droid": return "Droid"
+        case "mistral-vibe": return "Mistral Vibe"
+        case "qwen-code": return "Qwen Code"
+        case "rovo": return "Rovo Dev"
+        case "omp": return "OMP"
         default: return source.trimmingCharacters(in: .whitespacesAndNewlines).capitalized
         }
     }
@@ -53,6 +70,11 @@ enum TVColor {
         case "cursor": return Color(red: 0.55, green: 0.36, blue: 0.96) // purple
         case "zcode": return Color(red: 0.31, green: 0.36, blue: 0.96) // #4f5cf5 indigo (Z.ai/BigModel)
         case "grok": return Color(red: 0.45, green: 0.45, blue: 0.5)
+        case "aider": return Color(red: 0.27, green: 0.80, blue: 0.51) // green
+        case "devin": return Color(red: 0.31, green: 0.51, blue: 0.96) // blue
+        case "openclaude": return Color(red: 0.88, green: 0.42, blue: 0.30) // warm orange
+        case "omp": return Color(red: 0.88, green: 0.30, blue: 0.55) // magenta/pink
+        case "cline": return Color(red: 0.96, green: 0.65, blue: 0.14) // amber
         default: return Color(red: 0.3, green: 0.7, blue: 0.55)
         }
     }
@@ -182,7 +204,10 @@ struct UsageView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button(action: { AppSyncCoordinator.shared.syncAll() }) {
+            Button(action: {
+                AppSyncCoordinator.shared.syncAll()
+                ToastCenter.shared.success(l10n.toastSynced)
+            }) {
                 Image(systemName: "arrow.triangle.2.circlepath")
                     .font(.system(size: 13, weight: .semibold))
                     .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))

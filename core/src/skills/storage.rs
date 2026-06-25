@@ -5,9 +5,7 @@ use crate::skills::models::SkillEntry;
 pub fn upsert_skills(db: &crate::storage::Database, skills: &[SkillEntry]) -> Result<(), String> {
     let conn = db.conn();
     let mut stmt = conn
-        .prepare(
-            "INSERT OR REPLACE INTO skills_settings (key, value) VALUES (?1, ?2)",
-        )
+        .prepare("INSERT OR REPLACE INTO skills_settings (key, value) VALUES (?1, ?2)")
         .map_err(|e| format!("Failed to prepare upsert: {}", e))?;
 
     for skill in skills {
@@ -21,17 +19,11 @@ pub fn upsert_skills(db: &crate::storage::Database, skills: &[SkillEntry]) -> Re
         ])
         .map_err(|e| format!("Failed to upsert skill name {}: {}", skill.id, e))?;
 
-        stmt.execute(params![
-            format!("skill:{}:tags", skill.id),
-            tags_json,
-        ])
-        .map_err(|e| format!("Failed to upsert skill tags {}: {}", skill.id, e))?;
+        stmt.execute(params![format!("skill:{}:tags", skill.id), tags_json,])
+            .map_err(|e| format!("Failed to upsert skill tags {}: {}", skill.id, e))?;
 
-        stmt.execute(params![
-            format!("skill:{}:agents", skill.id),
-            agents_json,
-        ])
-        .map_err(|e| format!("Failed to upsert skill agents {}: {}", skill.id, e))?;
+        stmt.execute(params![format!("skill:{}:agents", skill.id), agents_json,])
+            .map_err(|e| format!("Failed to upsert skill agents {}: {}", skill.id, e))?;
 
         stmt.execute(params![
             format!("skill:{}:description", skill.id),

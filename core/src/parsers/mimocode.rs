@@ -1,10 +1,13 @@
-use std::path::Path;
 use rusqlite::Connection;
+use std::path::Path;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     let mut all_records = Vec::new();
     let mut cursor = FileCursor::from_json(cursor_data);
 
@@ -21,7 +24,8 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
     let conn = Connection::open(&db_path)?;
 
     // last_rowid stores the max rowid we've seen (more reliable than time_created)
-    let last_rowid: i64 = cursor.last_timestamp
+    let last_rowid: i64 = cursor
+        .last_timestamp
         .as_deref()
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
@@ -70,10 +74,19 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
 
         let input = tokens.get("input").and_then(|x| x.as_u64()).unwrap_or(0);
         let output = tokens.get("output").and_then(|x| x.as_u64()).unwrap_or(0);
-        let reasoning = tokens.get("reasoning").and_then(|x| x.as_u64()).unwrap_or(0);
+        let reasoning = tokens
+            .get("reasoning")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0);
         let cache = tokens.get("cache");
-        let cache_read = cache.and_then(|c| c.get("read")).and_then(|x| x.as_u64()).unwrap_or(0);
-        let cache_write = cache.and_then(|c| c.get("write")).and_then(|x| x.as_u64()).unwrap_or(0);
+        let cache_read = cache
+            .and_then(|c| c.get("read"))
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0);
+        let cache_write = cache
+            .and_then(|c| c.get("write"))
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0);
         let total = input + output + reasoning + cache_read + cache_write;
 
         if total == 0 {

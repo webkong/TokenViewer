@@ -18,6 +18,7 @@ void tt_free_string(char* _Nullable ptr);
 void tt_destroy(CoreHandle* _Nullable handle);
 
 char* _Nullable tt_skills_list(CoreHandle* _Nullable handle);
+char* _Nullable tt_skills_list_for_agents(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_list_agents(CoreHandle* _Nullable handle);
 char* _Nullable tt_skills_organize(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_delete(CoreHandle* _Nullable handle, const char* _Nonnull json);

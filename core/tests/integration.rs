@@ -22,8 +22,13 @@ fn test_full_sync() {
     assert!(result.errors.len() <= 23); // at most one error per provider
 
     // Verify cost computation does not panic and pricing resolves.
-    let rows = db.aggregate_by_model("2020-01-01T00:00:00Z", "2030-01-01T00:00:00Z").unwrap();
-    let total_cost: f64 = rows.iter().map(tokenviewer_core::pricing::compute_row_cost).sum();
+    let rows = db
+        .aggregate_by_model("2020-01-01T00:00:00Z", "2030-01-01T00:00:00Z")
+        .unwrap();
+    let total_cost: f64 = rows
+        .iter()
+        .map(tokenviewer_core::pricing::compute_row_cost)
+        .sum();
     println!("Models: {}, total cost: ${:.2}", rows.len(), total_cost);
     assert!(total_cost >= 0.0);
 }

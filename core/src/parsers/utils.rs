@@ -47,7 +47,11 @@ pub const MAX_FILE_SIZE: u64 = 100 * 1024 * 1024;
 pub fn read_to_string_capped(path: &Path) -> Option<String> {
     let len = fs::metadata(path).ok()?.len();
     if len > MAX_FILE_SIZE {
-        eprintln!("tokenviewer: skipping oversized file ({} bytes): {}", len, path.display());
+        eprintln!(
+            "tokenviewer: skipping oversized file ({} bytes): {}",
+            len,
+            path.display()
+        );
         return None;
     }
     fs::read_to_string(path).ok()
@@ -190,7 +194,11 @@ impl FileCursor {
         let prev = self.snapshots.get(key).copied().unwrap_or([0; 5]);
         let mut out = [0u64; 5];
         for i in 0..5 {
-            out[i] = if cur[i] >= prev[i] { cur[i] - prev[i] } else { cur[i] };
+            out[i] = if cur[i] >= prev[i] {
+                cur[i] - prev[i]
+            } else {
+                cur[i]
+            };
         }
         self.snapshots.insert(key.to_string(), cur);
         out
@@ -241,7 +249,10 @@ impl FileCursor {
         self.dir_mtimes.insert(dir_key, max_mtime);
         self.dir_files.insert(
             pattern.to_string(),
-            files.iter().map(|p| p.to_string_lossy().to_string()).collect(),
+            files
+                .iter()
+                .map(|p| p.to_string_lossy().to_string())
+                .collect(),
         );
         files
     }

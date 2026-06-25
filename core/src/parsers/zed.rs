@@ -1,11 +1,14 @@
-use std::path::Path;
 use rusqlite::Connection;
 use serde_json::Value;
+use std::path::Path;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     #[cfg(target_os = "macos")]
     let db_path = home_dir.join("Library/Application Support/Zed/threads/threads.db");
     #[cfg(target_os = "linux")]
@@ -25,9 +28,7 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
     let last_ts = cursor.last_timestamp.clone().unwrap_or_default();
     let conn = Connection::open(&db_path)?;
 
-    let mut stmt = conn.prepare(
-        "SELECT id, updated_at, data_type, data FROM threads"
-    )?;
+    let mut stmt = conn.prepare("SELECT id, updated_at, data_type, data FROM threads")?;
 
     let mut records = Vec::new();
     let mut max_ts = last_ts.clone();
@@ -55,7 +56,10 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
         };
 
         // Only count zed.dev provider
-        let provider = data.pointer("/model/provider").and_then(|p| p.as_str()).unwrap_or("");
+        let provider = data
+            .pointer("/model/provider")
+            .and_then(|p| p.as_str())
+            .unwrap_or("");
         if provider != "zed.dev" {
             continue;
         }
@@ -65,10 +69,22 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
             None => continue,
         };
 
-        let input = usage.get("input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-        let output = usage.get("output_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-        let cache_read = usage.get("cache_read_input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-        let cache_write = usage.get("cache_creation_input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
+        let input = usage
+            .get("input_tokens")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0);
+        let output = usage
+            .get("output_tokens")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0);
+        let cache_read = usage
+            .get("cache_read_input_tokens")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0);
+        let cache_write = usage
+            .get("cache_creation_input_tokens")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0);
 
         let cur = [input, output, cache_read, cache_write, 0];
         let delta = cursor.delta(&id, cur);
@@ -79,7 +95,8 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
             continue;
         }
 
-        let model = data.pointer("/model/model")
+        let model = data
+            .pointer("/model/model")
             .and_then(|m| m.as_str())
             .unwrap_or("zed-unknown")
             .to_string();

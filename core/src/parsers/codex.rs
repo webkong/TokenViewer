@@ -1,10 +1,13 @@
-use std::path::Path;
 use serde_json::Value;
+use std::path::Path;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     parse_codex_format(home_dir, cursor_data, ".codex/sessions", "codex")
 }
 
@@ -43,11 +46,7 @@ pub fn parse_codex_format(
             .cloned()
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| String::from("unknown"));
-        let mut last_provider = cursor
-            .last_providers
-            .get(&key)
-            .cloned()
-            .unwrap_or_default();
+        let mut last_provider = cursor.last_providers.get(&key).cloned().unwrap_or_default();
         let (lines, new_offset) = match read_lines_from_offset(&file, start_offset) {
             Ok(r) => r,
             Err(_) => continue,
@@ -91,8 +90,13 @@ pub fn parse_codex_format(
             }
 
             // Check for token_count in payload.type or payload.msg.type
-            let is_token_count = payload.get("type").and_then(|t| t.as_str()) == Some("token_count")
-                || payload.get("msg").and_then(|m| m.get("type")).and_then(|t| t.as_str()) == Some("token_count");
+            let is_token_count = payload.get("type").and_then(|t| t.as_str())
+                == Some("token_count")
+                || payload
+                    .get("msg")
+                    .and_then(|m| m.get("type"))
+                    .and_then(|t| t.as_str())
+                    == Some("token_count");
 
             if !is_token_count {
                 continue;
@@ -101,7 +105,11 @@ pub fn parse_codex_format(
             let info = if payload.get("type").and_then(|t| t.as_str()) == Some("token_count") {
                 payload.get("info").cloned().unwrap_or(Value::Null)
             } else {
-                payload.get("msg").and_then(|m| m.get("info")).cloned().unwrap_or(Value::Null)
+                payload
+                    .get("msg")
+                    .and_then(|m| m.get("info"))
+                    .cloned()
+                    .unwrap_or(Value::Null)
             };
 
             // Prefer total_token_usage (cumulative) with delta, fallback to last_token_usage
@@ -113,11 +121,26 @@ pub fn parse_codex_format(
                 continue;
             };
 
-            let raw_input = usage.get("input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-            let output = usage.get("output_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-            let cached = usage.get("cached_input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-            let cache_creation = usage.get("cache_creation_input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-            let reasoning = usage.get("reasoning_output_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
+            let raw_input = usage
+                .get("input_tokens")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
+            let output = usage
+                .get("output_tokens")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
+            let cached = usage
+                .get("cached_input_tokens")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
+            let cache_creation = usage
+                .get("cache_creation_input_tokens")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
+            let reasoning = usage
+                .get("reasoning_output_tokens")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
 
             let (fi, fo, fc_read, fc_write, fr) = if use_delta {
                 // Delta on raw values first, then normalize input -= cached
@@ -125,7 +148,13 @@ pub fn parse_codex_format(
                 let d = cursor.delta(&key, cur);
                 (d[0].saturating_sub(d[2]), d[1], d[2], d[3], d[4])
             } else {
-                (raw_input.saturating_sub(cached), output, cached, cache_creation, reasoning)
+                (
+                    raw_input.saturating_sub(cached),
+                    output,
+                    cached,
+                    cache_creation,
+                    reasoning,
+                )
             };
 
             let total = fi + fo + fc_read + fc_write + fr;
@@ -133,7 +162,8 @@ pub fn parse_codex_format(
                 continue;
             }
 
-            let hour_start = v.get("timestamp")
+            let hour_start = v
+                .get("timestamp")
                 .and_then(|t| t.as_str())
                 .map(iso_to_bucket)
                 .unwrap_or_else(|| bucket.clone());

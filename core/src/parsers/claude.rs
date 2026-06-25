@@ -1,38 +1,51 @@
-use std::path::Path;
 use serde_json::Value;
+use std::path::Path;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
 /// Parse Claude Code JSONL logs from ~/.claude/projects/
 /// Lines with "usage" field contain message.usage or usage with token data.
 /// Model is in message.model or model field.
 fn parse_claude_line(v: &Value, source: &str) -> Option<UsageRecord> {
     // Usage can be at message.usage or top-level usage
-    let usage = v.pointer("/message/usage")
-        .or_else(|| v.get("usage"))?;
+    let usage = v.pointer("/message/usage").or_else(|| v.get("usage"))?;
 
     if !usage.is_object() {
         return None;
     }
 
     // Skip if no valid timestamp
-    let hour_start = v.get("timestamp")
+    let hour_start = v
+        .get("timestamp")
         .and_then(|t| t.as_str())
         .filter(|s| !s.is_empty())
         .map(iso_to_bucket)?;
 
     // Model from message.model or top-level model
-    let model = v.pointer("/message/model")
+    let model = v
+        .pointer("/message/model")
         .or_else(|| v.get("model"))
         .and_then(|m| m.as_str())
         .unwrap_or("claude-unknown")
         .to_string();
 
-    let input = usage.get("input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-    let output = usage.get("output_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-    let cache_creation = usage.get("cache_creation_input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-    let cache_read = usage.get("cache_read_input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
+    let input = usage
+        .get("input_tokens")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0);
+    let output = usage
+        .get("output_tokens")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0);
+    let cache_creation = usage
+        .get("cache_creation_input_tokens")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0);
+    let cache_read = usage
+        .get("cache_read_input_tokens")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0);
     let total = input + output + cache_creation + cache_read;
 
     if total == 0 {
@@ -66,7 +79,10 @@ fn claude_user_has_text(v: &Value) -> bool {
     }
 }
 
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     parse_claude_format(home_dir, cursor_data, ".claude/projects", "claude")
 }
 
@@ -124,7 +140,10 @@ pub fn parse_claude_format(
                 continue;
             }
             // Dedup by message.id + requestId
-            let msg_id = v.pointer("/message/id").and_then(|id| id.as_str()).unwrap_or("");
+            let msg_id = v
+                .pointer("/message/id")
+                .and_then(|id| id.as_str())
+                .unwrap_or("");
             if !msg_id.is_empty() {
                 let req_id = v.get("requestId").and_then(|id| id.as_str()).unwrap_or("");
                 let dedup_key = if !req_id.is_empty() {

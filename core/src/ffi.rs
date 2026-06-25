@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::path::PathBuf;
@@ -42,16 +43,33 @@ pub extern "C" fn tt_init(db_path: *const c_char) -> *mut CoreHandle {
 
     match Database::open(&path) {
         Ok(db) => {
+            let config_dir = home_dir.join(".agents");
+            let persisted_config = load_skills_config(&config_dir);
             let source_root = std::env::var("TOKENVIEWER_SKILLS_ROOT")
-                .map(PathBuf::from)
-                .unwrap_or_else(|_| home_dir.join(".agents").join("skills"));
+                .ok()
+                .and_then(|raw| crate::skills::provider_config::expand_path(&raw).ok())
+                .or_else(|| {
+                    persisted_config
+                        .as_ref()
+                        .and_then(|c| c.source_root.clone())
+                })
+                .unwrap_or_else(|| home_dir.join(".agents").join("skills"));
 
-            let skills = match crate::skills::SkillsCore::new(&db, source_root) {
+            let mut skills = match crate::skills::SkillsCore::new(&db, source_root) {
                 Ok(skills) => skills,
                 Err(_) => return std::ptr::null_mut(),
             };
+            if let Some(config) = persisted_config {
+                skills.git_remote_url = config.git_remote_url;
+                skills.git_platform = config.git_platform;
+            }
 
-            Box::into_raw(Box::new(CoreHandle { db, db_path: path, home_dir, skills }))
+            Box::into_raw(Box::new(CoreHandle {
+                db,
+                db_path: path,
+                home_dir,
+                skills,
+            }))
         }
         Err(_) => std::ptr::null_mut(),
     }
@@ -116,10 +134,28 @@ pub extern "C" fn tt_get_provider_status(handle: *mut CoreHandle) -> *mut c_char
         None => return std::ptr::null_mut(),
     };
     let sources = [
-        "claude", "codex", "cursor", "gemini", "kiro", "opencode", "openclaw",
-        "everycode", "hermes", "copilot", "kimi", "grok", "antigravity",
-        "roocode", "kilocode", "kilocli", "zed", "goose", "ohmypi", "pi",
-        "craft", "codebuddy",
+        "claude",
+        "codex",
+        "cursor",
+        "gemini",
+        "kiro",
+        "opencode",
+        "openclaw",
+        "everycode",
+        "hermes",
+        "copilot",
+        "kimi",
+        "grok",
+        "antigravity",
+        "roocode",
+        "kilocode",
+        "kilocli",
+        "zed",
+        "goose",
+        "ohmypi",
+        "pi",
+        "craft",
+        "codebuddy",
     ];
 
     let statuses: Vec<serde_json::Value> = sources
@@ -321,10 +357,85 @@ pub extern "C" fn tt_skills_list(handle: *mut CoreHandle) -> *mut c_char {
         Some(h) => h,
         None => return std::ptr::null_mut(),
     };
-    match handle.skills.scanner.scan_all() {
+    match scan_skills_for_agents(handle, &[]) {
         Ok(skills) => to_json_cstring(&skills),
         Err(e) => to_json_cstring(&serde_json::json!({ "error": e.to_string() })),
     }
+}
+
+/// List scanned skills from source root plus selected agent skill directories.
+/// Takes JSON: {"agent_ids": ["claude", "codex", ...]}.
+///
+/// # Safety
+/// `handle` must be valid; `json` must be a valid NUL-terminated C string.
+#[no_mangle]
+pub extern "C" fn tt_skills_list_for_agents(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let handle = match unsafe { handle.as_ref() } {
+        Some(h) => h,
+        None => return std::ptr::null_mut(),
+    };
+    if json.is_null() {
+        return to_json_cstring(&serde_json::json!({ "error": "Null json" }));
+    }
+
+    #[derive(serde::Deserialize)]
+    struct ListSkillsReq {
+        #[serde(default)]
+        agent_ids: Vec<String>,
+    }
+
+    let s = match unsafe { CStr::from_ptr(json) }.to_str() {
+        Ok(s) => s,
+        Err(e) => return to_json_cstring(&serde_json::json!({ "error": e.to_string() })),
+    };
+    let req: ListSkillsReq = match serde_json::from_str(s) {
+        Ok(req) => req,
+        Err(e) => return to_json_cstring(&serde_json::json!({ "error": e.to_string() })),
+    };
+
+    match scan_skills_for_agents(handle, &req.agent_ids) {
+        Ok(skills) => to_json_cstring(&skills),
+        Err(e) => to_json_cstring(&serde_json::json!({ "error": e.to_string() })),
+    }
+}
+
+fn scan_skills_for_agents(
+    handle: &CoreHandle,
+    agent_ids: &[String],
+) -> Result<Vec<crate::skills::models::SkillEntry>, String> {
+    let mut by_id: HashMap<String, crate::skills::models::SkillEntry> = HashMap::new();
+
+    for skill in handle.skills.scanner.scan_all()? {
+        by_id.insert(skill.id.clone(), skill);
+    }
+
+    for agent_id in agent_ids {
+        let Some(agent) = handle.skills.registry.find(agent_id) else {
+            continue;
+        };
+        let path = match crate::skills::provider_config::expand_path(&agent.skills_path) {
+            Ok(path) => path,
+            Err(_) => continue,
+        };
+        if let Ok(skills) = handle.skills.scanner.scan_path(&path) {
+            for skill in skills {
+                by_id.entry(skill.id.clone()).or_insert(skill);
+            }
+        }
+    }
+
+    let mut skills: Vec<_> = by_id.into_values().collect();
+    skills.sort_by(|a, b| {
+        a.manifest
+            .name
+            .to_lowercase()
+            .cmp(&b.manifest.name.to_lowercase())
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    Ok(skills)
 }
 
 /// List all registered agents (builtin + custom). Returns JSON array.
@@ -356,7 +467,9 @@ pub extern "C" fn tt_skills_git_status(handle: *mut CoreHandle) -> *mut c_char {
             Ok(status) => to_json_cstring(&status),
             Err(e) => to_json_cstring(&serde_json::json!({ "error": e.to_string() })),
         },
-        None => to_json_cstring(&crate::skills::models::GitStatusInfo::error("No git repository")),
+        None => to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git repository",
+        )),
     }
 }
 
@@ -369,15 +482,24 @@ pub extern "C" fn tt_skills_git_status(handle: *mut CoreHandle) -> *mut c_char {
 pub extern "C" fn tt_skills_organize(handle: *mut CoreHandle, json: *const c_char) -> *mut c_char {
     let handle = match unsafe { handle.as_mut() } {
         Some(h) => h,
-        None => return to_json_cstring(&crate::skills::models::SkillCommandResult::error("Null handle")),
+        None => {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+                "Null handle",
+            ))
+        }
     };
 
     if json.is_null() {
-        return to_json_cstring(&crate::skills::models::SkillCommandResult::error("Null json"));
+        return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+            "Null json",
+        ));
     }
 
     #[derive(serde::Deserialize)]
-    struct SkillOperationReq { skill_id: String, agent_id: Option<String> }
+    struct SkillOperationReq {
+        skill_id: String,
+        agent_id: Option<String>,
+    }
 
     let req: SkillOperationReq = match unsafe { from_cstring_json(json) } {
         Ok(r) => r,
@@ -386,7 +508,11 @@ pub extern "C" fn tt_skills_organize(handle: *mut CoreHandle, json: *const c_cha
 
     // Use provided agent_id, or default to first agent in registry
     let agent_id = req.agent_id.unwrap_or_else(|| {
-        handle.skills.registry.all().first()
+        handle
+            .skills
+            .registry
+            .all()
+            .first()
             .map(|a| a.source.clone())
             .unwrap_or_default()
     });
@@ -405,15 +531,23 @@ pub extern "C" fn tt_skills_organize(handle: *mut CoreHandle, json: *const c_cha
 pub extern "C" fn tt_skills_delete(handle: *mut CoreHandle, json: *const c_char) -> *mut c_char {
     let handle = match unsafe { handle.as_mut() } {
         Some(h) => h,
-        None => return to_json_cstring(&crate::skills::models::SkillCommandResult::error("Null handle")),
+        None => {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+                "Null handle",
+            ))
+        }
     };
 
     if json.is_null() {
-        return to_json_cstring(&crate::skills::models::SkillCommandResult::error("Null json"));
+        return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+            "Null json",
+        ));
     }
 
     #[derive(serde::Deserialize)]
-    struct SkillIdReq { skill_id: String }
+    struct SkillIdReq {
+        skill_id: String,
+    }
 
     let req: SkillIdReq = match unsafe { from_cstring_json(json) } {
         Ok(r) => r,
@@ -435,15 +569,24 @@ pub extern "C" fn tt_skills_delete(handle: *mut CoreHandle, json: *const c_char)
 pub extern "C" fn tt_skills_restore(handle: *mut CoreHandle, json: *const c_char) -> *mut c_char {
     let handle = match unsafe { handle.as_mut() } {
         Some(h) => h,
-        None => return to_json_cstring(&crate::skills::models::SkillCommandResult::error("Null handle")),
+        None => {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+                "Null handle",
+            ))
+        }
     };
 
     if json.is_null() {
-        return to_json_cstring(&crate::skills::models::SkillCommandResult::error("Null json"));
+        return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+            "Null json",
+        ));
     }
 
     #[derive(serde::Deserialize)]
-    struct SkillOperationReq { skill_id: String, agent_id: Option<String> }
+    struct SkillOperationReq {
+        skill_id: String,
+        agent_id: Option<String>,
+    }
 
     let req: SkillOperationReq = match unsafe { from_cstring_json(json) } {
         Ok(r) => r,
@@ -451,7 +594,11 @@ pub extern "C" fn tt_skills_restore(handle: *mut CoreHandle, json: *const c_char
     };
 
     let agent_id = req.agent_id.unwrap_or_else(|| {
-        handle.skills.registry.all().first()
+        handle
+            .skills
+            .registry
+            .all()
+            .first()
             .map(|a| a.source.clone())
             .unwrap_or_default()
     });
@@ -471,14 +618,23 @@ pub extern "C" fn tt_skills_restore(handle: *mut CoreHandle, json: *const c_char
 pub extern "C" fn tt_skills_link(handle: *mut CoreHandle, json: *const c_char) -> *mut c_char {
     let handle = match unsafe { handle.as_mut() } {
         Some(h) => h,
-        None => return to_json_cstring(&crate::skills::models::SkillCommandResult::error("Null handle")),
+        None => {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+                "Null handle",
+            ))
+        }
     };
     if json.is_null() {
-        return to_json_cstring(&crate::skills::models::SkillCommandResult::error("Null json"));
+        return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+            "Null json",
+        ));
     }
 
     #[derive(serde::Deserialize)]
-    struct LinkReq { skill_id: String, agent_id: String }
+    struct LinkReq {
+        skill_id: String,
+        agent_id: String,
+    }
 
     let req: LinkReq = match unsafe { from_cstring_json(json) } {
         Ok(r) => r,
@@ -487,12 +643,23 @@ pub extern "C" fn tt_skills_link(handle: *mut CoreHandle, json: *const c_char) -
 
     let agent = match handle.skills.registry.find(&req.agent_id) {
         Some(a) => a,
-        None => return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
-            format!("Agent not found: {}", req.agent_id))),
+        None => {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(format!(
+                "Agent not found: {}",
+                req.agent_id
+            )))
+        }
     };
-    match handle.skills.symlink.create_skill_link(&agent, &req.skill_id) {
+    match handle
+        .skills
+        .symlink
+        .create_skill_link(&agent, &req.skill_id)
+    {
         Ok(()) => {
-            let _ = handle.skills.registry.link_skill(&req.agent_id, &req.skill_id);
+            let _ = handle
+                .skills
+                .registry
+                .link_skill(&req.agent_id, &req.skill_id);
             to_json_cstring(&crate::skills::models::SkillCommandResult::ok())
         }
         Err(e) => to_json_cstring(&crate::skills::models::SkillCommandResult::error(e)),
@@ -508,14 +675,23 @@ pub extern "C" fn tt_skills_link(handle: *mut CoreHandle, json: *const c_char) -
 pub extern "C" fn tt_skills_unlink(handle: *mut CoreHandle, json: *const c_char) -> *mut c_char {
     let handle = match unsafe { handle.as_mut() } {
         Some(h) => h,
-        None => return to_json_cstring(&crate::skills::models::SkillCommandResult::error("Null handle")),
+        None => {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+                "Null handle",
+            ))
+        }
     };
     if json.is_null() {
-        return to_json_cstring(&crate::skills::models::SkillCommandResult::error("Null json"));
+        return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+            "Null json",
+        ));
     }
 
     #[derive(serde::Deserialize)]
-    struct LinkReq { skill_id: String, agent_id: String }
+    struct LinkReq {
+        skill_id: String,
+        agent_id: String,
+    }
 
     let req: LinkReq = match unsafe { from_cstring_json(json) } {
         Ok(r) => r,
@@ -524,12 +700,23 @@ pub extern "C" fn tt_skills_unlink(handle: *mut CoreHandle, json: *const c_char)
 
     let agent = match handle.skills.registry.find(&req.agent_id) {
         Some(a) => a,
-        None => return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
-            format!("Agent not found: {}", req.agent_id))),
+        None => {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(format!(
+                "Agent not found: {}",
+                req.agent_id
+            )))
+        }
     };
-    match handle.skills.symlink.remove_skill_link(&agent, &req.skill_id) {
+    match handle
+        .skills
+        .symlink
+        .remove_skill_link(&agent, &req.skill_id)
+    {
         Ok(()) => {
-            let _ = handle.skills.registry.unlink_skill(&req.agent_id, &req.skill_id);
+            let _ = handle
+                .skills
+                .registry
+                .unlink_skill(&req.agent_id, &req.skill_id);
             to_json_cstring(&crate::skills::models::SkillCommandResult::ok())
         }
         Err(e) => to_json_cstring(&crate::skills::models::SkillCommandResult::error(e)),
@@ -542,7 +729,10 @@ pub extern "C" fn tt_skills_unlink(handle: *mut CoreHandle, json: *const c_char)
 /// # Safety
 /// `handle` must be valid; `json` must be a valid NUL-terminated C string.
 #[no_mangle]
-pub extern "C" fn tt_skills_add_custom_agent(handle: *mut CoreHandle, json: *const c_char) -> *mut c_char {
+pub extern "C" fn tt_skills_add_custom_agent(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
     let handle = match unsafe { handle.as_mut() } {
         Some(h) => h,
         None => return std::ptr::null_mut(),
@@ -571,7 +761,11 @@ pub extern "C" fn tt_skills_add_custom_agent(handle: *mut CoreHandle, json: *con
         None => None,
     };
 
-    match handle.skills.registry.set_override(&req.source, req.skills_path, link_type) {
+    match handle
+        .skills
+        .registry
+        .set_override(&req.source, req.skills_path, link_type)
+    {
         Ok(()) => to_json_cstring(&crate::skills::models::SkillCommandResult::ok()),
         Err(e) => to_json_cstring(&crate::skills::models::SkillCommandResult::error(e)),
     }
@@ -583,18 +777,29 @@ pub extern "C" fn tt_skills_add_custom_agent(handle: *mut CoreHandle, json: *con
 /// # Safety
 /// `handle` must be valid; `json` must be a valid NUL-terminated C string.
 #[no_mangle]
-pub extern "C" fn tt_skills_remove_custom_agent(handle: *mut CoreHandle, json: *const c_char) -> *mut c_char {
+pub extern "C" fn tt_skills_remove_custom_agent(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
     let handle = match unsafe { handle.as_mut() } {
         Some(h) => h,
-        None => return to_json_cstring(&crate::skills::models::SkillCommandResult::error("Null handle")),
+        None => {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+                "Null handle",
+            ))
+        }
     };
 
     if json.is_null() {
-        return to_json_cstring(&crate::skills::models::SkillCommandResult::error("Null json"));
+        return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+            "Null json",
+        ));
     }
 
     #[derive(serde::Deserialize)]
-    struct SourceReq { source: String }
+    struct SourceReq {
+        source: String,
+    }
 
     let req: SourceReq = match unsafe { from_cstring_json(json) } {
         Ok(r) => r,
@@ -617,13 +822,39 @@ pub extern "C" fn tt_skills_git_pull(handle: *mut CoreHandle) -> *mut c_char {
         Some(h) => h,
         None => return std::ptr::null_mut(),
     };
+    if handle
+        .skills
+        .git_remote_url
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git remote URL configured",
+        ));
+    }
+    if handle
+        .skills
+        .git_token
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git token configured",
+        ));
+    }
     let token = handle.skills.git_token.clone();
     match &mut handle.skills.git {
         Some(git) => match git.pull(token.as_deref()) {
             Ok(status) => to_json_cstring(&status),
             Err(e) => to_json_cstring(&crate::skills::models::GitStatusInfo::error(&e)),
         },
-        None => to_json_cstring(&crate::skills::models::GitStatusInfo::error("No git repository")),
+        None => to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git repository",
+        )),
     }
 }
 
@@ -637,13 +868,39 @@ pub extern "C" fn tt_skills_git_push(handle: *mut CoreHandle) -> *mut c_char {
         Some(h) => h,
         None => return std::ptr::null_mut(),
     };
+    if handle
+        .skills
+        .git_remote_url
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git remote URL configured",
+        ));
+    }
+    if handle
+        .skills
+        .git_token
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git token configured",
+        ));
+    }
     let token = handle.skills.git_token.clone();
     match &mut handle.skills.git {
         Some(git) => match git.stage_and_push("skill: sync", token.as_deref()) {
             Ok(status) => to_json_cstring(&status),
             Err(e) => to_json_cstring(&crate::skills::models::GitStatusInfo::error(&e)),
         },
-        None => to_json_cstring(&crate::skills::models::GitStatusInfo::error("No git repository")),
+        None => to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git repository",
+        )),
     }
 }
 
@@ -680,14 +937,23 @@ pub extern "C" fn tt_skills_git_connectivity(handle: *mut CoreHandle) -> *mut c_
 /// # Safety
 /// `handle` must be valid; `json` must be a valid NUL-terminated C string.
 #[no_mangle]
-pub extern "C" fn tt_skills_set_git_config(handle: *mut CoreHandle, json: *const c_char) -> *mut c_char {
+pub extern "C" fn tt_skills_set_git_config(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
     let handle = match unsafe { handle.as_mut() } {
         Some(h) => h,
-        None => return to_json_cstring(&crate::skills::models::SkillCommandResult::error("Null handle")),
+        None => {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+                "Null handle",
+            ))
+        }
     };
 
     if json.is_null() {
-        return to_json_cstring(&crate::skills::models::SkillCommandResult::error("Null json"));
+        return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+            "Null json",
+        ));
     }
 
     #[derive(serde::Deserialize)]
@@ -704,11 +970,20 @@ pub extern "C" fn tt_skills_set_git_config(handle: *mut CoreHandle, json: *const
     };
 
     if let Some(root) = req.source_root {
-        let path = std::path::PathBuf::from(&root);
+        if root.trim().is_empty() {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+                "Source root cannot be empty",
+            ));
+        }
+        let path = match crate::skills::provider_config::expand_path(root.trim()) {
+            Ok(path) => path,
+            Err(e) => return to_json_cstring(&crate::skills::models::SkillCommandResult::error(e)),
+        };
         if !path.exists() {
             if let Err(e) = std::fs::create_dir_all(&path) {
                 return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
-                    format!("Cannot create source root: {}", e)));
+                    format!("Cannot create source root: {}", e),
+                ));
             }
         }
         handle.skills.source_root = path.clone();
@@ -717,6 +992,9 @@ pub extern "C" fn tt_skills_set_git_config(handle: *mut CoreHandle, json: *const
         // Re-init scanner and symlink
         handle.skills.scanner = crate::skills::scanner::Scanner::new(path.clone());
         handle.skills.symlink = crate::skills::symlink::SymlinkManager::new(path);
+        if let Err(e) = persist_skills_config(&handle.skills.config_dir, &handle.skills) {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(e));
+        }
     }
 
     if let Some(url) = req.remote_url {
@@ -734,6 +1012,10 @@ pub extern "C" fn tt_skills_set_git_config(handle: *mut CoreHandle, json: *const
 
     if let Some(platform) = req.platform {
         handle.skills.git_platform = Some(platform);
+    }
+
+    if let Err(e) = persist_skills_config(&handle.skills.config_dir, &handle.skills) {
+        return to_json_cstring(&crate::skills::models::SkillCommandResult::error(e));
     }
 
     to_json_cstring(&crate::skills::models::SkillCommandResult::ok())
@@ -760,6 +1042,43 @@ pub extern "C" fn tt_skills_get_config(handle: *mut CoreHandle) -> *mut c_char {
 
 // --- Helpers ---
 
+#[derive(serde::Deserialize, serde::Serialize)]
+struct PersistedSkillsConfig {
+    #[serde(default)]
+    source_root: Option<PathBuf>,
+    #[serde(default)]
+    git_remote_url: Option<String>,
+    #[serde(default)]
+    git_platform: Option<String>,
+}
+
+fn skills_config_path(config_dir: &std::path::Path) -> PathBuf {
+    config_dir.join("skills_config.json")
+}
+
+fn load_skills_config(config_dir: &std::path::Path) -> Option<PersistedSkillsConfig> {
+    let path = skills_config_path(config_dir);
+    let data = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&data).ok()
+}
+
+fn persist_skills_config(
+    config_dir: &std::path::Path,
+    skills: &crate::skills::SkillsCore,
+) -> Result<(), String> {
+    std::fs::create_dir_all(config_dir)
+        .map_err(|e| format!("Failed to create skills config dir: {}", e))?;
+    let config = PersistedSkillsConfig {
+        source_root: Some(skills.source_root.clone()),
+        git_remote_url: skills.git_remote_url.clone(),
+        git_platform: skills.git_platform.clone(),
+    };
+    let data = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("Failed to serialize skills config: {}", e))?;
+    std::fs::write(skills_config_path(config_dir), data)
+        .map_err(|e| format!("Failed to write skills config: {}", e))
+}
+
 /// Validate and unpack the common (handle, from, to) query arguments.
 /// Returns None if any pointer is null.
 ///
@@ -781,7 +1100,9 @@ unsafe fn unpack_query_args<'a>(
 
 fn to_json_cstring<T: serde::Serialize>(value: &T) -> *mut c_char {
     match serde_json::to_string(value) {
-        Ok(json) => CString::new(json).map(|c| c.into_raw()).unwrap_or(std::ptr::null_mut()),
+        Ok(json) => CString::new(json)
+            .map(|c| c.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
         Err(_) => std::ptr::null_mut(),
     }
 }
@@ -790,7 +1111,11 @@ fn to_json_cstring<T: serde::Serialize>(value: &T) -> *mut c_char {
 ///
 /// # Safety
 /// `ptr` must be a valid, non-null, NUL-terminated C string.
-unsafe fn from_cstring_json<T: serde::de::DeserializeOwned>(ptr: *const c_char) -> Result<T, String> {
-    let s = CStr::from_ptr(ptr).to_str().map_err(|e| format!("Invalid UTF-8: {}", e))?;
+unsafe fn from_cstring_json<T: serde::de::DeserializeOwned>(
+    ptr: *const c_char,
+) -> Result<T, String> {
+    let s = CStr::from_ptr(ptr)
+        .to_str()
+        .map_err(|e| format!("Invalid UTF-8: {}", e))?;
     serde_json::from_str(s).map_err(|e| format!("Failed to parse JSON: {}", e))
 }

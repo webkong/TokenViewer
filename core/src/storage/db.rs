@@ -1,7 +1,9 @@
 use rusqlite::{params, Connection, Result as SqlResult};
 use std::path::Path;
 
-use crate::models::{DailyUsage, HeatmapPoint, ModelBreakdownEntry, SyncCursor, UsageRecord, UsageSummary};
+use crate::models::{
+    DailyUsage, HeatmapPoint, ModelBreakdownEntry, SyncCursor, UsageRecord, UsageSummary,
+};
 
 const SCHEMA_VERSION: i32 = 1;
 
@@ -24,7 +26,8 @@ impl Database {
     }
 
     fn migrate(&self) -> SqlResult<()> {
-        let version: i32 = self.conn
+        let version: i32 = self
+            .conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap_or(0);
 
@@ -57,11 +60,12 @@ impl Database {
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
-                );"
+                );",
             )?;
         }
 
-        self.conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
+        self.conn
+            .execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         Ok(())
     }
 
@@ -124,7 +128,7 @@ impl Database {
                 COALESCE(SUM(reasoning_output_tokens), 0),
                 COALESCE(SUM(conversation_count), 0),
                 COUNT(DISTINCT substr(hour_start, 1, 10))
-             FROM usage WHERE hour_start >= ?1 AND hour_start < ?2"
+             FROM usage WHERE hour_start >= ?1 AND hour_start < ?2",
         )?;
 
         stmt.query_row(params![from, to], |row| {
@@ -150,7 +154,7 @@ impl Database {
                 SUM(reasoning_output_tokens), SUM(conversation_count)
              FROM usage
              WHERE hour_start >= ?1 AND hour_start < ?2
-             GROUP BY date ORDER BY date"
+             GROUP BY date ORDER BY date",
         )?;
 
         let rows = stmt.query_map(params![from, to], |row| {
@@ -180,7 +184,7 @@ impl Database {
                 SUM(reasoning_output_tokens), SUM(conversation_count)
              FROM usage
              WHERE hour_start >= ?1 AND hour_start < ?2
-             GROUP BY hour ORDER BY hour"
+             GROUP BY hour ORDER BY hour",
         )?;
 
         let rows = stmt.query_map(params![from, to], |row| {
@@ -200,13 +204,17 @@ impl Database {
         rows.collect()
     }
 
-    pub fn query_model_breakdown(&self, from: &str, to: &str) -> SqlResult<Vec<ModelBreakdownEntry>> {
+    pub fn query_model_breakdown(
+        &self,
+        from: &str,
+        to: &str,
+    ) -> SqlResult<Vec<ModelBreakdownEntry>> {
         let mut stmt = self.conn.prepare(
             "SELECT model, source, SUM(total_tokens)
              FROM usage
              WHERE hour_start >= ?1 AND hour_start < ?2
              GROUP BY model, source
-             ORDER BY SUM(total_tokens) DESC"
+             ORDER BY SUM(total_tokens) DESC",
         )?;
 
         let rows = stmt.query_map(params![from, to], |row| {
@@ -238,21 +246,23 @@ impl Database {
                 SUM(cache_creation_input_tokens), SUM(reasoning_output_tokens),
                 SUM(total_tokens), SUM(conversation_count)
              FROM usage WHERE hour_start >= ?1 AND hour_start < ?2
-             GROUP BY source, model ORDER BY SUM(total_tokens) DESC"
+             GROUP BY source, model ORDER BY SUM(total_tokens) DESC",
         )?;
-        let rows = stmt.query_map(params![from, to], |row| Ok(UsageRecord {
-            id: None,
-            hour_start: String::new(),
-            source: row.get(0)?,
-            model: row.get(1)?,
-            input_tokens: row.get::<_, i64>(2)? as u64,
-            output_tokens: row.get::<_, i64>(3)? as u64,
-            cached_input_tokens: row.get::<_, i64>(4)? as u64,
-            cache_creation_input_tokens: row.get::<_, i64>(5)? as u64,
-            reasoning_output_tokens: row.get::<_, i64>(6)? as u64,
-            total_tokens: row.get::<_, i64>(7)? as u64,
-            conversation_count: row.get::<_, i32>(8)? as u32,
-        }))?;
+        let rows = stmt.query_map(params![from, to], |row| {
+            Ok(UsageRecord {
+                id: None,
+                hour_start: String::new(),
+                source: row.get(0)?,
+                model: row.get(1)?,
+                input_tokens: row.get::<_, i64>(2)? as u64,
+                output_tokens: row.get::<_, i64>(3)? as u64,
+                cached_input_tokens: row.get::<_, i64>(4)? as u64,
+                cache_creation_input_tokens: row.get::<_, i64>(5)? as u64,
+                reasoning_output_tokens: row.get::<_, i64>(6)? as u64,
+                total_tokens: row.get::<_, i64>(7)? as u64,
+                conversation_count: row.get::<_, i32>(8)? as u32,
+            })
+        })?;
         rows.collect()
     }
 
@@ -267,7 +277,12 @@ impl Database {
         self.aggregate_by_bucket_model(from, to, 13)
     }
 
-    fn aggregate_by_bucket_model(&self, from: &str, to: &str, len: usize) -> SqlResult<Vec<UsageRecord>> {
+    fn aggregate_by_bucket_model(
+        &self,
+        from: &str,
+        to: &str,
+        len: usize,
+    ) -> SqlResult<Vec<UsageRecord>> {
         // hour_start is stored in UTC; group by LOCAL-time bucket so day/hour
         // dimensions match the user's wall clock. len 10 = day, 13 = hour.
         let fmt = if len <= 10 { "%Y-%m-%d" } else { "%Y-%m-%dT%H" };
@@ -280,19 +295,21 @@ impl Database {
              GROUP BY bucket, source, model ORDER BY bucket"
         );
         let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt.query_map(params![from, to], |row| Ok(UsageRecord {
-            id: None,
-            hour_start: row.get(0)?,
-            source: row.get(1)?,
-            model: row.get(2)?,
-            input_tokens: row.get::<_, i64>(3)? as u64,
-            output_tokens: row.get::<_, i64>(4)? as u64,
-            cached_input_tokens: row.get::<_, i64>(5)? as u64,
-            cache_creation_input_tokens: row.get::<_, i64>(6)? as u64,
-            reasoning_output_tokens: row.get::<_, i64>(7)? as u64,
-            total_tokens: row.get::<_, i64>(8)? as u64,
-            conversation_count: row.get::<_, i32>(9)? as u32,
-        }))?;
+        let rows = stmt.query_map(params![from, to], |row| {
+            Ok(UsageRecord {
+                id: None,
+                hour_start: row.get(0)?,
+                source: row.get(1)?,
+                model: row.get(2)?,
+                input_tokens: row.get::<_, i64>(3)? as u64,
+                output_tokens: row.get::<_, i64>(4)? as u64,
+                cached_input_tokens: row.get::<_, i64>(5)? as u64,
+                cache_creation_input_tokens: row.get::<_, i64>(6)? as u64,
+                reasoning_output_tokens: row.get::<_, i64>(7)? as u64,
+                total_tokens: row.get::<_, i64>(8)? as u64,
+                conversation_count: row.get::<_, i32>(9)? as u32,
+            })
+        })?;
         rows.collect()
     }
 
@@ -302,7 +319,7 @@ impl Database {
             "SELECT strftime('%Y-%m-%d', hour_start, 'localtime') as date, SUM(total_tokens)
              FROM usage
              WHERE hour_start >= date('now', ?1)
-             GROUP BY date ORDER BY date"
+             GROUP BY date ORDER BY date",
         )?;
 
         let offset = format!("-{days} days");
@@ -320,7 +337,13 @@ impl Database {
             let max_count = points.iter().map(|p| p.count).max().unwrap_or(1).max(1);
             for p in &mut points {
                 p.level = match (p.count as f64 / max_count as f64 * 4.0).ceil() as u8 {
-                    0 => if p.count > 0 { 1 } else { 0 },
+                    0 => {
+                        if p.count > 0 {
+                            1
+                        } else {
+                            0
+                        }
+                    }
                     v => v.min(4),
                 };
             }
@@ -332,7 +355,7 @@ impl Database {
 
     pub fn get_cursor(&self, source: &str) -> SqlResult<Option<SyncCursor>> {
         let mut stmt = self.conn.prepare(
-            "SELECT source, cursor_data, updated_at FROM sync_cursors WHERE source = ?1"
+            "SELECT source, cursor_data, updated_at FROM sync_cursors WHERE source = ?1",
         )?;
 
         let mut rows = stmt.query_map(params![source], |row| {
@@ -362,7 +385,9 @@ impl Database {
     // --- Settings ---
 
     pub fn get_setting(&self, key: &str) -> SqlResult<Option<String>> {
-        let mut stmt = self.conn.prepare("SELECT value FROM settings WHERE key = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT value FROM settings WHERE key = ?1")?;
         let mut rows = stmt.query_map(params![key], |row| row.get::<_, String>(0))?;
         match rows.next() {
             Some(r) => Ok(Some(r?)),
@@ -392,7 +417,7 @@ impl Database {
             "CREATE TABLE IF NOT EXISTS skills_settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
-            );"
+            );",
         )
     }
 }

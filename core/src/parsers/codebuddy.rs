@@ -1,10 +1,13 @@
-use std::path::Path;
 use serde_json::Value;
+use std::path::Path;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     let base = home_dir.join(".codebuddy/projects");
     if !base.exists() {
         return Ok((vec![], cursor_data.unwrap_or("{}").to_string()));
@@ -16,7 +19,9 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
 
     for file in files {
         let key = file.to_string_lossy().to_string();
-        if !cursor.file_changed(&key) { continue; }
+        if !cursor.file_changed(&key) {
+            continue;
+        }
         let offset = cursor.get_offset(&key);
         let (lines, new_offset) = match read_lines_from_offset(&file, offset) {
             Ok(r) => r,
@@ -40,7 +45,9 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
             };
 
             // Dedup
-            let dedup_id = v.get("uuid").and_then(|x| x.as_str())
+            let dedup_id = v
+                .get("uuid")
+                .and_then(|x| x.as_str())
                 .or_else(|| v.get("id").and_then(|x| x.as_str()))
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| format!("{}", line.len()));
@@ -48,18 +55,43 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
                 continue;
             }
 
-            let prompt_tokens = raw_usage.get("prompt_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-            let completion_tokens = raw_usage.get("completion_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
+            let prompt_tokens = raw_usage
+                .get("prompt_tokens")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
+            let completion_tokens = raw_usage
+                .get("completion_tokens")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
 
-            let prompt_details = raw_usage.get("prompt_tokens_details").unwrap_or(&Value::Null);
-            let details_cached = prompt_details.get("cached_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-            let cache_read_field = raw_usage.get("cache_read_input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-            let prompt_cache_hit = raw_usage.get("prompt_cache_hit_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
+            let prompt_details = raw_usage
+                .get("prompt_tokens_details")
+                .unwrap_or(&Value::Null);
+            let details_cached = prompt_details
+                .get("cached_tokens")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
+            let cache_read_field = raw_usage
+                .get("cache_read_input_tokens")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
+            let prompt_cache_hit = raw_usage
+                .get("prompt_cache_hit_tokens")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
             let cache_read = details_cached.max(cache_read_field).max(prompt_cache_hit);
 
-            let cache_creation = raw_usage.get("cache_creation_input_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
-            let completion_details = raw_usage.get("completion_tokens_details").unwrap_or(&Value::Null);
-            let reasoning = completion_details.get("reasoning_tokens").and_then(|x| x.as_u64()).unwrap_or(0);
+            let cache_creation = raw_usage
+                .get("cache_creation_input_tokens")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
+            let completion_details = raw_usage
+                .get("completion_tokens_details")
+                .unwrap_or(&Value::Null);
+            let reasoning = completion_details
+                .get("reasoning_tokens")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
 
             let input = prompt_tokens.saturating_sub(cache_read);
             let output = completion_tokens;
@@ -68,12 +100,15 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
                 continue;
             }
 
-            let model = provider_data.get("model").and_then(|m| m.as_str())
+            let model = provider_data
+                .get("model")
+                .and_then(|m| m.as_str())
                 .or_else(|| v.get("model").and_then(|m| m.as_str()))
                 .unwrap_or("codebuddy-agent")
                 .to_string();
 
-            let hour_start = v.get("timestamp")
+            let hour_start = v
+                .get("timestamp")
                 .and_then(|t| t.as_i64())
                 .and_then(epoch_millis_to_bucket)
                 .unwrap_or_else(|| file_mtime_bucket(&file));

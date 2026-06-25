@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
 pub fn parse(
     home_dir: &Path,
@@ -39,7 +39,12 @@ pub fn parse(
         .get("usage_updated_at")
         .and_then(json_i64_value)
         .and_then(epoch_to_bucket)
-        .or_else(|| account.get("last_used").and_then(json_i64_value).and_then(epoch_to_bucket))
+        .or_else(|| {
+            account
+                .get("last_used")
+                .and_then(json_i64_value)
+                .and_then(epoch_to_bucket)
+        })
         .unwrap_or_else(|| file_mtime_bucket(&file));
 
     let record = UsageRecord {
@@ -94,10 +99,9 @@ fn read_json_value(path: &Path) -> Option<Value> {
 
 fn selected_account_id(index: &Value) -> Option<String> {
     let accounts = index.get("accounts")?.as_array()?;
-    let selected = accounts.iter().max_by(|left, right| {
-        account_sort_score(left)
-            .cmp(&account_sort_score(right))
-    })?;
+    let selected = accounts
+        .iter()
+        .max_by(|left, right| account_sort_score(left).cmp(&account_sort_score(right)))?;
     json_string(selected.get("id"))
         .or_else(|| json_string(selected.get("account_id")))
         .or_else(|| json_string(index.get("current_account_id")))

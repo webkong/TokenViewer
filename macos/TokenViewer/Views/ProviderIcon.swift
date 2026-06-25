@@ -61,17 +61,26 @@ struct ProviderIcon: View {
         "every-code": "codex", "everycode": "codex", "gemini": "gemini",
         "antigravity": "antigravity", "kiro": "kiro", "kiro-ide": "kiro", "opencode": "opencode",
         "openclaw": "openclaw", "cursor": "cursor", "deepseek": "deepseek", "grok": "grok", "kimi": "kimi",
-        "minimax": "minimax", "qwen": "qwen", "glm": "glm", "mimo": "mimo",
+        "minimax": "minimax", "qwen": "qwen", "qwen-code": "qwen", "glm": "glm", "mimo": "mimo",
         "copilot": "copilot", "hermes": "hermes", "kilocli": "kilo", "kilo-cli": "kilo", "kilocode": "kilo",
-        "mimocode": "mimo",
+        "kilo": "kilo", "mimocode": "mimo", "mimo-code": "mimo",
         "qoder": "qoder", "trae": "trae", "windsurf": "windsurf", "zed": "zed", "workbuddy": "workbuddy",
         "zcode": "zcode",
         // Agents without dedicated icons — will use fallback colored circle
         "roocode": "roocode", "goose": "goose", "ohmypi": "ohmypi", "pi": "pi", "craft": "craft",
+        // Orca-sourced agents with dedicated icons
+        "aider": "aider", "omp": "omp", "openclaude": "openclaude-logo",
+        // Orca-sourced agents reusing existing brand icons
+        "command-code": "codex",
+        // Orca-sourced agents with generated brand-colored circle icons
+        "devin": "devin", "ante": "ante", "autohand": "autohand",
+        "amp": "amp", "crush": "crush", "aug": "aug", "cline": "cline",
+        "codebuff": "codebuff", "continue": "continue", "droid": "droid",
+        "mistral-vibe": "mistral-vibe", "rovo": "rovo",
     ]
 
     /// Logos drawn with `currentColor` (monochrome) — tint to adapt to light/dark.
-    private static let monoLogos: Set<String> = ["copilot", "cursor", "grok", "kimi", "kiro", "kiro-ide", "mimo", "mimocode"]
+    private static let monoLogos: Set<String> = ["copilot", "cursor", "grok", "kimi", "kiro", "kiro-ide", "mimo", "mimocode", "aider"]
 
     var body: some View {
         if let img = logoImage() {

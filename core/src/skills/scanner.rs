@@ -25,8 +25,18 @@ impl Scanner {
             return Ok(skills);
         }
 
-        let entries = fs::read_dir(path)
-            .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+        self.scan_path_inner(path, 0, &mut skills)?;
+        Ok(skills)
+    }
+
+    fn scan_path_inner(
+        &self,
+        path: &Path,
+        depth: usize,
+        skills: &mut Vec<SkillEntry>,
+    ) -> Result<(), String> {
+        let entries =
+            fs::read_dir(path).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
 
         for entry in entries {
             let entry = match entry {
@@ -40,68 +50,36 @@ impl Scanner {
             }
 
             if let Some(name) = sub_path.file_name().and_then(|n| n.to_str()) {
-                if name.starts_with('.') {
+                if matches!(name, ".git" | "node_modules" | "target" | "DerivedData") {
                     continue;
                 }
             }
 
-            if !Self::validate_skill_dir(&sub_path) {
+            if Self::validate_skill_dir(&sub_path) {
+                if let Ok(skill) = self.parse_skill_dir(&sub_path) {
+                    skills.push(skill);
+                }
                 continue;
             }
 
-            if let Ok(skill) = self.parse_skill_dir(&sub_path) {
-                skills.push(skill);
+            if depth < 2 {
+                let _ = self.scan_path_inner(&sub_path, depth + 1, skills);
             }
         }
 
-        Ok(skills)
+        Ok(())
     }
 
     /// Scan all skill directories under source_root (one level deep).
     /// Returns all valid SkillEntry objects.
     pub fn scan_all(&self) -> Result<Vec<SkillEntry>, String> {
-        let mut skills = Vec::new();
-
-        let entries = fs::read_dir(&self.source_root)
-            .map_err(|e| format!("Failed to read source root {}: {}", self.source_root.display(), e))?;
-
-        for entry in entries {
-            let entry = match entry {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
-
-            let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
-
-            // Skip hidden directories
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.starts_with('.') {
-                    continue;
-                }
-            }
-
-            if !Self::validate_skill_dir(&path) {
-                continue;
-            }
-
-            if let Ok(skill) = self.parse_skill_dir(&path) {
-                skills.push(skill);
-            }
-        }
-
-        Ok(skills)
+        self.scan_path(&self.source_root)
     }
 
     /// Detect new skills by comparing against a set of known skill IDs.
     pub fn detect_new(&self, known: &HashSet<String>) -> Result<Vec<SkillEntry>, String> {
         let all = self.scan_all()?;
-        let new: Vec<SkillEntry> = all
-            .into_iter()
-            .filter(|s| !known.contains(&s.id))
-            .collect();
+        let new: Vec<SkillEntry> = all.into_iter().filter(|s| !known.contains(&s.id)).collect();
         Ok(new)
     }
 
@@ -293,9 +271,13 @@ mod tests {
         )
         .unwrap();
 
-        // Hidden directory
+        // Hidden containers such as Codex .system are scanned.
         let hidden = dir.path().join(".hidden");
         create_test_skill(&hidden, ".hidden-skill", "Hidden");
+
+        // Git internals are ignored.
+        let git_dir = dir.path().join(".git");
+        create_test_skill(&git_dir, "not-a-skill", "Git internals");
 
         // File (not directory)
         fs::write(dir.path().join("some-file.txt"), "not a skill").unwrap();
@@ -303,9 +285,24 @@ mod tests {
         let scanner = Scanner::new(dir.path().to_path_buf());
         let skills = scanner.scan_all().unwrap();
 
-        assert_eq!(skills.len(), 2); // valid-skill + no-manifest (with default manifest)
+        assert_eq!(skills.len(), 3); // valid-skill + no-manifest + hidden container skill
         assert!(skills.iter().any(|s| s.id == "valid-skill"));
         assert!(skills.iter().any(|s| s.id == "no-manifest"));
+        assert!(skills.iter().any(|s| s.id == ".hidden-skill"));
+        assert!(!skills.iter().any(|s| s.id == "not-a-skill"));
+    }
+
+    #[test]
+    fn test_scan_nested_system_skills() {
+        let dir = TempDir::new().unwrap();
+        let system = dir.path().join(".system");
+        create_test_skill(&system, "imagegen", "Generate images");
+
+        let scanner = Scanner::new(dir.path().to_path_buf());
+        let skills = scanner.scan_all().unwrap();
+
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].id, "imagegen");
     }
 
     #[test]

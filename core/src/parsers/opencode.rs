@@ -1,17 +1,24 @@
-use std::path::Path;
 use rusqlite::Connection;
 use serde_json::Value;
+use std::path::Path;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     let db_path = home_dir.join(".local/share/opencode/opencode.db");
     parse_opencode_db(&db_path, cursor_data, "opencode")
 }
 
 /// Shared parser for OpenCode-schema SQLite databases (used by kilocli too).
-pub fn parse_opencode_db(db_path: &Path, cursor_data: Option<&str>, source: &str) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+pub fn parse_opencode_db(
+    db_path: &Path,
+    cursor_data: Option<&str>,
+    source: &str,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     if !db_path.exists() {
         return Ok((vec![], cursor_data.unwrap_or("{}").to_string()));
     }
@@ -23,17 +30,13 @@ pub fn parse_opencode_db(db_path: &Path, cursor_data: Option<&str>, source: &str
     }
     let conn = Connection::open(db_path)?;
 
-    let mut stmt = conn.prepare(
-        "SELECT id, data FROM message WHERE json_extract(data, '$.role') = 'assistant'"
-    )?;
+    let mut stmt = conn
+        .prepare("SELECT id, data FROM message WHERE json_extract(data, '$.role') = 'assistant'")?;
 
     let mut records = Vec::new();
 
     let rows = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-        ))
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
     })?;
 
     for row in rows.flatten() {
@@ -54,22 +57,35 @@ pub fn parse_opencode_db(db_path: &Path, cursor_data: Option<&str>, source: &str
 
         let input = tokens.get("input").and_then(|x| x.as_u64()).unwrap_or(0);
         let output = tokens.get("output").and_then(|x| x.as_u64()).unwrap_or(0);
-        let reasoning = tokens.get("reasoning").and_then(|x| x.as_u64()).unwrap_or(0);
-        let cache_read = tokens.pointer("/cache/read").and_then(|x| x.as_u64()).unwrap_or(0);
-        let cache_write = tokens.pointer("/cache/write").and_then(|x| x.as_u64()).unwrap_or(0);
+        let reasoning = tokens
+            .get("reasoning")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0);
+        let cache_read = tokens
+            .pointer("/cache/read")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0);
+        let cache_write = tokens
+            .pointer("/cache/write")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0);
 
         let total = input + output + reasoning + cache_read + cache_write;
         if total == 0 {
             continue;
         }
 
-        let model = data.get("modelID").and_then(|m| m.as_str())
+        let model = data
+            .get("modelID")
+            .and_then(|m| m.as_str())
             .or_else(|| data.get("model").and_then(|m| m.as_str()))
             .unwrap_or("unknown")
             .to_string();
 
         // timestamp: time.completed or time.created (epoch ms)
-        let ts_ms = data.pointer("/time/completed").and_then(|x| x.as_i64())
+        let ts_ms = data
+            .pointer("/time/completed")
+            .and_then(|x| x.as_i64())
             .or_else(|| data.pointer("/time/created").and_then(|x| x.as_i64()));
 
         let hour_start = ts_ms

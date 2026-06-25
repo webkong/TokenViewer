@@ -46,5 +46,9 @@ pub fn sync_all(db: &Database, home_dir: &Path) -> SyncResult {
         }
     }
 
-    SyncResult { providers_synced, records_added, errors }
+    SyncResult {
+        providers_synced,
+        records_added,
+        errors,
+    }
 }

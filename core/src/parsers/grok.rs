@@ -1,10 +1,13 @@
-use std::path::Path;
 use serde_json::Value;
+use std::path::Path;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     let grok_home = std::env::var("TOKENTRACKER_GROK_HOME")
         .or_else(|_| std::env::var("GROK_HOME"))
         .map(std::path::PathBuf::from)
@@ -23,7 +26,9 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
 
     for file in files {
         let key = file.to_string_lossy().to_string();
-        if !cursor.file_changed(&key) { continue; }
+        if !cursor.file_changed(&key) {
+            continue;
+        }
         let offset = cursor.get_offset(&key);
         let (lines, new_offset) = match read_lines_from_offset(&file, offset) {
             Ok(r) => r,
@@ -39,11 +44,16 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
             };
 
             // Extract totalTokens from various nested locations
-            let total_tokens = v.get("params")
+            let total_tokens = v
+                .get("params")
                 .and_then(|p| p.get("_meta"))
                 .and_then(|m| m.get("totalTokens"))
                 .and_then(|x| x.as_u64())
-                .or_else(|| v.get("_meta").and_then(|m| m.get("totalTokens")).and_then(|x| x.as_u64()))
+                .or_else(|| {
+                    v.get("_meta")
+                        .and_then(|m| m.get("totalTokens"))
+                        .and_then(|x| x.as_u64())
+                })
                 .or_else(|| v.get("totalTokens").and_then(|x| x.as_u64()));
 
             let total_tokens = match total_tokens {
@@ -64,15 +74,25 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
             let output = delta_total - input;
 
             // Extract timestamp
-            let meta = v.get("params").and_then(|p| p.get("_meta"))
+            let meta = v
+                .get("params")
+                .and_then(|p| p.get("_meta"))
                 .or_else(|| v.get("_meta"));
 
             let hour_start = meta
                 .and_then(|m| m.get("agentTimestampMs").or(m.get("timestampMs")))
                 .and_then(|x| x.as_i64())
                 .and_then(epoch_millis_to_bucket)
-                .or_else(|| v.get("timestamp_ms").and_then(|x| x.as_i64()).and_then(epoch_millis_to_bucket))
-                .or_else(|| v.get("timestamp").and_then(|t| t.as_str()).map(|s| iso_to_bucket(s)))
+                .or_else(|| {
+                    v.get("timestamp_ms")
+                        .and_then(|x| x.as_i64())
+                        .and_then(epoch_millis_to_bucket)
+                })
+                .or_else(|| {
+                    v.get("timestamp")
+                        .and_then(|t| t.as_str())
+                        .map(|s| iso_to_bucket(s))
+                })
                 .unwrap_or_else(|| bucket.clone());
 
             all_records.push(UsageRecord {

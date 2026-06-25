@@ -1,10 +1,13 @@
-use std::path::Path;
 use serde_json::Value;
+use std::path::Path;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     let base = home_dir.join(".kimi/sessions");
     if !base.exists() {
         return Ok((vec![], cursor_data.unwrap_or("{}").to_string()));
@@ -17,7 +20,9 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
 
     for file in files {
         let key = file.to_string_lossy().to_string();
-        if !cursor.file_changed(&key) { continue; }
+        if !cursor.file_changed(&key) {
+            continue;
+        }
         let offset = cursor.get_offset(&key);
         let (lines, new_offset) = match read_lines_from_offset(&file, offset) {
             Ok(r) => r,
@@ -51,15 +56,34 @@ fn parse_kimi_line(v: &Value, cursor: &mut FileCursor) -> Option<UsageRecord> {
         return None;
     }
 
-    let input = usage.get("input_other").and_then(|x| x.as_u64()).unwrap_or(0);
+    let input = usage
+        .get("input_other")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0);
     let output = usage.get("output").and_then(|x| x.as_u64()).unwrap_or(0);
-    let cached = usage.get("input_cache_read").and_then(|x| x.as_u64()).unwrap_or(0);
-    let cache_creation = usage.get("input_cache_creation").and_then(|x| x.as_u64()).unwrap_or(0);
+    let cached = usage
+        .get("input_cache_read")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0);
+    let cache_creation = usage
+        .get("input_cache_creation")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0);
     let total = input + output + cached + cache_creation;
-    if total == 0 { return None; }
+    if total == 0 {
+        return None;
+    }
 
-    let bucket = v.get("timestamp").and_then(|t| t.as_str()).map(iso_to_bucket)
-        .or_else(|| payload.get("timestamp").and_then(|t| t.as_i64()).and_then(epoch_secs_to_bucket))
+    let bucket = v
+        .get("timestamp")
+        .and_then(|t| t.as_str())
+        .map(iso_to_bucket)
+        .or_else(|| {
+            payload
+                .get("timestamp")
+                .and_then(|t| t.as_i64())
+                .and_then(epoch_secs_to_bucket)
+        })
         .unwrap_or_else(now_bucket);
 
     Some(UsageRecord {

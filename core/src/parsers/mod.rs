@@ -1,29 +1,29 @@
-pub mod utils;
-pub mod claude;
-pub mod codex;
-pub mod cursor;
-pub mod gemini;
-pub mod kiro;
-pub mod opencode;
-pub mod openclaw;
-pub mod everycode;
-pub mod hermes;
-pub mod copilot;
-pub mod kimi;
-pub mod grok;
 pub mod antigravity;
-pub mod roocode;
-pub mod kilocode;
-pub mod kilocli;
-pub mod zed;
-pub mod goose;
-pub mod ohmypi;
-pub mod pi;
-pub mod craft;
+pub mod claude;
 pub mod codebuddy;
-pub mod workbuddy;
+pub mod codex;
+pub mod copilot;
+pub mod craft;
+pub mod cursor;
+pub mod everycode;
+pub mod gemini;
+pub mod goose;
+pub mod grok;
+pub mod hermes;
+pub mod kilocli;
+pub mod kilocode;
+pub mod kimi;
+pub mod kiro;
 pub mod mimocode;
+pub mod ohmypi;
+pub mod openclaw;
+pub mod opencode;
+pub mod pi;
+pub mod roocode;
+pub mod utils;
+pub mod workbuddy;
 pub mod zcode;
+pub mod zed;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -38,7 +38,8 @@ pub struct ParseResult {
     pub new_cursor: String,
 }
 
-type ParserFn = fn(&Path, Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>>;
+type ParserFn =
+    fn(&Path, Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>>;
 
 /// Returns all registered parsers as (source_name, parse_fn).
 fn all_parsers() -> Vec<(&'static str, ParserFn)> {
@@ -72,7 +73,10 @@ fn all_parsers() -> Vec<(&'static str, ParserFn)> {
 }
 
 pub fn all_parser_sources() -> Vec<&'static str> {
-    all_parsers().into_iter().map(|(source, _)| source).collect()
+    all_parsers()
+        .into_iter()
+        .map(|(source, _)| source)
+        .collect()
 }
 
 /// Parse all providers in parallel. `cursors` maps source name -> cursor JSON string.

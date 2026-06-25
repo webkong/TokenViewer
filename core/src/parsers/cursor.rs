@@ -1,17 +1,22 @@
-use std::path::Path;
 use serde_json::Value;
+use std::path::Path;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     // Simplified: read usage.json from Cursor's globalStorage
     #[cfg(target_os = "macos")]
-    let usage_path = home_dir.join("Library/Application Support/Cursor/User/globalStorage/cursorDiskModel/usage.json");
+    let usage_path = home_dir
+        .join("Library/Application Support/Cursor/User/globalStorage/cursorDiskModel/usage.json");
     #[cfg(target_os = "linux")]
     let usage_path = home_dir.join(".config/Cursor/User/globalStorage/cursorDiskModel/usage.json");
     #[cfg(target_os = "windows")]
-    let usage_path = home_dir.join("AppData/Roaming/Cursor/User/globalStorage/cursorDiskModel/usage.json");
+    let usage_path =
+        home_dir.join("AppData/Roaming/Cursor/User/globalStorage/cursorDiskModel/usage.json");
 
     if !usage_path.exists() {
         return Ok((vec![], cursor_data.unwrap_or("{}").to_string()));
@@ -58,17 +63,34 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
 }
 
 fn parse_cursor_entry(v: &Value) -> Option<UsageRecord> {
-    let model = v.get("model").and_then(|m| m.as_str()).unwrap_or("unknown").to_string();
-    let input = v.get("inputTokens").or_else(|| v.get("input_tokens")).and_then(|x| x.as_u64()).unwrap_or(0);
-    let output = v.get("outputTokens").or_else(|| v.get("output_tokens")).and_then(|x| x.as_u64()).unwrap_or(0);
+    let model = v
+        .get("model")
+        .and_then(|m| m.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+    let input = v
+        .get("inputTokens")
+        .or_else(|| v.get("input_tokens"))
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0);
+    let output = v
+        .get("outputTokens")
+        .or_else(|| v.get("output_tokens"))
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0);
     let total = input + output;
     if total == 0 {
         return None;
     }
-    let hour_start = v.get("timestamp")
+    let hour_start = v
+        .get("timestamp")
         .and_then(|t| t.as_str())
         .map(iso_to_bucket)
-        .or_else(|| v.get("startedAt").and_then(|t| t.as_str()).map(iso_to_bucket))
+        .or_else(|| {
+            v.get("startedAt")
+                .and_then(|t| t.as_str())
+                .map(iso_to_bucket)
+        })
         .unwrap_or_else(now_bucket);
 
     Some(UsageRecord {

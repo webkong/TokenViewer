@@ -1,16 +1,20 @@
-use std::path::Path;
 use rusqlite::Connection;
 use serde_json::Value;
+use std::path::Path;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     let mut all_records = Vec::new();
     let mut cursor = FileCursor::from_json(cursor_data);
 
     #[cfg(target_os = "macos")]
-    let dev_data = home_dir.join("Library/Application Support/Kiro/User/globalStorage/kiro.kiroagent/dev_data");
+    let dev_data = home_dir
+        .join("Library/Application Support/Kiro/User/globalStorage/kiro.kiroagent/dev_data");
     #[cfg(not(target_os = "macos"))]
     let dev_data = home_dir.join(".config/Kiro/User/globalStorage/kiro.kiroagent/dev_data");
 
@@ -24,15 +28,18 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
         let settings_model = read_kiro_settings_model(home_dir);
 
         if let Ok(conn) = Connection::open(&db_path) {
-            let last_id: i64 = cursor.last_timestamp
-                .as_deref().and_then(|s| s.parse().ok()).unwrap_or(0);
+            let last_id: i64 = cursor
+                .last_timestamp
+                .as_deref()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
             let sql = "SELECT id, model, provider, tokens_prompt, tokens_generated, timestamp \
                        FROM tokens_generated WHERE id > ?1 ORDER BY id ASC";
             if let Ok(mut stmt) = conn.prepare(sql) {
                 let mut max_id = last_id;
                 let rows = stmt.query_map([last_id], |row| {
                     Ok((
-                        row.get::<_, i64>(0)?,   // id
+                        row.get::<_, i64>(0)?,    // id
                         row.get::<_, String>(1)?, // model
                         row.get::<_, i64>(3)?,    // tokens_prompt
                         row.get::<_, i64>(4)?,    // tokens_generated
@@ -43,8 +50,17 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
                     for row in rows.flatten() {
                         let (id, model, prompt, generated, ts) = row;
                         let total = (prompt + generated) as u64;
-                        if total == 0 { if id > max_id { max_id = id; } continue; }
-                        let model_name = if model == "agent" { "kiro-agent".to_string() } else { normalize_kiro_model(&model) };
+                        if total == 0 {
+                            if id > max_id {
+                                max_id = id;
+                            }
+                            continue;
+                        }
+                        let model_name = if model == "agent" {
+                            "kiro-agent".to_string()
+                        } else {
+                            normalize_kiro_model(&model)
+                        };
                         // timestamp is UTC "YYYY-MM-DD HH:MM:SS" → ISO bucket
                         let iso = ts.replacen(' ', "T", 1) + "Z";
                         let hour_start = iso_to_bucket(&iso);
@@ -52,7 +68,8 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
                         let ts_ms = {
                             let s = ts.replacen(' ', "T", 1) + "Z";
                             chrono::DateTime::parse_from_rfc3339(&s)
-                                .map(|dt| dt.timestamp_millis()).unwrap_or(0)
+                                .map(|dt| dt.timestamp_millis())
+                                .unwrap_or(0)
                         };
                         let resolved_model = if timeline.is_empty() {
                             settings_model.clone().unwrap_or(model_name)
@@ -61,14 +78,21 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
                                 .unwrap_or_else(|| settings_model.clone().unwrap_or(model_name))
                         };
                         all_records.push(UsageRecord {
-                            id: None, hour_start,
-                            source: "kiro".to_string(), model: resolved_model,
-                            input_tokens: prompt as u64, output_tokens: generated as u64,
-                            cached_input_tokens: 0, cache_creation_input_tokens: 0,
-                            reasoning_output_tokens: 0, total_tokens: total,
+                            id: None,
+                            hour_start,
+                            source: "kiro".to_string(),
+                            model: resolved_model,
+                            input_tokens: prompt as u64,
+                            output_tokens: generated as u64,
+                            cached_input_tokens: 0,
+                            cache_creation_input_tokens: 0,
+                            reasoning_output_tokens: 0,
+                            total_tokens: total,
                             conversation_count: 1,
                         });
-                        if id > max_id { max_id = id; }
+                        if id > max_id {
+                            max_id = id;
+                        }
                     }
                 }
                 cursor.last_timestamp = Some(max_id.to_string());
@@ -93,8 +117,13 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
             // Fallback only: no timestamps available, bucket by file mtime (best effort).
             let offset = cursor.get_offset(&key);
             let bucket = file_mtime_bucket(&jsonl);
-            let (mut records, new_offset) = parse_jsonl_file(&jsonl, offset, "kiro", parse_kiro_token_line);
-            for r in &mut records { if r.hour_start.is_empty() { r.hour_start = bucket.clone(); } }
+            let (mut records, new_offset) =
+                parse_jsonl_file(&jsonl, offset, "kiro", parse_kiro_token_line);
+            for r in &mut records {
+                if r.hour_start.is_empty() {
+                    r.hour_start = bucket.clone();
+                }
+            }
             all_records.extend(records);
             cursor.set_offset(&key, new_offset);
         }
@@ -107,7 +136,9 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
         let json_files = cursor.glob_cached(&pattern, &cli_sessions_dir);
         for json_file in json_files {
             let key = json_file.to_string_lossy().to_string();
-            if !cursor.file_changed(&key) { continue; }
+            if !cursor.file_changed(&key) {
+                continue;
+            }
             if let Some(records) = parse_kiro_cli_session(&json_file, &mut cursor) {
                 all_records.extend(records);
             }
@@ -137,13 +168,23 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
 /// {"model":"agent","provider":"kiro","promptTokens":13893,"generatedTokens":0}
 fn parse_kiro_token_line(v: &Value, source: &str) -> Option<UsageRecord> {
     let prompt = v.get("promptTokens").and_then(|x| x.as_u64()).unwrap_or(0);
-    let generated = v.get("generatedTokens").and_then(|x| x.as_u64()).unwrap_or(0);
+    let generated = v
+        .get("generatedTokens")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0);
     let total = prompt + generated;
     if total == 0 {
         return None;
     }
-    let model = v.get("model").and_then(|m| m.as_str()).unwrap_or("kiro-agent");
-    let model_name = if model == "agent" { "kiro-agent" } else { model };
+    let model = v
+        .get("model")
+        .and_then(|m| m.as_str())
+        .unwrap_or("kiro-agent");
+    let model_name = if model == "agent" {
+        "kiro-agent"
+    } else {
+        model
+    };
 
     Some(UsageRecord {
         id: None,
@@ -166,10 +207,15 @@ fn parse_kiro_cli_session(json_path: &Path, cursor: &mut FileCursor) -> Option<V
     let content = read_to_string_capped(json_path)?;
     let data: Value = serde_json::from_str(&content).ok()?;
     let ss = data.get("session_state")?;
-    let turns = ss.pointer("/conversation_metadata/user_turn_metadatas")?.as_array()?;
-    if turns.is_empty() { return Some(vec![]); }
+    let turns = ss
+        .pointer("/conversation_metadata/user_turn_metadatas")?
+        .as_array()?;
+    if turns.is_empty() {
+        return Some(vec![]);
+    }
 
-    let model_id = ss.pointer("/rts_model_state/model_info/model_id")
+    let model_id = ss
+        .pointer("/rts_model_state/model_info/model_id")
         .and_then(|m| m.as_str())
         .unwrap_or("kiro-cli-agent");
     let model = normalize_kiro_model(model_id);
@@ -188,18 +234,29 @@ fn parse_kiro_cli_session(json_path: &Path, cursor: &mut FileCursor) -> Option<V
     let mut records = Vec::new();
     for (i, turn) in turns.iter().enumerate().skip(prev_turn_count) {
         // Timestamp: end_timestamp (ISO) or request_start_timestamp_ms
-        let hour_start = turn.get("end_timestamp")
+        let hour_start = turn
+            .get("end_timestamp")
             .and_then(|t| t.as_str())
             .map(iso_to_bucket)
-            .or_else(|| turn.get("request_start_timestamp_ms")
-                .and_then(|ms| ms.as_i64())
-                .and_then(epoch_millis_to_bucket))
+            .or_else(|| {
+                turn.get("request_start_timestamp_ms")
+                    .and_then(|ms| ms.as_i64())
+                    .and_then(epoch_millis_to_bucket)
+            })
             .unwrap_or_default();
-        if hour_start.is_empty() { continue; }
+        if hour_start.is_empty() {
+            continue;
+        }
 
         // Real token counts (usually 0 in kiro-cli)
-        let mut input = turn.get("input_token_count").and_then(|x| x.as_u64()).unwrap_or(0);
-        let mut output = turn.get("output_token_count").and_then(|x| x.as_u64()).unwrap_or(0);
+        let mut input = turn
+            .get("input_token_count")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0);
+        let mut output = turn
+            .get("output_token_count")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0);
 
         // Fallback: char-based estimation
         if input == 0 && output == 0 {
@@ -210,15 +267,21 @@ fn parse_kiro_cli_session(json_path: &Path, cursor: &mut FileCursor) -> Option<V
         }
 
         let total = input + output;
-        if total == 0 { continue; }
+        if total == 0 {
+            continue;
+        }
 
         records.push(UsageRecord {
-            id: None, hour_start,
+            id: None,
+            hour_start,
             source: "kiro".to_string(),
             model: model.clone(),
-            input_tokens: input, output_tokens: output,
-            cached_input_tokens: 0, cache_creation_input_tokens: 0,
-            reasoning_output_tokens: 0, total_tokens: total,
+            input_tokens: input,
+            output_tokens: output,
+            cached_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+            reasoning_output_tokens: 0,
+            total_tokens: total,
             conversation_count: 1,
         });
     }
@@ -228,7 +291,10 @@ fn parse_kiro_cli_session(json_path: &Path, cursor: &mut FileCursor) -> Option<V
 }
 
 /// Build a map of turn_index → (input_chars, output_chars) from the .jsonl sibling.
-fn build_cli_char_map(jsonl_path: &Path, turns: &[Value]) -> std::collections::HashMap<usize, (usize, usize)> {
+fn build_cli_char_map(
+    jsonl_path: &Path,
+    turns: &[Value],
+) -> std::collections::HashMap<usize, (usize, usize)> {
     let mut result = std::collections::HashMap::new();
 
     // Build message_id → turn_index mapping
@@ -262,13 +328,18 @@ fn build_cli_char_map(jsonl_path: &Path, turns: &[Value]) -> std::collections::H
             Some(d) => d,
             None => continue,
         };
-        let mid = data.get("message_id").and_then(|m| m.as_str()).unwrap_or("");
+        let mid = data
+            .get("message_id")
+            .and_then(|m| m.as_str())
+            .unwrap_or("");
 
         // Count chars in content
         let chars = count_content_chars(data);
 
         match kind {
-            "Prompt" => { pending_prompt_chars += chars; }
+            "Prompt" => {
+                pending_prompt_chars += chars;
+            }
             "AssistantMessage" => {
                 if let Some(&turn_idx) = mid_to_turn.get(mid) {
                     // Attribute pending prompt chars to this turn
@@ -334,37 +405,66 @@ fn count_content_chars(data: &Value) -> usize {
 /// e.g. CLAUDE_SONNET_4_20250514_V1_0 → claude-sonnet-4
 fn normalize_kiro_model(raw: &str) -> String {
     let lower = raw.to_lowercase();
-    if lower == "agent" { return "kiro-agent".to_string(); }
+    if lower == "agent" {
+        return "kiro-agent".to_string();
+    }
 
     // Already a clean model name like "claude-opus-4.6", "claude-sonnet-4.5" — keep as-is
-    let version_re = ["claude-opus-4", "claude-sonnet-4", "claude-haiku-4",
-                      "claude-3-5-sonnet", "claude-3-5-haiku",
-                      "gpt-4", "gpt-4o", "gpt-5", "gemini"];
+    let version_re = [
+        "claude-opus-4",
+        "claude-sonnet-4",
+        "claude-haiku-4",
+        "claude-3-5-sonnet",
+        "claude-3-5-haiku",
+        "gpt-4",
+        "gpt-4o",
+        "gpt-5",
+        "gemini",
+    ];
     for prefix in &version_re {
-        if lower.starts_with(prefix) { return lower; }
+        if lower.starts_with(prefix) {
+            return lower;
+        }
     }
 
     // Convert internal IDs like CLAUDE_SONNET_4_20250514_V1_0 → family name
     let slug = lower.replace('_', "-");
     // Try specific versioned matches first (longer prefix wins)
-    for prefix in &["claude-opus-4-5", "claude-opus-4-6", "claude-opus-4-7", "claude-opus-4-8",
-                     "claude-sonnet-4-5", "claude-sonnet-4-6",
-                     "claude-haiku-4", "claude-opus-4", "claude-sonnet-4",
-                     "claude-3-5-sonnet", "claude-3-5-haiku",
-                     "gpt-4o", "gpt-4", "gpt-5", "gemini"] {
+    for prefix in &[
+        "claude-opus-4-5",
+        "claude-opus-4-6",
+        "claude-opus-4-7",
+        "claude-opus-4-8",
+        "claude-sonnet-4-5",
+        "claude-sonnet-4-6",
+        "claude-haiku-4",
+        "claude-opus-4",
+        "claude-sonnet-4",
+        "claude-3-5-sonnet",
+        "claude-3-5-haiku",
+        "gpt-4o",
+        "gpt-4",
+        "gpt-5",
+        "gemini",
+    ] {
         if slug.contains(prefix) {
             // Convert dashes back to dots for version: claude-opus-4-6 → claude-opus-4.6
             let model = prefix.replace("-4-", "-4.").replace("-3-5-", "-3.5-");
             return model;
         }
     }
-    if slug.contains("claude") { return "claude-sonnet-4".to_string(); }
+    if slug.contains("claude") {
+        return "claude-sonnet-4".to_string();
+    }
     raw.to_string()
 }
 
 /// Build a sorted timeline of (start_ms, model_name) from .chat metadata files.
 fn build_kiro_model_timeline(dev_data: &std::path::Path) -> Vec<(i64, String)> {
-    let pattern = format!("{}/**/*.chat", dev_data.parent().unwrap_or(dev_data).display());
+    let pattern = format!(
+        "{}/**/*.chat",
+        dev_data.parent().unwrap_or(dev_data).display()
+    );
     let mut timeline: Vec<(i64, String)> = glob_files(&pattern)
         .into_iter()
         .filter_map(|f| {
@@ -373,7 +473,9 @@ fn build_kiro_model_timeline(dev_data: &std::path::Path) -> Vec<(i64, String)> {
             let meta = v.get("metadata")?;
             let model_id = meta.get("modelId").and_then(|m| m.as_str())?;
             let start_ms = meta.get("startTime").and_then(|t| t.as_i64())?;
-            if start_ms == 0 { return None; }
+            if start_ms == 0 {
+                return None;
+            }
             Some((start_ms, normalize_kiro_model(model_id)))
         })
         .collect();
@@ -383,10 +485,13 @@ fn build_kiro_model_timeline(dev_data: &std::path::Path) -> Vec<(i64, String)> {
 
 /// Find the model active at the given timestamp (ms) from the timeline.
 fn resolve_kiro_model(timeline: &[(i64, String)], ts_ms: i64) -> Option<String> {
-    if timeline.is_empty() || ts_ms == 0 { return None; }
+    if timeline.is_empty() || ts_ms == 0 {
+        return None;
+    }
     // Find the last chat that started within 10 minutes before ts_ms
     let window = 10 * 60 * 1000i64;
-    timeline.iter()
+    timeline
+        .iter()
         .filter(|(start, _)| ts_ms >= *start && ts_ms - start <= window)
         .max_by_key(|(start, _)| *start)
         .map(|(_, model)| model.clone())
@@ -402,7 +507,9 @@ fn read_kiro_settings_model(home_dir: &std::path::Path) -> Option<String> {
     let content = std::fs::read_to_string(&storage_path).ok()?;
     let v: serde_json::Value = serde_json::from_str(&content).ok()?;
     let model = v.get("kiroAgent.modelSelection").and_then(|m| m.as_str())?;
-    if model.is_empty() || model == "auto" { return None; }
+    if model.is_empty() || model == "auto" {
+        return None;
+    }
     Some(normalize_kiro_model(model))
 }
 
@@ -430,9 +537,9 @@ fn parse_kiro_cli_db(db_path: &Path, cursor: &mut FileCursor) -> Option<Vec<Usag
     let rows = stmt
         .query_map([last_updated], |row| {
             Ok((
-                row.get::<_, String>(0)?,            // conversation_id
-                row.get::<_, String>(1)?,            // value (JSON blob)
-                row.get::<_, i64>(2).unwrap_or(0),   // updated_at (epoch ms)
+                row.get::<_, String>(0)?,          // conversation_id
+                row.get::<_, String>(1)?,          // value (JSON blob)
+                row.get::<_, i64>(2).unwrap_or(0), // updated_at (epoch ms)
             ))
         })
         .ok()?;
@@ -457,53 +564,88 @@ fn parse_kiro_cli_db(db_path: &Path, cursor: &mut FileCursor) -> Option<Vec<Usag
         let mut new_wm = conv_wm;
 
         for turn in history {
-            let user = match turn.get("user") { Some(u) => u, None => continue };
-            let meta = match turn.get("assistant")
+            let user = match turn.get("user") {
+                Some(u) => u,
+                None => continue,
+            };
+            let meta = match turn
+                .get("assistant")
                 .and_then(|a| a.get("request_metadata"))
-                .or_else(|| turn.get("request_metadata")) {
+                .or_else(|| turn.get("request_metadata"))
+            {
                 Some(m) => m,
                 None => continue,
             };
-            let request_id = meta.get("request_id").and_then(|r| r.as_str()).unwrap_or("");
-            if request_id.is_empty() { continue; }
+            let request_id = meta
+                .get("request_id")
+                .and_then(|r| r.as_str())
+                .unwrap_or("");
+            if request_id.is_empty() {
+                continue;
+            }
 
             // Event time (epoch ms): prefer request_start_timestamp_ms, fall back to
             // the user message timestamp. Turns with neither cannot be placed in
             // time nor deduplicated, so they are skipped.
             let event_ts_ms = {
-                let req_ts = meta.get("request_start_timestamp_ms").and_then(|t| t.as_i64()).unwrap_or(0);
+                let req_ts = meta
+                    .get("request_start_timestamp_ms")
+                    .and_then(|t| t.as_i64())
+                    .unwrap_or(0);
                 if req_ts > 0 {
                     req_ts
                 } else {
-                    user.get("timestamp").and_then(|t| t.as_str())
+                    user.get("timestamp")
+                        .and_then(|t| t.as_str())
                         .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
                         .map(|dt| dt.timestamp_millis())
                         .unwrap_or(0)
                 }
             };
-            if event_ts_ms <= 0 { continue; }
+            if event_ts_ms <= 0 {
+                continue;
+            }
             // Per-conversation watermark: skip turns already counted.
-            if event_ts_ms <= conv_wm { continue; }
-            if event_ts_ms > new_wm { new_wm = event_ts_ms; }
+            if event_ts_ms <= conv_wm {
+                continue;
+            }
+            if event_ts_ms > new_wm {
+                new_wm = event_ts_ms;
+            }
 
-            let model_id = meta.get("model_id").and_then(|m| m.as_str()).unwrap_or("auto");
+            let model_id = meta
+                .get("model_id")
+                .and_then(|m| m.as_str())
+                .unwrap_or("auto");
             let model = normalize_kiro_model(model_id);
             let hour_start = epoch_millis_to_bucket(event_ts_ms).unwrap_or_else(now_bucket);
 
-            let prompt_chars = meta.get("user_prompt_length").and_then(|x| x.as_u64()).unwrap_or(0);
-            let resp_chars = meta.get("response_size").and_then(|x| x.as_u64()).unwrap_or(0);
+            let prompt_chars = meta
+                .get("user_prompt_length")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
+            let resp_chars = meta
+                .get("response_size")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
             let input = prompt_chars / 4;
             let output = resp_chars / 4;
             let total = input + output;
-            if total == 0 { continue; }
+            if total == 0 {
+                continue;
+            }
 
             records.push(UsageRecord {
-                id: None, hour_start,
+                id: None,
+                hour_start,
                 source: "kiro".to_string(),
                 model,
-                input_tokens: input, output_tokens: output,
-                cached_input_tokens: 0, cache_creation_input_tokens: 0,
-                reasoning_output_tokens: 0, total_tokens: total,
+                input_tokens: input,
+                output_tokens: output,
+                cached_input_tokens: 0,
+                cache_creation_input_tokens: 0,
+                reasoning_output_tokens: 0,
+                total_tokens: total,
                 conversation_count: 1,
             });
         }

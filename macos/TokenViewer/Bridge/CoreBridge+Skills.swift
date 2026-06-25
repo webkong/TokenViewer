@@ -5,6 +5,10 @@ extension CoreBridge {
         callSkills { tt_skills_list($0) }
     }
 
+    func skillsListForAgents(_ payload: Data) -> Data? {
+        callSkillsWithJSON(payload) { tt_skills_list_for_agents($0, $1) }
+    }
+
     func skillsListAgents() -> Data? {
         callSkills { tt_skills_list_agents($0) }
     }

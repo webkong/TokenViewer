@@ -1,11 +1,14 @@
+use serde_json::Value;
 use std::fs;
 use std::path::Path;
-use serde_json::Value;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     let base = home_dir.join(".gemini/tmp");
     if !base.exists() {
         return Ok((vec![], cursor_data.unwrap_or("{}").to_string()));
@@ -17,7 +20,9 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
 
     for file in files {
         let key = file.to_string_lossy().to_string();
-        if !cursor.file_changed(&key) { continue; }
+        if !cursor.file_changed(&key) {
+            continue;
+        }
         let prev_offset = cursor.get_offset(&key);
         let file_len = fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
         if prev_offset >= file_len && prev_offset > 0 {
@@ -76,7 +81,11 @@ pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRec
             } else {
                 file_mtime_bucket(&file)
             };
-            let model = if last_model.is_empty() { "gemini".to_string() } else { last_model };
+            let model = if last_model.is_empty() {
+                "gemini".to_string()
+            } else {
+                last_model
+            };
 
             all_records.push(UsageRecord {
                 id: None,

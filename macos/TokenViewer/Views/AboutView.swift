@@ -37,7 +37,7 @@ struct AboutView: View {
                 }
 
                 // Supported agents
-                SettingsCard(title: "支持的 Agent") {
+                SettingsCard(title: l10n.aboutSupportedAgents) {
                     VStack(alignment: .leading, spacing: 2) {
                         Button {
                             withAnimation { showAgents.toggle() }
@@ -47,19 +47,19 @@ struct AboutView: View {
                                     Image(systemName: "rectangle.stack.fill")
                                         .font(.system(size: 11))
                                         .foregroundStyle(.secondary)
-                                    Text("\(allProviders.count) 个 AI 编程工具")
+                                    Text(l10n.aboutAgentCount(allProviders.count))
                                         .font(.system(size: 13))
                                 }
                                 Spacer()
                                 HStack(spacing: 12) {
                                     HStack(spacing: 4) {
                                         Circle().fill(.green).frame(width: 6, height: 6)
-                                        Text("\(limitsCount) 支持限额").font(.caption).foregroundStyle(.secondary)
+                                        Text(l10n.aboutLimitsCount(limitsCount)).font(.caption).foregroundStyle(.secondary)
                                     }
                                     Text("·").foregroundStyle(.tertiary)
                                     HStack(spacing: 4) {
                                         Circle().fill(.secondary).frame(width: 6, height: 6)
-                                        Text("\(otherCount) 其他").font(.caption).foregroundStyle(.secondary)
+                                        Text(l10n.aboutOtherCount(otherCount)).font(.caption).foregroundStyle(.secondary)
                                     }
                                     Image(systemName: showAgents ? "chevron.up" : "chevron.down")
                                         .font(.system(size: 11, weight: .semibold))
@@ -72,7 +72,7 @@ struct AboutView: View {
                         if showAgents {
                             Divider().padding(.vertical, 6)
                             // Limits agents
-                            Text("带限额订阅").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                            Text(l10n.aboutWithLimits).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
                             FlowLayout(itemSpacing: 6, rowSpacing: 6) {
                                 ForEach(allProviders.filter(\.hasLimits)) { p in
                                     chip(p)
@@ -80,7 +80,7 @@ struct AboutView: View {
                             }
                             Divider().padding(.vertical, 4)
                             // Other agents
-                            Text("不带限额").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                            Text(l10n.aboutWithoutLimits).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
                             FlowLayout(itemSpacing: 6, rowSpacing: 6) {
                                 ForEach(allProviders.filter { !$0.hasLimits }) { p in
                                     chip(p)

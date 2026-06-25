@@ -2,8 +2,8 @@ use std::fs;
 use std::os::unix::fs as unix_fs;
 use std::path::{Path, PathBuf};
 
-use crate::skills::provider_config::{expand_path, ProviderSkillsConfig};
 use crate::skills::models::LinkType;
+use crate::skills::provider_config::{expand_path, ProviderSkillsConfig};
 use crate::skills::scanner::Scanner;
 
 pub struct SymlinkManager {
@@ -51,8 +51,13 @@ impl SymlinkManager {
             LinkType::SingleFile => {
                 // SingleFile mode generates a merged file; remove it
                 if target_base.is_symlink() || target_base.is_file() {
-                    fs::remove_file(&target_base)
-                        .map_err(|e| format!("Failed to remove single file {}: {}", target_base.display(), e))?;
+                    fs::remove_file(&target_base).map_err(|e| {
+                        format!(
+                            "Failed to remove single file {}: {}",
+                            target_base.display(),
+                            e
+                        )
+                    })?;
                 }
                 Ok(())
             }
@@ -100,12 +105,27 @@ impl SymlinkManager {
         // Backup existing non-symlink
         if target.exists() && !target.is_symlink() {
             let backup = target.with_extension("bak");
-            fs::rename(&target, &backup)
-                .map_err(|e| format!("Failed to backup {} to {}: {}", target.display(), backup.display(), e))?;
-            eprintln!("Backed up existing directory: {} -> {}", target.display(), backup.display());
+            fs::rename(&target, &backup).map_err(|e| {
+                format!(
+                    "Failed to backup {} to {}: {}",
+                    target.display(),
+                    backup.display(),
+                    e
+                )
+            })?;
+            eprintln!(
+                "Backed up existing directory: {} -> {}",
+                target.display(),
+                backup.display()
+            );
         } else if target.is_symlink() {
-            fs::remove_file(&target)
-                .map_err(|e| format!("Failed to remove existing symlink {}: {}", target.display(), e))?;
+            fs::remove_file(&target).map_err(|e| {
+                format!(
+                    "Failed to remove existing symlink {}: {}",
+                    target.display(),
+                    e
+                )
+            })?;
         }
 
         // Ensure parent directory exists
@@ -114,8 +134,14 @@ impl SymlinkManager {
                 .map_err(|e| format!("Failed to create parent dir {}: {}", parent.display(), e))?;
         }
 
-        unix_fs::symlink(source, &target)
-            .map_err(|e| format!("Failed to create symlink {} -> {}: {}", target.display(), source.display(), e))?;
+        unix_fs::symlink(source, &target).map_err(|e| {
+            format!(
+                "Failed to create symlink {} -> {}: {}",
+                target.display(),
+                source.display(),
+                e
+            )
+        })?;
 
         Ok(())
     }
@@ -163,8 +189,13 @@ impl SymlinkManager {
         skill_id: &str,
     ) -> Result<(), String> {
         let overlay_dir = target_base.join(skill_id);
-        fs::create_dir_all(&overlay_dir)
-            .map_err(|e| format!("Failed to create overlay dir {}: {}", overlay_dir.display(), e))?;
+        fs::create_dir_all(&overlay_dir).map_err(|e| {
+            format!(
+                "Failed to create overlay dir {}: {}",
+                overlay_dir.display(),
+                e
+            )
+        })?;
 
         for entry in fs::read_dir(source)
             .map_err(|e| format!("Failed to read source dir {}: {}", source.display(), e))?
@@ -183,8 +214,14 @@ impl SymlinkManager {
                 continue;
             }
 
-            unix_fs::symlink(&source_file, &link_path)
-                .map_err(|e| format!("Failed to create overlay symlink {} -> {}: {}", link_path.display(), source_file.display(), e))?;
+            unix_fs::symlink(&source_file, &link_path).map_err(|e| {
+                format!(
+                    "Failed to create overlay symlink {} -> {}: {}",
+                    link_path.display(),
+                    source_file.display(),
+                    e
+                )
+            })?;
         }
 
         Ok(())
@@ -209,7 +246,10 @@ impl SymlinkManager {
         let source_dir = target_base.join(skill_id);
 
         if !source_dir.exists() {
-            return Err(format!("Skill directory not found: {}", source_dir.display()));
+            return Err(format!(
+                "Skill directory not found: {}",
+                source_dir.display()
+            ));
         }
 
         // Don't organize if it's already a symlink
@@ -231,8 +271,14 @@ impl SymlinkManager {
         }
 
         // Move directory
-        fs::rename(&source_dir, &dest_dir)
-            .map_err(|e| format!("Failed to move {} to {}: {}", source_dir.display(), dest_dir.display(), e))?;
+        fs::rename(&source_dir, &dest_dir).map_err(|e| {
+            format!(
+                "Failed to move {} to {}: {}",
+                source_dir.display(),
+                dest_dir.display(),
+                e
+            )
+        })?;
 
         // Create symlink at original location
         unix_fs::symlink(&dest_dir, &source_dir)
@@ -275,7 +321,10 @@ impl SymlinkManager {
                         organized.push((skill.id.clone(), agent.source.clone()));
                     }
                     Err(e) => {
-                        eprintln!("Failed to organize skill {} from {}: {}", skill.id, agent.source, e);
+                        eprintln!(
+                            "Failed to organize skill {} from {}: {}",
+                            skill.id, agent.source, e
+                        );
                     }
                 }
             }
@@ -296,7 +345,10 @@ impl SymlinkManager {
         let source_dir = self.source_root.join(skill_id);
 
         if !source_dir.exists() {
-            return Err(format!("Source directory not found: {}", source_dir.display()));
+            return Err(format!(
+                "Source directory not found: {}",
+                source_dir.display()
+            ));
         }
 
         if source_dir.is_symlink() {
@@ -308,8 +360,13 @@ impl SymlinkManager {
 
         // Remove symlink at agent's location
         if target_dir.is_symlink() {
-            fs::remove_file(&target_dir)
-                .map_err(|e| format!("Failed to remove symlink at {}: {}", target_dir.display(), e))?;
+            fs::remove_file(&target_dir).map_err(|e| {
+                format!(
+                    "Failed to remove symlink at {}: {}",
+                    target_dir.display(),
+                    e
+                )
+            })?;
         }
 
         // Remove broken symlinks from other agents
@@ -323,7 +380,10 @@ impl SymlinkManager {
 
         // Move directory back
         if target_dir.exists() {
-            return Err(format!("Target directory already exists: {}", target_dir.display()));
+            return Err(format!(
+                "Target directory already exists: {}",
+                target_dir.display()
+            ));
         }
 
         if let Some(parent) = target_dir.parent() {
@@ -331,8 +391,14 @@ impl SymlinkManager {
                 .map_err(|e| format!("Failed to create parent dir: {}", e))?;
         }
 
-        fs::rename(&source_dir, &target_dir)
-            .map_err(|e| format!("Failed to move {} to {}: {}", source_dir.display(), target_dir.display(), e))?;
+        fs::rename(&source_dir, &target_dir).map_err(|e| {
+            format!(
+                "Failed to move {} to {}: {}",
+                source_dir.display(),
+                target_dir.display(),
+                e
+            )
+        })?;
 
         Ok(())
     }
@@ -370,10 +436,7 @@ mod tests {
 
         let link_path = target_base.join("code-review");
         assert!(link_path.is_symlink());
-        assert_eq!(
-            fs::read_link(&link_path).unwrap(),
-            skill_dir
-        );
+        assert_eq!(fs::read_link(&link_path).unwrap(), skill_dir);
     }
 
     #[test]

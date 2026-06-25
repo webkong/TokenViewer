@@ -9,7 +9,9 @@ use crate::skills::models::{GitConnectivity, GitStatusInfo, PendingChange};
 pub fn debug_log(msg: &str) {
     eprintln!("[asm] {}", msg);
     if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true).append(true).open("/tmp/asm-git.log")
+        .create(true)
+        .append(true)
+        .open("/tmp/asm-git.log")
     {
         let _ = writeln!(f, "[asm] {}", msg);
     }
@@ -31,8 +33,13 @@ pub struct GitEngine {
 impl GitEngine {
     /// Open an existing git repository.
     pub fn open(repo_path: &Path) -> Result<Self, String> {
-        let repo = Repository::open(repo_path)
-            .map_err(|e| format!("Failed to open git repository at {}: {}", repo_path.display(), e))?;
+        let repo = Repository::open(repo_path).map_err(|e| {
+            format!(
+                "Failed to open git repository at {}: {}",
+                repo_path.display(),
+                e
+            )
+        })?;
         Ok(Self { repo })
     }
 
@@ -47,11 +54,14 @@ impl GitEngine {
             .map_err(|e| format!("Failed to init git repo at {}: {}", repo_path.display(), e))?;
 
         // Configure local user for commits
-        let mut config = repo.config()
+        let mut config = repo
+            .config()
             .map_err(|e| format!("Failed to get repo config: {}", e))?;
-        config.set_str("user.name", "SkillSync")
+        config
+            .set_str("user.name", "SkillSync")
             .map_err(|e| format!("Failed to set user.name: {}", e))?;
-        config.set_str("user.email", "skillsync@local")
+        config
+            .set_str("user.email", "skillsync@local")
             .map_err(|e| format!("Failed to set user.email: {}", e))?;
         drop(config);
 
@@ -63,20 +73,26 @@ impl GitEngine {
         }
 
         // Stage and make initial commit
-        let mut index = repo.index()
+        let mut index = repo
+            .index()
             .map_err(|e| format!("Failed to get index: {}", e))?;
-        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
+        index
+            .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
             .map_err(|e| format!("Failed to stage files: {}", e))?;
-        index.write()
+        index
+            .write()
             .map_err(|e| format!("Failed to write index: {}", e))?;
 
-        let tree_oid = index.write_tree()
+        let tree_oid = index
+            .write_tree()
             .map_err(|e| format!("Failed to write tree: {}", e))?;
         drop(index);
 
-        let tree = repo.find_tree(tree_oid)
+        let tree = repo
+            .find_tree(tree_oid)
             .map_err(|e| format!("Failed to find tree: {}", e))?;
-        let sig = repo.signature()
+        let sig = repo
+            .signature()
             .map_err(|e| format!("Failed to get signature: {}", e))?;
 
         // Create initial commit (HEAD is unborn in a fresh repo, so no parent)
@@ -119,15 +135,20 @@ impl GitEngine {
 
     /// Get the current git status with branch info, ahead/behind, and pending changes.
     pub fn get_status(&self) -> Result<GitStatusInfo, String> {
-        let statuses = self.repo.statuses(Some(
-            StatusOptions::new()
-                .include_untracked(true)
-                .renames_head_to_index(true),
-        ))
-        .map_err(|e| format!("Failed to get status: {}", e))?;
+        let statuses = self
+            .repo
+            .statuses(Some(
+                StatusOptions::new()
+                    .include_untracked(true)
+                    .renames_head_to_index(true),
+            ))
+            .map_err(|e| format!("Failed to get status: {}", e))?;
 
         // Get branch name
-        let branch = self.repo.head().ok()
+        let branch = self
+            .repo
+            .head()
+            .ok()
             .and_then(|h| h.shorthand().map(|s| s.to_string()));
 
         // Get ahead/behind counts
@@ -149,8 +170,12 @@ impl GitEngine {
         });
 
         if has_conflicts {
-            let count = statuses.iter().filter(|s| s.status().contains(Status::CONFLICTED)).count();
-            let mut info = GitStatusInfo::conflicted(&format!("{} file(s) have merge conflicts", count));
+            let count = statuses
+                .iter()
+                .filter(|s| s.status().contains(Status::CONFLICTED))
+                .count();
+            let mut info =
+                GitStatusInfo::conflicted(&format!("{} file(s) have merge conflicts", count));
             info.branch = branch;
             info.ahead = ahead;
             info.behind = behind;
@@ -181,7 +206,10 @@ impl GitEngine {
         };
 
         // Try to resolve upstream branch
-        let upstream = match self.repo.branch_upstream_name(head.shorthand().unwrap_or("")) {
+        let upstream = match self
+            .repo
+            .branch_upstream_name(head.shorthand().unwrap_or(""))
+        {
             Ok(name) => name,
             Err(_) => return Ok((0, 0)),
         };
@@ -195,7 +223,9 @@ impl GitEngine {
             None => return Ok((0, 0)),
         };
 
-        let (ahead, behind) = self.repo.graph_ahead_behind(head_oid, upstream_oid)
+        let (ahead, behind) = self
+            .repo
+            .graph_ahead_behind(head_oid, upstream_oid)
             .map_err(|e| format!("Failed to compute ahead/behind: {}", e))?;
 
         Ok((ahead as i32, behind as i32))
@@ -203,12 +233,14 @@ impl GitEngine {
 
     /// Get a list of pending changes (modified, added, deleted files).
     pub fn get_pending_changes(&self) -> Result<Vec<PendingChange>, String> {
-        let statuses = self.repo.statuses(Some(
-            StatusOptions::new()
-                .include_untracked(true)
-                .renames_head_to_index(true),
-        ))
-        .map_err(|e| format!("Failed to get status: {}", e))?;
+        let statuses = self
+            .repo
+            .statuses(Some(
+                StatusOptions::new()
+                    .include_untracked(true)
+                    .renames_head_to_index(true),
+            ))
+            .map_err(|e| format!("Failed to get status: {}", e))?;
 
         let changes: Vec<PendingChange> = statuses
             .iter()
@@ -216,13 +248,16 @@ impl GitEngine {
                 let path = s.path()?.to_string();
                 let status = s.status();
 
-                let change_type = if status.contains(Status::INDEX_NEW) || status.contains(Status::WT_NEW) {
-                    "added"
-                } else if status.contains(Status::INDEX_DELETED) || status.contains(Status::WT_DELETED) {
-                    "deleted"
-                } else {
-                    "modified"
-                };
+                let change_type =
+                    if status.contains(Status::INDEX_NEW) || status.contains(Status::WT_NEW) {
+                        "added"
+                    } else if status.contains(Status::INDEX_DELETED)
+                        || status.contains(Status::WT_DELETED)
+                    {
+                        "deleted"
+                    } else {
+                        "modified"
+                    };
 
                 Some(PendingChange {
                     file_path: path,
@@ -237,10 +272,12 @@ impl GitEngine {
     /// Set (or create) the "origin" remote URL.
     pub fn set_remote_url(&self, url: &str) -> Result<(), String> {
         if self.repo.find_remote("origin").is_ok() {
-            self.repo.remote_set_url("origin", url)
+            self.repo
+                .remote_set_url("origin", url)
                 .map_err(|e| format!("Failed to set remote URL: {}", e))?;
         } else {
-            self.repo.remote("origin", url)
+            self.repo
+                .remote("origin", url)
                 .map_err(|e| format!("Failed to create remote 'origin': {}", e))?;
         }
         Ok(())
@@ -248,18 +285,25 @@ impl GitEngine {
 
     /// Detect the current branch name.
     fn current_branch(&self) -> Result<String, String> {
-        let head = self.repo.head()
+        let head = self
+            .repo
+            .head()
             .map_err(|e| format!("Failed to get HEAD: {}", e))?;
-        let name = head.shorthand()
-            .ok_or("HEAD is not on a branch")?;
+        let name = head.shorthand().ok_or("HEAD is not on a branch")?;
         debug_log!(" current_branch: {}", name);
         Ok(name.to_string())
     }
 
     /// Fetch from origin using the given token for auth (or no auth if None).
     fn fetch_origin(&self, branch: &str, token: Option<&str>) -> Result<(), String> {
-        debug_log!(" fetch_origin: branch={}, has_token={}", branch, token.is_some());
-        let mut remote = self.repo.find_remote("origin")
+        debug_log!(
+            " fetch_origin: branch={}, has_token={}",
+            branch,
+            token.is_some()
+        );
+        let mut remote = self
+            .repo
+            .find_remote("origin")
             .map_err(|e| format!("Failed to find remote 'origin': {}", e))?;
 
         let mut fetch_options = git2::FetchOptions::new();
@@ -267,7 +311,8 @@ impl GitEngine {
             fetch_options.remote_callbacks(Self::make_remote_callbacks(tok));
         }
 
-        remote.fetch(&[branch], Some(&mut fetch_options), None)
+        remote
+            .fetch(&[branch], Some(&mut fetch_options), None)
             .map_err(|e| format!("Failed to fetch from origin: {}", e))?;
 
         debug_log!(" fetch_origin: completed");
@@ -291,55 +336,65 @@ impl GitEngine {
 
         let file_count = changes.len();
 
-        let mut index = self.repo.index()
+        let mut index = self
+            .repo
+            .index()
             .map_err(|e| format!("Failed to get index: {}", e))?;
 
-        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
+        index
+            .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
             .map_err(|e| format!("Failed to stage files: {}", e))?;
 
-        index.write()
+        index
+            .write()
             .map_err(|e| format!("Failed to write index: {}", e))?;
 
-        let tree_oid = index.write_tree()
+        let tree_oid = index
+            .write_tree()
             .map_err(|e| format!("Failed to write tree: {}", e))?;
         drop(index);
 
-        let tree = self.repo.find_tree(tree_oid)
+        let tree = self
+            .repo
+            .find_tree(tree_oid)
             .map_err(|e| format!("Failed to find tree: {}", e))?;
 
-        let sig = self.repo.signature()
+        let sig = self
+            .repo
+            .signature()
             .map_err(|e| format!("Failed to get signature: {}", e))?;
 
-        let message = format!("Auto-commit before sync ({} file{})", file_count, if file_count == 1 { "" } else { "s" });
+        let message = format!(
+            "Auto-commit before sync ({} file{})",
+            file_count,
+            if file_count == 1 { "" } else { "s" }
+        );
 
         match self.repo.head() {
             Ok(head) => {
                 let parent_oid = head.target().ok_or("HEAD has no target")?;
                 drop(head);
-                let parent = self.repo.find_commit(parent_oid)
+                let parent = self
+                    .repo
+                    .find_commit(parent_oid)
                     .map_err(|e| format!("Failed to find parent commit: {}", e))?;
-                self.repo.commit(
-                    Some("HEAD"),
-                    &sig,
-                    &sig,
-                    &message,
-                    &tree,
-                    &[&parent],
-                )
-                .map_err(|e| format!("Failed to auto-commit: {}", e))?;
+                self.repo
+                    .commit(Some("HEAD"), &sig, &sig, &message, &tree, &[&parent])
+                    .map_err(|e| format!("Failed to auto-commit: {}", e))?;
                 debug_log!(" auto_commit: committed (parent) \"{}\"", message);
             }
             Err(_) => {
                 // Unborn HEAD: initial commit with no parents
-                self.repo.commit(
-                    Some("HEAD"),
-                    &sig,
-                    &sig,
-                    &message,
-                    &tree,
-                    &[] as &[&git2::Commit],
-                )
-                .map_err(|e| format!("Failed to create initial auto-commit: {}", e))?;
+                self.repo
+                    .commit(
+                        Some("HEAD"),
+                        &sig,
+                        &sig,
+                        &message,
+                        &tree,
+                        &[] as &[&git2::Commit],
+                    )
+                    .map_err(|e| format!("Failed to create initial auto-commit: {}", e))?;
                 debug_log!(" auto_commit: committed (initial) \"{}\"", message);
             }
         }
@@ -359,7 +414,9 @@ impl GitEngine {
         // Check FETCH_HEAD validity before rebase
         let fetch_head_path = self.repo.path().join("FETCH_HEAD");
         let fetch_ok = fetch_head_path.exists()
-            && std::fs::metadata(&fetch_head_path).map(|m| m.len() > 0).unwrap_or(false);
+            && std::fs::metadata(&fetch_head_path)
+                .map(|m| m.len() > 0)
+                .unwrap_or(false);
 
         if !fetch_ok {
             debug_log!(" pull: FETCH_HEAD missing or empty, nothing to rebase");
@@ -370,21 +427,29 @@ impl GitEngine {
 
         // Rebase onto FETCH_HEAD
         {
-            let fetch_head = self.repo.find_reference("FETCH_HEAD")
+            let fetch_head = self
+                .repo
+                .find_reference("FETCH_HEAD")
                 .map_err(|e| format!("Failed to find FETCH_HEAD: {}", e))?;
-            let upstream = self.repo.reference_to_annotated_commit(&fetch_head)
+            let upstream = self
+                .repo
+                .reference_to_annotated_commit(&fetch_head)
                 .map_err(|e| format!("Failed to resolve FETCH_HEAD: {}", e))?;
             drop(fetch_head);
 
-            let mut rebase = self.repo.rebase(
-                None,
-                Some(&upstream),
-                None,
-                Some(&mut git2::RebaseOptions::new()),
-            )
-            .map_err(|e| format!("Failed to start rebase: {}", e))?;
+            let mut rebase = self
+                .repo
+                .rebase(
+                    None,
+                    Some(&upstream),
+                    None,
+                    Some(&mut git2::RebaseOptions::new()),
+                )
+                .map_err(|e| format!("Failed to start rebase: {}", e))?;
 
-            let sig = self.repo.signature()
+            let sig = self
+                .repo
+                .signature()
                 .map_err(|e| format!("Failed to get signature: {}", e))?;
 
             while let Some(op) = rebase.next() {
@@ -394,7 +459,8 @@ impl GitEngine {
                 }
             }
 
-            rebase.finish(None)
+            rebase
+                .finish(None)
                 .map_err(|e| format!("Failed to finish rebase: {}", e))?;
         }
 
@@ -403,7 +469,11 @@ impl GitEngine {
     }
 
     /// Auto-commit pending changes, pull-rebase, and push.
-    pub fn stage_and_push(&mut self, _message: &str, token: Option<&str>) -> Result<GitStatusInfo, String> {
+    pub fn stage_and_push(
+        &mut self,
+        _message: &str,
+        token: Option<&str>,
+    ) -> Result<GitStatusInfo, String> {
         debug_log!(" stage_and_push: start");
         self.auto_commit()?;
 
@@ -443,7 +513,9 @@ impl GitEngine {
         // Clean up stale empty FETCH_HEAD from previous failed attempts
         let fetch_head_path = self.repo.path().join("FETCH_HEAD");
         if fetch_head_path.exists() {
-            let len = std::fs::metadata(&fetch_head_path).map(|m| m.len()).unwrap_or(0);
+            let len = std::fs::metadata(&fetch_head_path)
+                .map(|m| m.len())
+                .unwrap_or(0);
             debug_log!(" pull_rebase: existing FETCH_HEAD size={}", len);
             if len == 0 {
                 debug_log!(" pull_rebase: removing stale empty FETCH_HEAD");
@@ -462,8 +534,11 @@ impl GitEngine {
                 .map(|m| m.len() == 0)
                 .unwrap_or(true);
 
-        debug_log!(" pull_rebase: FETCH_HEAD after fetch: exists={}, is_empty={}",
-            fetch_head_path.exists(), is_empty);
+        debug_log!(
+            " pull_rebase: FETCH_HEAD after fetch: exists={}, is_empty={}",
+            fetch_head_path.exists(),
+            is_empty
+        );
 
         if is_empty {
             debug_log!(" pull_rebase: nothing fetched, skipping rebase");
@@ -472,24 +547,32 @@ impl GitEngine {
 
         // Get the FETCH_HEAD
         debug_log!(" pull_rebase: finding FETCH_HEAD reference");
-        let fetch_head = self.repo.find_reference("FETCH_HEAD")
+        let fetch_head = self
+            .repo
+            .find_reference("FETCH_HEAD")
             .map_err(|e| format!("Failed to find FETCH_HEAD: {}", e))?;
-        let upstream = self.repo.reference_to_annotated_commit(&fetch_head)
+        let upstream = self
+            .repo
+            .reference_to_annotated_commit(&fetch_head)
             .map_err(|e| format!("Failed to resolve FETCH_HEAD: {}", e))?;
 
         // Drop fetch_head before rebase
         drop(fetch_head);
 
         // Rebase onto fetched commit
-        let mut rebase = self.repo.rebase(
-            None,
-            Some(&upstream),
-            None,
-            Some(&mut git2::RebaseOptions::new()),
-        )
-        .map_err(|e| format!("Failed to start rebase: {}", e))?;
+        let mut rebase = self
+            .repo
+            .rebase(
+                None,
+                Some(&upstream),
+                None,
+                Some(&mut git2::RebaseOptions::new()),
+            )
+            .map_err(|e| format!("Failed to start rebase: {}", e))?;
 
-        let sig = self.repo.signature()
+        let sig = self
+            .repo
+            .signature()
             .map_err(|e| format!("Failed to get signature: {}", e))?;
 
         // Iterate rebase steps
@@ -500,7 +583,8 @@ impl GitEngine {
             }
         }
 
-        rebase.finish(None)
+        rebase
+            .finish(None)
             .map_err(|e| format!("Failed to finish rebase: {}", e))?;
 
         Ok(())
@@ -511,10 +595,12 @@ impl GitEngine {
     pub fn check_connectivity(&self, token: Option<&str>) -> Result<GitConnectivity, String> {
         let token = match token {
             Some(t) if !t.is_empty() => t,
-            _ => return Ok(GitConnectivity {
-                status: "disconnected".into(),
-                message: Some("No token configured".into()),
-            }),
+            _ => {
+                return Ok(GitConnectivity {
+                    status: "disconnected".into(),
+                    message: Some("No token configured".into()),
+                })
+            }
         };
 
         // Check if remote exists
@@ -525,18 +611,28 @@ impl GitEngine {
             });
         }
 
-        let mut remote = self.repo.find_remote("origin")
+        let mut remote = self
+            .repo
+            .find_remote("origin")
             .map_err(|e| format!("Failed to find remote 'origin': {}", e))?;
 
         // Connect only — no data transfer, just auth handshake
         // Use a block to scope the RemoteConnection's lifetime
         let result = {
-            remote.connect_auth(git2::Direction::Fetch, Some(Self::make_remote_callbacks(token)), None)
+            remote
+                .connect_auth(
+                    git2::Direction::Fetch,
+                    Some(Self::make_remote_callbacks(token)),
+                    None,
+                )
                 .map(|_conn| ())
                 .map_err(|e| e.to_string())
         };
         match result {
-            Ok(()) => Ok(GitConnectivity { status: "connected".into(), message: None }),
+            Ok(()) => Ok(GitConnectivity {
+                status: "connected".into(),
+                message: None,
+            }),
             Err(e) => {
                 let msg = if e.contains("403") {
                     "Access denied (403). Check that your token has 'repo' scope and is not expired.".into()
@@ -547,7 +643,10 @@ impl GitEngine {
                 } else {
                     format!("Connection failed: {}", e)
                 };
-                Ok(GitConnectivity { status: "disconnected".into(), message: Some(msg) })
+                Ok(GitConnectivity {
+                    status: "disconnected".into(),
+                    message: Some(msg),
+                })
             }
         }
     }
@@ -555,7 +654,9 @@ impl GitEngine {
     /// Push to origin.
     fn push(&self, token: Option<&str>) -> Result<(), String> {
         debug_log!(" push: start, has_token={}", token.is_some());
-        let mut remote = self.repo.find_remote("origin")
+        let mut remote = self
+            .repo
+            .find_remote("origin")
             .map_err(|e| format!("Failed to find remote 'origin': {}", e))?;
 
         let branch = self.current_branch().unwrap_or_else(|_| "main".to_string());
@@ -567,7 +668,8 @@ impl GitEngine {
             push_options.remote_callbacks(Self::make_remote_callbacks(tok));
         }
 
-        remote.push(&[&refspec], Some(&mut push_options))
+        remote
+            .push(&[&refspec], Some(&mut push_options))
             .map_err(|e| format!("Failed to push: {}", e))?;
 
         debug_log!(" push: completed");
@@ -669,7 +771,9 @@ mod tests {
         let dir = TempDir::new().unwrap();
         init_git_repo(dir.path());
         let engine = GitEngine::open(dir.path()).unwrap();
-        engine.set_remote_url("https://github.com/test/repo.git").unwrap();
+        engine
+            .set_remote_url("https://github.com/test/repo.git")
+            .unwrap();
         let remote = engine.repo.find_remote("origin").unwrap();
         assert_eq!(remote.url().unwrap(), "https://github.com/test/repo.git");
     }
@@ -679,8 +783,12 @@ mod tests {
         let dir = TempDir::new().unwrap();
         init_git_repo(dir.path());
         let engine = GitEngine::open(dir.path()).unwrap();
-        engine.set_remote_url("https://github.com/test/repo.git").unwrap();
-        engine.set_remote_url("https://gitlab.com/test/repo.git").unwrap();
+        engine
+            .set_remote_url("https://github.com/test/repo.git")
+            .unwrap();
+        engine
+            .set_remote_url("https://gitlab.com/test/repo.git")
+            .unwrap();
         let remote = engine.repo.find_remote("origin").unwrap();
         assert_eq!(remote.url().unwrap(), "https://gitlab.com/test/repo.git");
     }

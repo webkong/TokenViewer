@@ -3,27 +3,58 @@ import SwiftUI
 struct SkillManagerView: View {
     @StateObject private var viewModel = SkillManagerViewModel.shared
     @State private var showSyncSheet = false
+    @AppStorage("skillsEnabledProviders") private var enabledProvidersJSON: String = "[\"claude\",\"codex\",\"opencode\"]"
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Agent filter chips
+        VStack(alignment: .leading, spacing: 14) {
+            header
             agentFilterBar
-            Divider()
 
-            // Skill list
-            if viewModel.isLoading {
-                Spacer()
-                ProgressView()
-                Spacer()
-            } else if viewModel.filteredSkills.isEmpty {
-                emptyState
-            } else {
-                SkillListView(viewModel: viewModel)
+            Group {
+                if viewModel.isLoading {
+                    Spacer()
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                    Spacer()
+                } else if viewModel.filteredSkills.isEmpty {
+                    emptyState
+                } else {
+                    SkillListView(viewModel: viewModel)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .padding(20)
+        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear { viewModel.refresh() }
+        .onChange(of: enabledProvidersJSON) { _, _ in
+            viewModel.ensureValidFilter()
+            viewModel.refresh()
+        }
         .sheet(isPresented: $showSyncSheet) {
             SkillGitSyncSheet(viewModel: viewModel)
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L10n.shared.skills)
+                    .font(.system(size: 24, weight: .bold))
+                Text(L10n.shared.skillsSubtitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button { viewModel.refresh(showToast: true) } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 13, weight: .semibold))
+                    .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
+                    .animation(viewModel.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading)
+            }
+            .buttonStyle(.borderless)
+            .disabled(viewModel.isLoading)
+            .quickHelp(L10n.shared.skillRefreshTip)
         }
     }
 
@@ -36,6 +67,7 @@ struct SkillManagerView: View {
                 icon: "square.grid.2x2",
                 label: L10n.shared.skillAll,
                 isSelected: viewModel.selectedFilter == "all",
+                tooltip: L10n.shared.skillAllFilterTip,
                 action: { viewModel.selectedFilter = "all" }
             )
 
@@ -47,6 +79,7 @@ struct SkillManagerView: View {
                             providerIcon: p.source,
                             label: p.displayName,
                             isSelected: viewModel.selectedFilter == p.source,
+                            tooltip: L10n.shared.skillAgentFilterTip(p.displayName),
                             action: { viewModel.selectedFilter = p.source }
                         )
                     }
@@ -61,7 +94,8 @@ struct SkillManagerView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
-                TextField("Search", text: $viewModel.searchText)
+                TextField(L10n.shared.skillSearchPlaceholder, text: $viewModel.searchText)
+                    .help(L10n.shared.skillSearchPlaceholder)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .frame(width: 120)
@@ -69,6 +103,28 @@ struct SkillManagerView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(.quinary, in: RoundedRectangle(cornerRadius: 6))
+
+            Button {
+                AppFocus.clear()
+                viewModel.organizeFilteredSkills()
+            } label: {
+                Image(systemName: "arrow.triangle.swap")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .buttonStyle(.borderless)
+            .disabled(viewModel.isLoading)
+            .quickHelp(L10n.shared.skillOrganizeAllTip)
+
+            Button {
+                AppFocus.clear()
+                viewModel.restoreFilteredSkills()
+            } label: {
+                Image(systemName: "arrow.uturn.backward")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .buttonStyle(.borderless)
+            .disabled(viewModel.isLoading)
+            .quickHelp(L10n.shared.skillRestoreAllTip)
 
             // Sync button
             Button {
@@ -79,18 +135,13 @@ struct SkillManagerView: View {
                     .font(.system(size: 12, weight: .medium))
             }
             .buttonStyle(.borderless)
-            .help("Git Sync")
+            .quickHelp(L10n.shared.skillGitSyncTip)
 
-            // Refresh button
-            Button { viewModel.refresh() } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .buttonStyle(.borderless)
-            .help(L10n.shared.skillFetch)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary, lineWidth: 0.5))
     }
 
     // MARK: - Empty State
@@ -109,6 +160,7 @@ struct SkillManagerView: View {
                 .multilineTextAlignment(.center)
             Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -119,6 +171,7 @@ struct FilterChip: View {
     var providerIcon: String? = nil
     let label: String
     let isSelected: Bool
+    let tooltip: String
     let action: () -> Void
 
     var body: some View {
@@ -147,5 +200,6 @@ struct FilterChip: View {
             .foregroundStyle(isSelected ? .white : .primary)
         }
         .buttonStyle(.plain)
+        .quickHelp(tooltip)
     }
 }

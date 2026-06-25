@@ -1,11 +1,19 @@
-use std::path::Path;
 use serde_json::Value;
+use std::path::Path;
 
-use crate::models::UsageRecord;
 use super::utils::*;
+use crate::models::UsageRecord;
 
-pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
-    parse_ui_messages(home_dir, cursor_data, "rooveterinaryinc.roo-cline", "roocode")
+pub fn parse(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+    parse_ui_messages(
+        home_dir,
+        cursor_data,
+        "rooveterinaryinc.roo-cline",
+        "roocode",
+    )
 }
 
 /// Shared parser for VS Code extensions that write tasks/*/ui_messages.json.
@@ -27,10 +35,14 @@ pub fn parse_ui_messages(
 
     for file in files {
         let key = file.to_string_lossy().to_string();
-        if !cursor.file_changed(&key) { continue; }
+        if !cursor.file_changed(&key) {
+            continue;
+        }
         let prev = cursor.get_offset(&key);
         let file_len = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
-        if prev >= file_len && prev > 0 { continue; }
+        if prev >= file_len && prev > 0 {
+            continue;
+        }
 
         let content = match read_to_string_capped(&file) {
             Some(c) => c,
@@ -57,16 +69,33 @@ pub fn parse_ui_messages(
 
             let ts = msg.get("ts").and_then(|t| t.as_i64()).unwrap_or(0);
             let ts_key = format!("{}", ts);
-            if !cursor.mark_seen(&ts_key) { continue; }
+            if !cursor.mark_seen(&ts_key) {
+                continue;
+            }
 
-            let input = payload.get("tokensIn").and_then(|x| x.as_u64()).unwrap_or(0);
-            let output = payload.get("tokensOut").and_then(|x| x.as_u64()).unwrap_or(0);
-            let cached = payload.get("cacheReads").and_then(|x| x.as_u64()).unwrap_or(0);
-            let cache_creation = payload.get("cacheWrites").and_then(|x| x.as_u64()).unwrap_or(0);
+            let input = payload
+                .get("tokensIn")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
+            let output = payload
+                .get("tokensOut")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
+            let cached = payload
+                .get("cacheReads")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
+            let cache_creation = payload
+                .get("cacheWrites")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
             let total = input + output + cached + cache_creation;
-            if total == 0 { continue; }
+            if total == 0 {
+                continue;
+            }
 
-            let model = payload.get("inferenceProvider")
+            let model = payload
+                .get("inferenceProvider")
                 .and_then(|p| p.as_str())
                 .map(|s| format!("provider:{}", s))
                 .unwrap_or_else(|| "unknown".to_string());

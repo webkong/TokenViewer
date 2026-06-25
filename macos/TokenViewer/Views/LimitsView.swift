@@ -5,30 +5,42 @@ struct LimitsView: View {
     @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 16) {
-                header
-                let activeProviders = viewModel.providers.filter { $0.configured && $0.hasLimitDisplay }
-                let inactiveProviders = viewModel.providers.filter { !$0.configured || !$0.hasLimitDisplay }
-                if viewModel.providers.isEmpty {
-                    emptyState
-                } else {
-                    ForEach(activeProviders) { provider in
-                        ProviderLimitCard(provider: provider)
-                    }
-                    if !inactiveProviders.isEmpty {
-                        Divider().padding(.vertical, 2)
-                        ForEach(inactiveProviders) { provider in
-                            ProviderLimitCard(provider: provider)
+        GeometryReader { geo in
+            let cardW = (geo.size.width - 40 - 12) / 2
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 16) {
+                    header
+                    let activeProviders = viewModel.providers.filter { $0.configured && $0.hasLimitDisplay }
+                    let inactiveProviders = viewModel.providers.filter { !$0.configured || !$0.hasLimitDisplay }
+                    if viewModel.providers.isEmpty {
+                        emptyState
+                    } else {
+                        twoColumnSection(providers: activeProviders, cardWidth: cardW)
+                        if !inactiveProviders.isEmpty {
+                            Divider().padding(.vertical, 2)
+                            twoColumnSection(providers: inactiveProviders, cardWidth: cardW)
                         }
                     }
                 }
+                .padding(20)
             }
-            .padding(20)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .onAppear { viewModel.startAutoRefresh() }
+            .onDisappear { viewModel.stopAutoRefresh() }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
-        .onAppear { viewModel.startAutoRefresh() }
-        .onDisappear { viewModel.stopAutoRefresh() }
+    }
+
+    private func twoColumnSection(providers: [ProviderLimit], cardWidth: CGFloat) -> some View {
+        ForEach(Array(stride(from: 0, to: providers.count, by: 2)), id: \.self) { i in
+            HStack(alignment: .top, spacing: 12) {
+                ProviderLimitCard(provider: providers[i])
+                    .frame(width: cardWidth)
+                if i + 1 < providers.count {
+                    ProviderLimitCard(provider: providers[i + 1])
+                        .frame(width: cardWidth)
+                }
+            }
+        }
     }
 
     private var header: some View {
@@ -39,7 +51,10 @@ struct LimitsView: View {
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             }
             Spacer()
-            Button(action: { viewModel.refresh() }) {
+            Button(action: {
+                viewModel.refresh()
+                ToastCenter.shared.success(l10n.toastRefreshed)
+            }) {
                 Image(systemName: "arrow.triangle.2.circlepath")
                     .font(.system(size: 13, weight: .semibold))
                     .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
@@ -109,7 +124,6 @@ private struct ProviderLimitCard: View {
             }
         }
         .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color(nsColor: .controlBackgroundColor))
