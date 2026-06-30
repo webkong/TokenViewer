@@ -163,7 +163,17 @@ struct PopoverView: View {
         return Group {
             if !active.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    sectionHeader(l10n.limits)
+                    HStack(spacing: 8) {
+                        sectionHeader(l10n.limits)
+                        Spacer()
+                        Button(action: { onOpenMainWindow?("limits") }) {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help(l10n.limits)
+                    }
                     ForEach(active) { p in
                         CompactProviderLimitCard(provider: p)
                     }
