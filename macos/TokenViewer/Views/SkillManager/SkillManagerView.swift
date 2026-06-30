@@ -3,6 +3,8 @@ import SwiftUI
 struct SkillManagerView: View {
     @StateObject private var viewModel = SkillManagerViewModel.shared
     @State private var showSyncSheet = false
+    @State private var showOrganizeAllConfirm = false
+    @State private var showRestoreAllConfirm = false
     @AppStorage("skillsEnabledProviders") private var enabledProvidersJSON: String = "[\"claude\",\"codex\",\"opencode\"]"
 
     var body: some View {
@@ -33,6 +35,24 @@ struct SkillManagerView: View {
         }
         .sheet(isPresented: $showSyncSheet) {
             SkillGitSyncSheet(viewModel: viewModel)
+        }
+        .alert(L10n.shared.skillOrganizeAllConfirmTitle, isPresented: $showOrganizeAllConfirm) {
+            Button(L10n.shared.cancel, role: .cancel) {}
+            Button(L10n.shared.skillOrganize) {
+                AppFocus.clear()
+                viewModel.organizeFilteredSkills()
+            }
+        } message: {
+            Text(L10n.shared.skillOrganizeAllConfirmMessage)
+        }
+        .alert(L10n.shared.skillRestoreAllConfirmTitle, isPresented: $showRestoreAllConfirm) {
+            Button(L10n.shared.cancel, role: .cancel) {}
+            Button(L10n.shared.skillRestore) {
+                AppFocus.clear()
+                viewModel.restoreFilteredSkills()
+            }
+        } message: {
+            Text(L10n.shared.skillRestoreAllConfirmMessage)
         }
     }
 
@@ -106,7 +126,7 @@ struct SkillManagerView: View {
 
             Button {
                 AppFocus.clear()
-                viewModel.organizeFilteredSkills()
+                showOrganizeAllConfirm = true
             } label: {
                 Image(systemName: "arrow.triangle.swap")
                     .font(.system(size: 12, weight: .medium))
@@ -117,7 +137,7 @@ struct SkillManagerView: View {
 
             Button {
                 AppFocus.clear()
-                viewModel.restoreFilteredSkills()
+                showRestoreAllConfirm = true
             } label: {
                 Image(systemName: "arrow.uturn.backward")
                     .font(.system(size: 12, weight: .medium))

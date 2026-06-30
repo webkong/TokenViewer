@@ -250,6 +250,10 @@ final class L10n: ObservableObject {
     var skillGitSyncTip: String { isZh ? "打开 Git 同步面板，配置远程仓库并同步技能目录" : "Open Git Sync to configure a remote repository and sync skills" }
     var skillOrganizeAllTip: String { isZh ? "把当前筛选结果中尚未整理的技能移动到共享技能根目录" : "Organize all eligible skills in the current filtered list into the shared source root" }
     var skillRestoreAllTip: String { isZh ? "把当前筛选结果中已整理的技能还原到原始 Agent 目录" : "Restore all organized skills in the current filtered list to their original agent folders" }
+    var skillOrganizeAllConfirmTitle: String { isZh ? "确认批量整理？" : "Confirm Batch Organize?" }
+    var skillOrganizeAllConfirmMessage: String { isZh ? "将把当前筛选结果中可整理的技能移动到共享技能根目录，并保留对应 Agent 的链接。" : "Eligible skills in the current filtered list will be moved into the shared source root while keeping their agent links." }
+    var skillRestoreAllConfirmTitle: String { isZh ? "确认批量还原？" : "Confirm Batch Restore?" }
+    var skillRestoreAllConfirmMessage: String { isZh ? "将把当前筛选结果中可还原的技能放回原始 Agent 目录。" : "Eligible skills in the current filtered list will be restored to their original agent folders." }
     var skillAllFilterTip: String { isZh ? "显示所有已启用 Agent 可见的技能" : "Show skills visible to all enabled agents" }
     func skillAgentFilterTip(_ agent: String) -> String { isZh ? "只显示 \(agent) 相关的技能" : "Show skills related to \(agent)" }
     func skillOrganizeTip(_ agent: String) -> String { isZh ? "把此技能整理到共享技能根目录，并为 \(agent) 保持链接" : "Move this skill into the shared source root and keep \(agent) linked" }
