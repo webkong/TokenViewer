@@ -164,22 +164,23 @@ struct SkillRowView: View {
 
     private var agentLinkTags: some View {
         let agents = viewModel.visibleProviders
+        let activeAgentIDs = viewModel.skillAgentIDs(for: skill)
         let linked = agents.filter { viewModel.isSkillLinked(skillID: skill.id, agentID: $0.source) }
-        let unlinked = agents.filter { !linked.contains($0) }
-        let sourceAgent = viewModel.sourceAgent(for: skill)
+        let active = agents.filter { activeAgentIDs.contains($0.source) && !linked.contains($0) }
+        let inactive = agents.filter { !activeAgentIDs.contains($0.source) }
 
         return Group {
             if agents.isEmpty {
                 Text(l10n.skillNoAgentsEnabled).font(.caption2).foregroundStyle(.secondary)
             } else {
                 AgentTagClusterView(
-                    agents: linked + unlinked,
+                    agents: linked + active + inactive,
                     maxWidth: agentsColumnWidth
                 ) { agent in
                     agentLinkChip(
                         agent: agent,
                         isLinked: linked.contains(agent),
-                        isSource: agent.source == sourceAgent && !linked.contains(agent)
+                        isSource: active.contains(agent)
                     )
                 }
             }

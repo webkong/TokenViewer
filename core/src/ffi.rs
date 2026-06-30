@@ -398,8 +398,19 @@ fn scan_skills_for_agents(
             Err(_) => continue,
         };
         if let Ok(skills) = handle.skills.scanner.scan_path(&path) {
-            for skill in skills {
-                by_id.entry(skill.id.clone()).or_insert(skill);
+            for mut skill in skills {
+                if !skill.agent_ids.contains(agent_id) {
+                    skill.agent_ids.push(agent_id.clone());
+                }
+
+                by_id
+                    .entry(skill.id.clone())
+                    .and_modify(|existing| {
+                        if !existing.agent_ids.contains(agent_id) {
+                            existing.agent_ids.push(agent_id.clone());
+                        }
+                    })
+                    .or_insert(skill);
             }
         }
     }

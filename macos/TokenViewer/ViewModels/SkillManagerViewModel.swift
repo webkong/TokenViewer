@@ -93,10 +93,7 @@ final class SkillManagerViewModel: ObservableObject {
     }
 
     private func skillMatchesAgent(_ skill: SkillEntry, agentID: String) -> Bool {
-        if sourceAgent(for: skill) == agentID {
-            return true
-        }
-        return isSkillLinked(skillID: skill.id, agentID: agentID)
+        skillAgentIDs(for: skill).contains(agentID)
     }
 
     /// Check if a skill is linked (via symlink) to a given agent.
@@ -104,10 +101,29 @@ final class SkillManagerViewModel: ObservableObject {
         providers.first(where: { $0.source == agentID })?.linkedSkills.contains(skillID) == true
     }
 
-    /// Get the source agent for a skill (the first agent that claims it as linked).
+    /// Get all agents that currently have this skill, either from scan results or persisted links.
+    func skillAgentIDs(for skill: SkillEntry) -> Set<String> {
+        var agentIDs = Set(skill.agentIds)
+
+        for provider in providers where provider.linkedSkills.contains(skill.id) {
+            agentIDs.insert(provider.source)
+        }
+
+        let sourceDir = standardizedPath(skill.sourceDir)
+        for provider in providers where sourceDir.hasPrefix(standardizedPath(provider.skillsPath) + "/") {
+            agentIDs.insert(provider.source)
+        }
+
+        return agentIDs
+    }
+
+    /// Get the primary source agent for actions that need a single target.
     func sourceAgent(for skill: SkillEntry) -> String? {
         if let linked = providers.first(where: { $0.linkedSkills.contains(skill.id) })?.source {
             return linked
+        }
+        if let scanned = skill.agentIds.first {
+            return scanned
         }
         let sourceDir = standardizedPath(skill.sourceDir)
         return providers.first { provider in

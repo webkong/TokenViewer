@@ -35,6 +35,8 @@ pub struct SkillEntry {
     pub manifest: SkillManifest,
     pub source_dir: String,
     pub installed_at: String,
+    #[serde(default)]
+    pub agent_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

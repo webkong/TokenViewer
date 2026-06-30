@@ -195,6 +195,7 @@ impl Scanner {
             manifest,
             source_dir: path.to_string_lossy().to_string(),
             installed_at,
+            agent_ids: Vec::new(),
         })
     }
 }

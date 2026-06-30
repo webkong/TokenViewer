@@ -13,6 +13,38 @@ struct SkillEntry: Codable, Identifiable, Hashable {
     let manifest: SkillManifest
     let sourceDir: String
     let installedAt: String
+    let agentIds: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case manifest
+        case sourceDir
+        case installedAt
+        case agentIds
+    }
+
+    init(
+        id: String,
+        manifest: SkillManifest,
+        sourceDir: String,
+        installedAt: String,
+        agentIds: [String] = []
+    ) {
+        self.id = id
+        self.manifest = manifest
+        self.sourceDir = sourceDir
+        self.installedAt = installedAt
+        self.agentIds = agentIds
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        manifest = try container.decode(SkillManifest.self, forKey: .manifest)
+        sourceDir = try container.decode(String.self, forKey: .sourceDir)
+        installedAt = try container.decode(String.self, forKey: .installedAt)
+        agentIds = try container.decodeIfPresent([String].self, forKey: .agentIds) ?? []
+    }
 }
 
 struct SkillProvider: Codable, Identifiable, Hashable {
