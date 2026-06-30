@@ -96,14 +96,14 @@ struct SkillRowView: View {
         }
         if let sourceAgent = viewModel.sourceAgent(for: skill) {
             if !viewModel.isInSourceRoot(skill) {
-                Text(TVColor.sourceDisplayName(sourceAgent))
+                Text(ProviderRegistry.shared.displayName(for: sourceAgent))
                     .font(.caption2)
                     .padding(.horizontal, 5).padding(.vertical, 1)
                     .background(.gray.opacity(0.1), in: Capsule())
                     .foregroundStyle(.secondary)
             }
             if sourceAgent == "claude" {
-                Text(TVColor.sourceDisplayName("claude"))
+                Text(ProviderRegistry.shared.displayName(for: "claude"))
                     .font(.caption2)
                     .padding(.horizontal, 5).padding(.vertical, 1)
                     .background(.orange.opacity(0.1), in: Capsule())
@@ -117,7 +117,7 @@ struct SkillRowView: View {
     private var actionButtons: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !viewModel.isInSourceRoot(skill), let sourceAgent = viewModel.sourceAgent(for: skill) {
-                let displayName = TVColor.sourceDisplayName(sourceAgent)
+                let displayName = ProviderRegistry.shared.displayName(for: sourceAgent)
                 Button {
                     viewModel.organize(skill: skill, agentID: sourceAgent)
                 } label: {
@@ -131,7 +131,7 @@ struct SkillRowView: View {
                 .buttonStyle(.plain)
                 .quickHelp(l10n.skillOrganizeTip(displayName))
             } else if viewModel.isInSourceRoot(skill), let sourceAgent = viewModel.sourceAgent(for: skill) {
-                let displayName = TVColor.sourceDisplayName(sourceAgent)
+                let displayName = ProviderRegistry.shared.displayName(for: sourceAgent)
                 Button {
                     viewModel.restore(skill: skill, agentID: sourceAgent)
                 } label: {

@@ -133,30 +133,7 @@ pub extern "C" fn tt_get_provider_status(handle: *mut CoreHandle) -> *mut c_char
         Some(h) => h,
         None => return std::ptr::null_mut(),
     };
-    let sources = [
-        "claude",
-        "codex",
-        "cursor",
-        "gemini",
-        "kiro",
-        "opencode",
-        "openclaw",
-        "everycode",
-        "hermes",
-        "copilot",
-        "kimi",
-        "grok",
-        "antigravity",
-        "roocode",
-        "kilocode",
-        "kilocli",
-        "zed",
-        "goose",
-        "ohmypi",
-        "pi",
-        "craft",
-        "codebuddy",
-    ];
+    let sources = crate::parsers::all_parser_sources();
 
     let statuses: Vec<serde_json::Value> = sources
         .iter()

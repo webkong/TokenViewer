@@ -1,83 +1,9 @@
 import SwiftUI
 
-/// Brand + provider colors mirrored from the original dashboard design system.
+/// Brand color constant only — display names and provider colors come from
+/// `ProviderRegistry.shared`.
 enum TVColor {
     static let brand = Color(red: 0.02, green: 0.59, blue: 0.41) // #059669 emerald
-
-    private static func normalizedSource(_ source: String) -> String {
-        source.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
-
-    static func sourceDisplayName(_ source: String) -> String {
-        switch normalizedSource(source) {
-        case "claude": return "Claude"
-        case "codex": return "Codex"
-        case "cursor": return "Cursor"
-        case "gemini": return "Gemini"
-        case "kiro": return "Kiro"
-        case "copilot": return "GitHub Copilot"
-        case "kimi": return "Kimi"
-        case "antigravity": return "Antigravity"
-        case "zed": return "Zed"
-        case "trae": return "Trae"
-        case "windsurf": return "Windsurf"
-        case "qoder": return "Qoder"
-        case "codebuddy": return "CodeBuddy"
-        case "workbuddy": return "WorkBuddy"
-        case "mimocode": return "MiMoCode"
-        case "zcode": return "ZCode"
-        case "goose": return "Goose"
-        case "hermes": return "Hermes"
-        case "grok": return "Grok"
-        case "opencode": return "OpenCode"
-        case "openclaw": return "OpenClaw"
-        case "roocode": return "RooCode"
-        case "kilocode": return "KiloCode"
-        case "kilocli": return "KiloCLI"
-        case "ohmypi": return "OhMyPi"
-        case "pi": return "Pi"
-        case "craft": return "Craft"
-        case "everycode": return "EveryCode"
-        case "openclaude": return "OpenClaude"
-        case "devin": return "Devin"
-        case "ante": return "Ante"
-        case "autohand": return "Autohand Code"
-        case "aider": return "Aider"
-        case "amp": return "Amp"
-        case "crush": return "Charm"
-        case "aug": return "Auggie"
-        case "cline": return "Cline"
-        case "codebuff": return "Codebuff"
-        case "command-code": return "Command Code"
-        case "continue": return "Continue"
-        case "droid": return "Droid"
-        case "mistral-vibe": return "Mistral Vibe"
-        case "qwen-code": return "Qwen Code"
-        case "rovo": return "Rovo Dev"
-        case "omp": return "OMP"
-        default: return source.trimmingCharacters(in: .whitespacesAndNewlines).capitalized
-        }
-    }
-
-    static func provider(_ source: String) -> Color {
-        switch normalizedSource(source) {
-        case "claude", "codebuddy": return Color(red: 0.85, green: 0.46, blue: 0.34) // #d97757
-        case "codex", "everycode": return Color(red: 0.23, green: 0.51, blue: 0.96) // #3b82f6
-        case "opencode", "openclaw": return Color(red: 0.96, green: 0.62, blue: 0.04) // #f59e0b
-        case "gemini", "antigravity": return Color(red: 0.13, green: 0.59, blue: 0.95) // #2196f3
-        case "kimi": return Color(red: 0.65, green: 0.55, blue: 0.98) // violet
-        case "kiro": return brand
-        case "cursor": return Color(red: 0.55, green: 0.36, blue: 0.96) // purple
-        case "zcode": return Color(red: 0.31, green: 0.36, blue: 0.96) // #4f5cf5 indigo (Z.ai/BigModel)
-        case "grok": return Color(red: 0.45, green: 0.45, blue: 0.5)
-        case "aider": return Color(red: 0.27, green: 0.80, blue: 0.51) // green
-        case "devin": return Color(red: 0.31, green: 0.51, blue: 0.96) // blue
-        case "openclaude": return Color(red: 0.88, green: 0.42, blue: 0.30) // warm orange
-        case "omp": return Color(red: 0.88, green: 0.30, blue: 0.55) // magenta/pink
-        case "cline": return Color(red: 0.96, green: 0.65, blue: 0.14) // amber
-        default: return Color(red: 0.3, green: 0.7, blue: 0.55)
-        }
-    }
 }
 
 func tvFormatTokens(_ n: UInt64) -> String {
@@ -323,7 +249,7 @@ private struct ModelBreakdownView: View {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             Capsule().fill(.quaternary).frame(height: 5)
-                            Capsule().fill(TVColor.provider(entry.source))
+                            Capsule().fill(ProviderRegistry.shared.brandColor(for: entry.source))
                                 .frame(width: max(2, geo.size.width * entry.percentage / 100.0), height: 5)
                         }
                     }
@@ -426,7 +352,7 @@ private struct ProviderBreakdownView: View {
                 VStack(spacing: 5) {
                     HStack(spacing: 8) {
                         ProviderIcon(source: row.id, size: 14)
-                        Text(TVColor.sourceDisplayName(row.id)).font(.system(size: 13, weight: .medium))
+                        Text(ProviderRegistry.shared.displayName(for: row.id)).font(.system(size: 13, weight: .medium))
                         Spacer()
                         Text(tvFormatCost(row.cost))
                             .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
@@ -437,7 +363,7 @@ private struct ProviderBreakdownView: View {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             Capsule().fill(.quaternary).frame(height: 5)
-                            Capsule().fill(TVColor.provider(row.id))
+                            Capsule().fill(ProviderRegistry.shared.brandColor(for: row.id))
                                 .frame(width: max(2, geo.size.width * CGFloat(row.tokens) / CGFloat(total)), height: 5)
                         }
                     }

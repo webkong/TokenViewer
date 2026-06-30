@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.register(defaults: ["syncFrequencyMinutes": 30])
         // Initialize Rust core early to create database
         _ = CoreBridge.shared
+        ProviderRegistry.shared.loadIfNeeded()
+        LimitsVisibilityStore.load()
         rebuildIfVersionChanged()
         ThemeManager.shared.apply()
         statusBarController = StatusBarController()

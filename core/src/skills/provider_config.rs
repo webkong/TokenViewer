@@ -29,6 +29,12 @@ pub struct ProviderSkillsConfig {
     /// Whether the detect_cmd binary was found on PATH at last check.
     #[serde(default)]
     pub is_installed: bool,
+    /// Brand color hex string, e.g. "#059669".
+    #[serde(default)]
+    pub brand_color: String,
+    /// Logo filename without extension, e.g. "claude-code".
+    #[serde(default)]
+    pub logo_file: String,
 }
 
 impl ProviderSkillsConfig {
@@ -45,6 +51,8 @@ impl ProviderSkillsConfig {
             has_limits: false,
             detect_cmd: None,
             is_installed: false,
+            brand_color: "#059669".to_string(),
+            logo_file: String::new(),
         }
     }
 }
@@ -277,31 +285,95 @@ pub fn expand_path(raw: &str) -> Result<PathBuf, String> {
     }
 }
 
-/// Detect which agents are installed. Two strategies:
+/// Detect which agents are installed. Two strategies are OR'ed:
 /// 1. CLI check: if detect_cmd is set, run `which <cmd>` (fast, ms-level)
-/// 2. Dir check: for agents without CLI (IDE/plugin), check if ~/.{source}/ exists
+/// 2. Presence check: inspect known config/data directories for agents without
+///    a CLI, or when the CLI binary is not on PATH.
 pub fn detect_installed_agents(providers: &[ProviderSkillsConfig]) -> Vec<(String, bool)> {
     providers
         .par_iter()
         .map(|p| {
-            let installed = match &p.detect_cmd {
-                Some(cmd) => is_command_on_path(cmd),
-                // No CLI — fall back to checking if the agent's config directory exists
-                None => is_agent_dir_present(&p.skills_path),
-            };
+            let installed = p
+                .detect_cmd
+                .as_deref()
+                .map(is_command_on_path)
+                .unwrap_or(false)
+                || is_agent_present_on_disk(p);
             (p.source.clone(), installed)
         })
         .collect()
 }
 
-/// Check if an agent's config directory exists by looking at the parent of skills_path.
-/// skills_path is typically ~/.{source}/skills, so ~/.{source} is the config dir.
-fn is_agent_dir_present(skills_path: &str) -> bool {
-    let path = std::path::Path::new(skills_path);
-    // Go up one level from .../skills to check the agent's config dir
-    path.parent()
-        .map(|p| p.exists())
-        .unwrap_or(false)
+/// Check whether provider-specific local data exists.
+fn is_agent_present_on_disk(provider: &ProviderSkillsConfig) -> bool {
+    agent_presence_paths(provider)
+        .into_iter()
+        .any(|path| path.exists())
+}
+
+/// Candidate files/directories that indicate an agent has been used/installed.
+fn agent_presence_paths(provider: &ProviderSkillsConfig) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+
+    if let Ok(skills_path) = expand_path(&provider.skills_path) {
+        if let Some(parent) = skills_path.parent() {
+            paths.push(parent.to_path_buf());
+        }
+    }
+
+    if let Some(home) = dirs::home_dir() {
+        match provider.source.as_str() {
+            "codebuddy" => {
+                if let Ok(custom_home) = std::env::var("CODEBUDDY_HOME") {
+                    paths.push(PathBuf::from(custom_home));
+                }
+                paths.push(home.join(".codebuddy"));
+                paths.push(home.join(".antigravity_cockpit/codebuddy_accounts"));
+                paths.push(home.join(".antigravity_cockpit/codebuddy_cn_accounts"));
+                paths.push(home.join(".antigravity_cockpit/codebuddy_accounts.json"));
+                paths.push(home.join(".antigravity_cockpit/codebuddy_cn_accounts.json"));
+            }
+            "workbuddy" => {
+                if let Ok(custom_home) = std::env::var("WORKBUDDY_HOME") {
+                    paths.push(PathBuf::from(custom_home));
+                }
+                paths.push(home.join(".antigravity_cockpit/workbuddy_accounts"));
+                paths.push(home.join(".antigravity_cockpit/workbuddy_accounts.json"));
+            }
+            "zcode" => {
+                paths.push(home.join(".zcode"));
+                paths.push(home.join(".zcode/cli/db/db.sqlite"));
+                paths.push(home.join(".zcode/v2/config.json"));
+            }
+            "craft" => {
+                paths.push(home.join(".craft-agent"));
+            }
+            "zed" => {
+                paths.push(home.join(".config/zed"));
+                paths.push(home.join("Library/Application Support/Zed"));
+            }
+            "trae" => {
+                paths.push(home.join(".trae"));
+                paths.push(home.join(".antigravity_cockpit/trae_accounts"));
+                paths.push(home.join("Library/Application Support/Trae"));
+            }
+            "windsurf" => {
+                paths.push(home.join(".codeium/windsurf"));
+                paths.push(home.join(".antigravity_cockpit/windsurf_accounts"));
+                paths.push(home.join("Library/Application Support/Windsurf"));
+            }
+            "qoder" => {
+                paths.push(home.join(".qoder"));
+                paths.push(home.join(".antigravity_cockpit/qoder_accounts"));
+                paths.push(home.join("Library/Application Support/Qoder"));
+            }
+            _ => {}
+        }
+    }
+
+    paths.sort();
+    paths.dedup();
+    paths
 }
 
 /// Check if a command exists on PATH with a 3-second timeout.
@@ -343,9 +415,12 @@ fn is_command_on_path(cmd: &str) -> bool {
 
 /// Cache TTL in seconds (1 hour).
 const INSTALL_CACHE_TTL_SECS: u64 = 3600;
+const INSTALL_CACHE_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct InstallStatusCache {
+    #[serde(default)]
+    version: u32,
     updated_at: u64,
     statuses: HashMap<String, bool>,
 }
@@ -355,6 +430,9 @@ fn load_install_cache(config_dir: &Path) -> Option<HashMap<String, bool>> {
     let cache_path = config_dir.join("install_status.json");
     let data = fs::read_to_string(&cache_path).ok()?;
     let cache: InstallStatusCache = serde_json::from_str(&data).ok()?;
+    if cache.version != INSTALL_CACHE_VERSION {
+        return None;
+    }
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -374,6 +452,7 @@ fn save_install_cache(config_dir: &Path, statuses: &HashMap<String, bool>) -> Re
         .unwrap_or_default()
         .as_secs();
     let cache = InstallStatusCache {
+        version: INSTALL_CACHE_VERSION,
         updated_at: now,
         statuses: statuses.clone(),
     };
@@ -433,93 +512,6 @@ fn builtin_providers() -> Vec<ProviderSkillsConfig> {
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
     let home_str = home.to_string_lossy().to_string();
 
-    // Name → display_name mapping (same as original agent_registry)
-    let display_names: HashMap<&str, &str> = HashMap::from([
-        ("claude", "Claude Code"),
-        ("codex", "Codex"),
-        ("cursor", "Cursor"),
-        ("kiro", "Kiro"),
-        ("copilot", "GitHub Copilot"),
-        ("kimi", "Kimi"),
-        ("antigravity", "Antigravity"),
-        ("zed", "Zed"),
-        ("trae", "Trae"),
-        ("windsurf", "Windsurf"),
-        ("qoder", "Qoder"),
-        ("codebuddy", "CodeBuddy"),
-        ("workbuddy", "WorkBuddy"),
-        ("gemini", "Gemini"),
-        ("opencode", "OpenCode"),
-        ("openclaw", "OpenClaw"),
-        ("hermes", "Hermes"),
-        ("grok", "Grok"),
-        ("roocode", "RooCode"),
-        ("kilocode", "KiloCode"),
-        ("kilocli", "Kilo CLI"),
-        ("goose", "Goose"),
-        ("ohmypi", "OhMyPi"),
-        ("pi", "Pi"),
-        ("craft", "Craft Agent"),
-        ("everycode", "EveryCode"),
-        ("mimocode", "MimoCode"),
-        ("zcode", "ZCode"),
-        ("openclaude", "OpenClaude"),
-        ("devin", "Devin"),
-        ("ante", "Ante"),
-        ("autohand", "Autohand Code"),
-        ("aider", "Aider"),
-        ("amp", "Amp"),
-        ("crush", "Charm"),
-        ("aug", "Auggie"),
-        ("cline", "Cline"),
-        ("codebuff", "Codebuff"),
-        ("command-code", "Command Code"),
-        ("continue", "Continue"),
-        ("droid", "Droid"),
-        ("mistral-vibe", "Mistral Vibe"),
-        ("qwen-code", "Qwen Code"),
-        ("rovo", "Rovo Dev"),
-        ("omp", "OMP"),
-    ]);
-
-    // CLI binary names for install detection (from Orca tui-agent-config.ts).
-    // Only agents with standalone CLI binaries have entries.
-    let detect_cmds: HashMap<&str, &str> = HashMap::from([
-        ("claude", "claude"),
-        ("codex", "codex"),
-        ("cursor", "cursor-agent"),
-        ("kiro", "kiro-cli"),
-        ("copilot", "copilot"),
-        ("kimi", "kimi"),
-        ("antigravity", "agy"),
-        ("gemini", "gemini"),
-        ("opencode", "opencode"),
-        ("openclaw", "openclaw"),
-        ("hermes", "hermes"),
-        ("grok", "grok"),
-        ("kilocode", "kilo"),
-        ("goose", "goose"),
-        ("pi", "pi"),
-        ("mimocode", "mimo"),
-        ("openclaude", "openclaude"),
-        ("devin", "devin"),
-        ("ante", "ante"),
-        ("autohand", "autohand"),
-        ("aider", "aider"),
-        ("amp", "amp"),
-        ("crush", "crush"),
-        ("aug", "auggie"),
-        ("cline", "cline"),
-        ("codebuff", "codebuff"),
-        ("command-code", "command-code"),
-        ("continue", "cn"),
-        ("droid", "droid"),
-        ("mistral-vibe", "vibe"),
-        ("qwen-code", "qwen-code"),
-        ("rovo", "rovo"),
-        ("omp", "omp"),
-    ]);
-
     // Source names with has_parser (the parser sources list)
     let parser_sources: std::collections::HashSet<&str> = std::collections::HashSet::from([
         "claude",
@@ -549,35 +541,156 @@ fn builtin_providers() -> Vec<ProviderSkillsConfig> {
         "zcode",
     ]);
 
+    // Providers with subscription/quota tracking (limits panel).
+    let limits_sources: std::collections::HashSet<&str> = std::collections::HashSet::from([
+        "claude",
+        "codex",
+        "gemini",
+        "kimi",
+        "opencode",
+        "copilot",
+        "kiro",
+        "cursor",
+        "antigravity",
+        "zed",
+        "trae",
+        "windsurf",
+        "qoder",
+        "codebuddy",
+        "workbuddy",
+        "zcode",
+    ]);
+
     // All sources (parser + agent-only)
-    let all_sources: Vec<&str> = {
-        let mut sources = crate::parsers::all_parser_sources();
-        // Add agent-only sources not in parsers
-        for extra in [
-            "trae",
-            "windsurf",
-            "qoder",
-            // Orca-sourced agents (not in TokenViewer parsers)
-            "openclaude",
-            "devin",
-            "ante",
-            "autohand",
-            "aider",
-            "amp",
-            "crush",
-            "aug",
-            "cline",
-            "codebuff",
-            "command-code",
-            "continue",
-            "droid",
-            "mistral-vibe",
-            "qwen-code",
-            "rovo",
-            "omp",
-        ] {
-            if !sources.contains(&extra) {
-                sources.push(extra);
+    let all_sources: Vec<(&str, &str, &str, Option<&str>, &str)> = {
+        let mut sources: Vec<(&str, &str, &str, Option<&str>, &str)> = vec![
+            // (source, display_name, logo_file, detect_cmd, brand_color)
+            // ── Canonical providers with parsers ──
+            (
+                "claude",
+                "Claude Code",
+                "claude-code",
+                Some("claude"),
+                "#d97757",
+            ),
+            ("codex", "Codex", "codex", Some("codex"), "#3b82f6"),
+            (
+                "cursor",
+                "Cursor",
+                "cursor",
+                Some("cursor-agent"),
+                "#8c5cf5",
+            ),
+            ("kiro", "Kiro", "kiro", Some("kiro-cli"), "#059669"),
+            (
+                "copilot",
+                "GitHub Copilot",
+                "copilot",
+                Some("copilot"),
+                "#4078c0",
+            ),
+            ("kimi", "Kimi", "kimi", Some("kimi"), "#a38cfa"),
+            (
+                "antigravity",
+                "Antigravity",
+                "antigravity",
+                Some("agy"),
+                "#2196f3",
+            ),
+            ("zed", "Zed", "zed", None, "#c4841e"),
+            ("gemini", "Gemini", "gemini", Some("gemini"), "#2196f3"),
+            (
+                "opencode",
+                "OpenCode",
+                "opencode",
+                Some("opencode"),
+                "#f59e0b",
+            ),
+            (
+                "openclaw",
+                "OpenClaw",
+                "openclaw",
+                Some("openclaw"),
+                "#f59e0b",
+            ),
+            ("hermes", "Hermes", "hermes", Some("hermes"), "#ca8a04"),
+            ("grok", "Grok", "grok", Some("grok"), "#73737f"),
+            ("roocode", "RooCode", "roocode", None, "#ea580c"),
+            ("kilocode", "KiloCode", "kilo", Some("kilo"), "#dc2626"),
+            ("kilocli", "Kilo CLI", "kilo", None, "#dc2626"),
+            ("goose", "Goose", "goose", Some("goose"), "#16a34a"),
+            ("ohmypi", "OhMyPi", "ohmypi", None, "#db2777"),
+            ("pi", "Pi", "pi", Some("pi"), "#9333ea"),
+            ("craft", "Craft Agent", "craft", None, "#0284c7"),
+            ("everycode", "EveryCode", "codex", None, "#3b82f6"),
+            ("mimocode", "MimoCode", "mimo", Some("mimo"), "#2563eb"),
+            ("zcode", "ZCode", "zcode", None, "#4f5cf5"),
+            ("codebuddy", "CodeBuddy", "codebuddy", None, "#d97757"),
+            ("workbuddy", "WorkBuddy", "workbuddy", None, "#1d4ed8"),
+            // ── Agent-only (limits card, no parser) ──
+            ("trae", "Trae", "trae", None, "#2563eb"),
+            ("windsurf", "Windsurf", "windsurf", None, "#0d9488"),
+            ("qoder", "Qoder", "qoder", None, "#7c3aed"),
+            // ── Orca-sourced agents (skill-only, no parser, no limits) ──
+            (
+                "openclaude",
+                "OpenClaude",
+                "openclaude-logo",
+                Some("openclaude"),
+                "#e06b4d",
+            ),
+            ("devin", "Devin", "devin", Some("devin"), "#4f82f5"),
+            ("ante", "Ante", "ante", Some("ante"), "#3b82f6"),
+            (
+                "autohand",
+                "Autohand Code",
+                "autohand",
+                Some("autohand"),
+                "#f43f5e",
+            ),
+            ("aider", "Aider", "aider", Some("aider"), "#45cc82"),
+            ("amp", "Amp", "amp", Some("amp"), "#8b5cf6"),
+            ("crush", "Charm", "crush", Some("crush"), "#ec4899"),
+            ("aug", "Auggie", "aug", Some("auggie"), "#14b8a6"),
+            ("cline", "Cline", "cline", Some("cline"), "#f5a624"),
+            (
+                "codebuff",
+                "Codebuff",
+                "codebuff",
+                Some("codebuff"),
+                "#22c55e",
+            ),
+            (
+                "command-code",
+                "Command Code",
+                "codex",
+                Some("command-code"),
+                "#3b82f6",
+            ),
+            ("continue", "Continue", "continue", Some("cn"), "#6366f1"),
+            ("droid", "Droid", "droid", Some("droid"), "#22c55e"),
+            (
+                "mistral-vibe",
+                "Mistral Vibe",
+                "mistral-vibe",
+                Some("vibe"),
+                "#3b82f6",
+            ),
+            (
+                "qwen-code",
+                "Qwen Code",
+                "qwen",
+                Some("qwen-code"),
+                "#1e90ff",
+            ),
+            ("rovo", "Rovo Dev", "rovo", Some("rovo"), "#a855f7"),
+            ("omp", "OMP", "omp", Some("omp"), "#e04d8c"),
+        ];
+        // Ensure parser sources that aren't in the list above are still included
+        // via all_parser_sources(). This catches any future additions.
+        for ps in crate::parsers::all_parser_sources() {
+            if !sources.iter().any(|(s, _, _, _, _)| *s == ps) {
+                sources.push((ps, ps, ps, None, "#059669"));
             }
         }
         sources
@@ -585,54 +698,35 @@ fn builtin_providers() -> Vec<ProviderSkillsConfig> {
 
     all_sources
         .into_iter()
-        .map(|source| {
-            let display_name = display_names.get(source).unwrap_or(&source).to_string();
-            let has_parser = parser_sources.contains(source);
-            let detect_cmd = detect_cmds.get(source).map(|s| s.to_string());
-            // Skills path: ~/.{source}/skills
-            // For claude, the agent id is "claude-code" but we use "claude" as canonical
-            let skills_dir = if source == "claude" {
-                ".claude".to_string()
-            } else {
-                format!(".{}", source)
-            };
-            let skills_path = format!("{}/{}/skills", home_str, skills_dir);
+        .map(
+            |(source, display_name, logo_file, detect_cmd, brand_color)| {
+                let has_parser = parser_sources.contains(source);
+                let has_limits = limits_sources.contains(source);
+                // Skills path: ~/.{source}/skills
+                // For claude, the agent id is "claude-code" but we use "claude" as canonical
+                let skills_dir = if source == "claude" {
+                    ".claude".to_string()
+                } else {
+                    format!(".{}", source)
+                };
+                let skills_path = format!("{}/{}/skills", home_str, skills_dir);
 
-            ProviderSkillsConfig {
-                source: source.to_string(),
-                display_name,
-                skills_path,
-                link_type: LinkType::Directory,
-                is_linked: false,
-                linked_skills: Vec::new(),
-                has_parser,
-                detect_cmd,
-                is_installed: false,
-                // Providers with subscription/quota tracking for the limits panel.
-                // Core rate-limit API fetchers (from Orca): claude, codex, gemini, opencode, kimi.
-                // TokenViewer additionally tracks: copilot, kiro, cursor, antigravity, zed,
-                // trae, windsurf, qoder, codebuddy, workbuddy, zcode.
-                has_limits: matches!(
-                    source,
-                    "claude"
-                        | "codex"
-                        | "gemini"
-                        | "kimi"
-                        | "opencode"
-                        | "copilot"
-                        | "kiro"
-                        | "cursor"
-                        | "antigravity"
-                        | "zed"
-                        | "trae"
-                        | "windsurf"
-                        | "qoder"
-                        | "codebuddy"
-                        | "workbuddy"
-                        | "zcode"
-                ),
-            }
-        })
+                ProviderSkillsConfig {
+                    source: source.to_string(),
+                    display_name: display_name.to_string(),
+                    skills_path,
+                    link_type: LinkType::Directory,
+                    is_linked: false,
+                    linked_skills: Vec::new(),
+                    has_parser,
+                    has_limits,
+                    detect_cmd: detect_cmd.map(|s| s.to_string()),
+                    is_installed: false,
+                    brand_color: brand_color.to_string(),
+                    logo_file: logo_file.to_string(),
+                }
+            },
+        )
         .collect()
 }
 

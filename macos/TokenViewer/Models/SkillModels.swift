@@ -27,6 +27,8 @@ struct SkillProvider: Codable, Identifiable, Hashable {
     let hasLimits: Bool
     let detectCmd: String?
     var isInstalled: Bool = false
+    let brandColor: String
+    let logoFile: String
 
     enum CodingKeys: String, CodingKey {
         case source
@@ -39,6 +41,8 @@ struct SkillProvider: Codable, Identifiable, Hashable {
         case hasLimits
         case detectCmd
         case isInstalled
+        case brandColor
+        case logoFile
     }
 
     init(
@@ -51,7 +55,9 @@ struct SkillProvider: Codable, Identifiable, Hashable {
         hasParser: Bool,
         hasLimits: Bool,
         detectCmd: String?,
-        isInstalled: Bool = false
+        isInstalled: Bool = false,
+        brandColor: String = "#059669",
+        logoFile: String = ""
     ) {
         self.source = source
         self.displayName = displayName
@@ -63,6 +69,8 @@ struct SkillProvider: Codable, Identifiable, Hashable {
         self.hasLimits = hasLimits
         self.detectCmd = detectCmd
         self.isInstalled = isInstalled
+        self.brandColor = brandColor
+        self.logoFile = logoFile
     }
 
     init(from decoder: Decoder) throws {
@@ -77,6 +85,8 @@ struct SkillProvider: Codable, Identifiable, Hashable {
         hasLimits = try container.decode(Bool.self, forKey: .hasLimits)
         detectCmd = try container.decodeIfPresent(String.self, forKey: .detectCmd)
         isInstalled = try container.decodeIfPresent(Bool.self, forKey: .isInstalled) ?? false
+        brandColor = try container.decodeIfPresent(String.self, forKey: .brandColor) ?? "#059669"
+        logoFile = try container.decodeIfPresent(String.self, forKey: .logoFile) ?? ""
     }
 }
 

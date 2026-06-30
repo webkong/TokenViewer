@@ -92,21 +92,21 @@ private struct ProviderLimitCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 ProviderIcon(source: provider.name, size: 16)
-                Text(TVColor.sourceDisplayName(provider.name)).font(.system(size: 15, weight: .semibold))
+                Text(ProviderRegistry.shared.displayName(for: provider.name)).font(.system(size: 15, weight: .semibold))
                 if let plan = provider.planLabel {
                     Text(plan)
                         .font(.system(size: 10, weight: .medium))
                         .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Capsule().fill(TVColor.provider(provider.name).opacity(0.15)))
-                        .foregroundStyle(TVColor.provider(provider.name))
+                        .background(Capsule().fill(ProviderRegistry.shared.brandColor(for: provider.name).opacity(0.15)))
+                        .foregroundStyle(ProviderRegistry.shared.brandColor(for: provider.name))
                 }
                 Spacer()
                 if let expiry = provider.subscriptionExpiresAt {
-                    ProviderDateBadge(kind: .expires, date: expiry, tint: TVColor.provider(provider.name))
+                    ProviderDateBadge(kind: .expires, date: expiry, tint: ProviderRegistry.shared.brandColor(for: provider.name))
                 } else if let reset = provider.subscriptionResetAt {
-                    ProviderDateBadge(kind: .subscriptionReset, date: reset, tint: TVColor.provider(provider.name))
+                    ProviderDateBadge(kind: .subscriptionReset, date: reset, tint: ProviderRegistry.shared.brandColor(for: provider.name))
                 } else if let reset = provider.quotaResetAt {
-                    ProviderDateBadge(kind: .quotaReset, date: reset, tint: TVColor.provider(provider.name))
+                    ProviderDateBadge(kind: .quotaReset, date: reset, tint: ProviderRegistry.shared.brandColor(for: provider.name))
                 }
                 if !provider.configured {
                     Text(l10n.notConfigured).font(.system(size: 11)).foregroundStyle(.tertiary)
@@ -119,7 +119,7 @@ private struct ProviderLimitCard: View {
 
             if provider.configured && !provider.windows.isEmpty {
                 ForEach(provider.windows) { window in
-                    LimitWindowRow(window: window, tint: TVColor.provider(provider.name))
+                    LimitWindowRow(window: window, tint: ProviderRegistry.shared.brandColor(for: provider.name))
                 }
             }
         }

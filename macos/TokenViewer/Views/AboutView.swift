@@ -164,7 +164,7 @@ struct AboutView: View {
     private func chip(_ p: SkillProvider) -> some View {
         HStack(spacing: 5) {
             ProviderIcon(source: p.source, size: 16)
-            Text(TVColor.sourceDisplayName(p.source))
+            Text(ProviderRegistry.shared.displayName(for: p.source))
                 .font(.system(size: 12))
                 .lineLimit(1)
         }

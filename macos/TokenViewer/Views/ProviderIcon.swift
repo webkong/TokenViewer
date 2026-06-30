@@ -51,40 +51,25 @@ struct ProviderIcon: View {
         if m.hasPrefix("qwen") || m.hasPrefix("provider:qwen") || m.hasPrefix("provider:alibaba") || m.hasPrefix("provider:dashscope") { return "qwen" }
         if m.hasPrefix("glm") || m.hasPrefix("chatglm") || m.hasPrefix("provider:zhipu") { return "glm" }
         if m.hasPrefix("mimo") || m.hasPrefix("provider:xiaomi") { return "mimo" }
-        if Self.logoMap[s] != nil { return s }
+        // Fall back to the provider registry for non-model-based sources.
+        let registryLogo = ProviderRegistry.shared.logoFile(for: s)
+        if !registryLogo.isEmpty { return s }
         return normalizedSource
     }
 
-    /// Map a source/model provider to its bundled logo file name (without extension).
-    private static let logoMap: [String: String] = [
-        "claude": "claude-code", "codebuddy": "codebuddy", "codex": "codex",
-        "every-code": "codex", "everycode": "codex", "gemini": "gemini",
-        "antigravity": "antigravity", "kiro": "kiro", "kiro-ide": "kiro", "opencode": "opencode",
-        "openclaw": "openclaw", "cursor": "cursor", "deepseek": "deepseek", "grok": "grok", "kimi": "kimi",
-        "minimax": "minimax", "qwen": "qwen", "qwen-code": "qwen", "glm": "glm", "mimo": "mimo",
-        "copilot": "copilot", "hermes": "hermes", "kilocli": "kilo", "kilo-cli": "kilo", "kilocode": "kilo",
-        "kilo": "kilo", "mimocode": "mimo", "mimo-code": "mimo",
-        "qoder": "qoder", "trae": "trae", "windsurf": "windsurf", "zed": "zed", "workbuddy": "workbuddy",
-        "zcode": "zcode",
-        // Agents without dedicated icons — will use fallback colored circle
-        "roocode": "roocode", "goose": "goose", "ohmypi": "ohmypi", "pi": "pi", "craft": "craft",
-        // Orca-sourced agents with dedicated icons
-        "aider": "aider", "omp": "omp", "openclaude": "openclaude-logo",
-        // Orca-sourced agents reusing existing brand icons
-        "command-code": "codex",
-        // Orca-sourced agents with generated brand-colored circle icons
-        "devin": "devin", "ante": "ante", "autohand": "autohand",
-        "amp": "amp", "crush": "crush", "aug": "aug", "cline": "cline",
-        "codebuff": "codebuff", "continue": "continue", "droid": "droid",
-        "mistral-vibe": "mistral-vibe", "rovo": "rovo",
-    ]
+    /// Resolved logo filename (without extension) from the provider registry.
+    private var logoName: String {
+        ProviderRegistry.shared.logoFile(for: resolvedSource.lowercased())
+    }
 
     /// Logos drawn with `currentColor` (monochrome) — tint to adapt to light/dark.
-    private static let monoLogos: Set<String> = ["copilot", "cursor", "grok", "kimi", "kiro", "kiro-ide", "mimo", "mimocode", "aider"]
+    private static let monoLogos: Set<String> = ["copilot", "cursor", "grok", "kimi", "kiro", "mimo", "aider"]
 
     var body: some View {
-        if let img = logoImage() {
-            let mono = Self.logoMap[resolvedSource.lowercased()].map(Self.monoLogos.contains) ?? false
+        let resolved = resolvedSource.lowercased()
+        let logo = ProviderRegistry.shared.logoFile(for: resolved)
+        if !logo.isEmpty, let img = loadImage(named: logo) {
+            let mono = Self.monoLogos.contains(logo)
             Image(nsImage: img)
                 .resizable()
                 .interpolation(.high)
@@ -95,8 +80,8 @@ struct ProviderIcon: View {
         } else {
             // Fallback: colored circle with first letter.
             ZStack {
-                Circle().fill(TVColor.provider(source))
-                Text(resolvedSource.prefix(1).uppercased())
+                Circle().fill(ProviderRegistry.shared.brandColor(for: resolved))
+                Text(resolved.prefix(1).uppercased())
                     .font(.system(size: size * 0.55, weight: .bold))
                     .foregroundStyle(.white)
             }
@@ -104,8 +89,7 @@ struct ProviderIcon: View {
         }
     }
 
-    private func logoImage() -> NSImage? {
-        guard let name = Self.logoMap[resolvedSource.lowercased()] else { return nil }
+    private func loadImage(named name: String) -> NSImage? {
         if let img = NSImage(named: NSImage.Name(name)) {
             if img.size.width <= 1 || img.size.height <= 1 {
                 img.size = NSSize(width: 64, height: 64)
@@ -117,8 +101,6 @@ struct ProviderIcon: View {
             guard let url = Bundle.main.url(forResource: name, withExtension: ext),
                   let img = NSImage(contentsOf: url) else { continue }
             if img.size.width <= 1 || img.size.height <= 1 {
-                // SVGs often load with a 1x1 intrinsic size; give vectors a real
-                // size so they rasterize crisply at Retina scale.
                 img.size = NSSize(width: 64, height: 64)
             }
             if Self.monoLogos.contains(name) { img.isTemplate = true }

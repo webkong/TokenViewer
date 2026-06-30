@@ -152,7 +152,7 @@ struct SettingsView: View {
                     let isInstalled = agentInstallStatus[provider.source] ?? provider.isInstalled
                     agentChip(
                         source: provider.source,
-                        label: TVColor.sourceDisplayName(provider.source),
+                        label: ProviderRegistry.shared.displayName(for: provider.source),
                         isSelected: visible.contains(provider.source),
                         isInstalled: isInstalled
                     ) {
@@ -399,7 +399,7 @@ struct SettingsView: View {
                             let isInstalled = agentInstallStatus[p.source] ?? p.isInstalled
                             agentChip(
                                 source: p.source,
-                                label: TVColor.sourceDisplayName(p.source),
+                                label: ProviderRegistry.shared.displayName(for: p.source),
                                 isSelected: enabledProviders.contains(p.source),
                                 isInstalled: isInstalled
                             ) {
@@ -602,7 +602,7 @@ struct SettingsCard<Content: View>: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     ProviderIcon(source: provider.source, size: 16)
-                    Text(TVColor.sourceDisplayName(provider.source))
+                    Text(ProviderRegistry.shared.displayName(for: provider.source))
                         .font(.system(size: 12, weight: .medium))
                         .frame(width: 100, alignment: .leading)
                     Spacer()

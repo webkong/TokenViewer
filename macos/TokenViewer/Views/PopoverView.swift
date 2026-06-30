@@ -287,7 +287,7 @@ private struct CompactProviderLimitCard: View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
                 ProviderIcon(source: provider.name, size: 13)
-                Text(TVColor.sourceDisplayName(provider.name))
+                Text(ProviderRegistry.shared.displayName(for: provider.name))
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
                 if let plan = provider.planLabel {
@@ -295,21 +295,21 @@ private struct CompactProviderLimitCard: View {
                         .font(.system(size: 8, weight: .medium))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
-                        .background(Capsule().fill(TVColor.provider(provider.name).opacity(0.14)))
-                        .foregroundStyle(TVColor.provider(provider.name))
+                        .background(Capsule().fill(ProviderRegistry.shared.brandColor(for: provider.name).opacity(0.14)))
+                        .foregroundStyle(ProviderRegistry.shared.brandColor(for: provider.name))
                 }
                 Spacer(minLength: 4)
                 if let expiry = provider.subscriptionExpiresAt {
-                    CompactProviderDateBadge(kind: .expires, date: expiry, tint: TVColor.provider(provider.name))
+                    CompactProviderDateBadge(kind: .expires, date: expiry, tint: ProviderRegistry.shared.brandColor(for: provider.name))
                 } else if let reset = provider.subscriptionResetAt {
-                    CompactProviderDateBadge(kind: .subscriptionReset, date: reset, tint: TVColor.provider(provider.name))
+                    CompactProviderDateBadge(kind: .subscriptionReset, date: reset, tint: ProviderRegistry.shared.brandColor(for: provider.name))
                 } else if let reset = provider.quotaResetAt {
-                    CompactProviderDateBadge(kind: .quotaReset, date: reset, tint: TVColor.provider(provider.name))
+                    CompactProviderDateBadge(kind: .quotaReset, date: reset, tint: ProviderRegistry.shared.brandColor(for: provider.name))
                 }
             }
 
             ForEach(provider.windows) { window in
-                CompactLimitWindowRow(window: window, tint: TVColor.provider(provider.name))
+                CompactLimitWindowRow(window: window, tint: ProviderRegistry.shared.brandColor(for: provider.name))
             }
         }
         .padding(9)
