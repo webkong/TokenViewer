@@ -22,6 +22,7 @@ pub struct SkillsCore {
     pub git: Option<GitEngine>,
     pub config_dir: PathBuf,
     pub source_root: PathBuf,
+    pub source_root_display: String,
     pub known_skill_ids: HashSet<String>,
     /// Git auth token (set by FFI, stored in memory for the session).
     pub git_token: Option<String>,
@@ -56,6 +57,7 @@ impl SkillsCore {
             git,
             config_dir,
             source_root,
+            source_root_display: String::new(),
             known_skill_ids,
             git_token: None,
             git_remote_url: None,

@@ -351,17 +351,12 @@ struct SettingsView: View {
                     TextField("~/.agents/skills", text: $skillsSourceRoot)
                         .textFieldStyle(.roundedBorder)
                     Button(l10n.openInFinder) {
-                        let panel = NSOpenPanel()
-                        panel.canChooseDirectories = true
-                        panel.canChooseFiles = false
-                        if panel.runModal() == .OK, let url = panel.url {
-                            skillsSourceRoot = url.path
-                        }
+                        openSkillsSourceRootInFinder()
                     }
                     .font(.system(size: 11))
                     Button(l10n.save) {
                         AppFocus.clear()
-                        let payload: [String: String] = ["source_root": skillsSourceRoot.trimmingCharacters(in: .whitespaces)]
+                        let payload: [String: String] = ["source_root": skillsSourceRoot.trimmingCharacters(in: .whitespacesAndNewlines)]
                         if let data = try? JSONSerialization.data(withJSONObject: payload) {
                             let resultData = CoreBridge.shared.skillsSetGitConfig(data)
                             if let resultData,
@@ -490,6 +485,21 @@ struct SettingsView: View {
             await MainActor.run {
                 skillsSourceRoot = config.sourceRoot
             }
+        }
+    }
+
+    private func openSkillsSourceRootInFinder() {
+        AppFocus.clear()
+        let rawPath = skillsSourceRoot.trimmingCharacters(in: .whitespacesAndNewlines)
+        let path = rawPath.isEmpty ? "~/.agents/skills" : rawPath
+        let expandedPath = (NSString(string: path).expandingTildeInPath as NSString).standardizingPath
+        let url = URL(fileURLWithPath: expandedPath, isDirectory: true)
+
+        do {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(url)
+        } catch {
+            ToastCenter.shared.error(l10n.toastSaveFailed)
         }
     }
 

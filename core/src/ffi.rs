@@ -45,9 +45,29 @@ pub extern "C" fn tt_init(db_path: *const c_char) -> *mut CoreHandle {
         Ok(db) => {
             let config_dir = home_dir.join(".agents");
             let persisted_config = load_skills_config(&config_dir);
-            let source_root = std::env::var("TOKENVIEWER_SKILLS_ROOT")
-                .ok()
-                .and_then(|raw| crate::skills::provider_config::expand_path(&raw).ok())
+            let env_source_root = std::env::var("TOKENVIEWER_SKILLS_ROOT").ok();
+            let persisted_source_root_raw = persisted_config
+                .as_ref()
+                .and_then(|c| c.source_root_raw.clone());
+            let default_source_root = "~/.agents/skills".to_string();
+            let source_root_display = env_source_root
+                .clone()
+                .or(persisted_source_root_raw.clone())
+                .or_else(|| {
+                    persisted_config
+                        .as_ref()
+                        .and_then(|c| c.source_root.as_ref())
+                        .map(|path| display_path(path, &home_dir))
+                })
+                .unwrap_or(default_source_root.clone());
+            let source_root = env_source_root
+                .as_deref()
+                .and_then(|raw| crate::skills::provider_config::expand_path(raw).ok())
+                .or_else(|| {
+                    persisted_source_root_raw
+                        .as_deref()
+                        .and_then(|raw| crate::skills::provider_config::expand_path(raw).ok())
+                })
                 .or_else(|| {
                     persisted_config
                         .as_ref()
@@ -59,6 +79,7 @@ pub extern "C" fn tt_init(db_path: *const c_char) -> *mut CoreHandle {
                 Ok(skills) => skills,
                 Err(_) => return std::ptr::null_mut(),
             };
+            skills.source_root_display = source_root_display;
             if let Some(config) = persisted_config {
                 skills.git_remote_url = config.git_remote_url;
                 skills.git_platform = config.git_platform;
@@ -979,12 +1000,13 @@ pub extern "C" fn tt_skills_set_git_config(
     };
 
     if let Some(root) = req.source_root {
-        if root.trim().is_empty() {
+        let root = root.trim();
+        if root.is_empty() {
             return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
                 "Source root cannot be empty",
             ));
         }
-        let path = match crate::skills::provider_config::expand_path(root.trim()) {
+        let path = match crate::skills::provider_config::expand_path(root) {
             Ok(path) => path,
             Err(e) => return to_json_cstring(&crate::skills::models::SkillCommandResult::error(e)),
         };
@@ -996,6 +1018,7 @@ pub extern "C" fn tt_skills_set_git_config(
             }
         }
         handle.skills.source_root = path.clone();
+        handle.skills.source_root_display = root.to_string();
         // Re-init git engine for new path
         handle.skills.git = crate::skills::git_engine::GitEngine::open_or_init(&path).ok();
         // Re-init scanner and symlink
@@ -1041,7 +1064,11 @@ pub extern "C" fn tt_skills_get_config(handle: *mut CoreHandle) -> *mut c_char {
         None => return std::ptr::null_mut(),
     };
     let config = serde_json::json!({
-        "source_root": handle.skills.source_root.to_string_lossy(),
+        "source_root": if handle.skills.source_root_display.is_empty() {
+            display_path(&handle.skills.source_root, &handle.home_dir)
+        } else {
+            handle.skills.source_root_display.clone()
+        },
         "git_remote_url": handle.skills.git_remote_url.as_deref().unwrap_or(""),
         "git_platform": handle.skills.git_platform.as_deref().unwrap_or("custom"),
         "git_token_configured": handle.skills.git_token.is_some(),
@@ -1077,6 +1104,8 @@ struct PersistedSkillsConfig {
     #[serde(default)]
     source_root: Option<PathBuf>,
     #[serde(default)]
+    source_root_raw: Option<String>,
+    #[serde(default)]
     git_remote_url: Option<String>,
     #[serde(default)]
     git_platform: Option<String>,
@@ -1100,6 +1129,11 @@ fn persist_skills_config(
         .map_err(|e| format!("Failed to create skills config dir: {}", e))?;
     let config = PersistedSkillsConfig {
         source_root: Some(skills.source_root.clone()),
+        source_root_raw: if skills.source_root_display.is_empty() {
+            None
+        } else {
+            Some(skills.source_root_display.clone())
+        },
         git_remote_url: skills.git_remote_url.clone(),
         git_platform: skills.git_platform.clone(),
     };
@@ -1107,6 +1141,19 @@ fn persist_skills_config(
         .map_err(|e| format!("Failed to serialize skills config: {}", e))?;
     std::fs::write(skills_config_path(config_dir), data)
         .map_err(|e| format!("Failed to write skills config: {}", e))
+}
+
+fn display_path(path: &std::path::Path, home_dir: &std::path::Path) -> String {
+    if let Ok(relative) = path.strip_prefix(home_dir) {
+        let relative = relative.to_string_lossy();
+        if relative.is_empty() {
+            "~".to_string()
+        } else {
+            format!("~/{}", relative)
+        }
+    } else {
+        path.to_string_lossy().to_string()
+    }
 }
 
 /// Validate and unpack the common (handle, from, to) query arguments.
