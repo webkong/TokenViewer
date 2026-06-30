@@ -38,6 +38,7 @@ struct MainWindowView: View {
         }
         .frame(minWidth: 600, minHeight: 480)
         .clearInitialFocus(trigger: router.selectedTab)
+        .clearFocusOnOutsideClick()
         .toastOverlay()
     }
 }
@@ -153,9 +154,77 @@ private struct ClearInitialFocusView: NSViewRepresentable {
     }
 }
 
+private struct ClearFocusOnOutsideClickView: NSViewRepresentable {
+    func makeNSView(context: Context) -> FocusDismissHostView {
+        FocusDismissHostView()
+    }
+
+    func updateNSView(_ nsView: FocusDismissHostView, context: Context) {
+        nsView.refreshMonitor()
+    }
+
+    final class FocusDismissHostView: NSView {
+        private var monitor: Any?
+        private weak var monitoredWindow: NSWindow?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            refreshMonitor()
+        }
+
+        deinit {
+            removeMonitor()
+        }
+
+        func refreshMonitor() {
+            guard monitoredWindow !== window else { return }
+            removeMonitor()
+            monitoredWindow = window
+            guard let window else { return }
+
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self, weak window] event in
+                guard let self, let window, event.window === window else { return event }
+                guard !self.clickedTextInput(event, in: window) else { return event }
+                window.makeFirstResponder(nil)
+                return event
+            }
+        }
+
+        private func removeMonitor() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+            monitoredWindow = nil
+        }
+
+        private func clickedTextInput(_ event: NSEvent, in window: NSWindow) -> Bool {
+            guard let contentView = window.contentView else { return false }
+            let point = contentView.convert(event.locationInWindow, from: nil)
+            guard let hitView = contentView.hitTest(point) else { return false }
+            return hasTextInputAncestor(hitView)
+        }
+
+        private func hasTextInputAncestor(_ view: NSView) -> Bool {
+            var current: NSView? = view
+            while let candidate = current {
+                if candidate is NSTextField || candidate is NSTextView {
+                    return true
+                }
+                current = candidate.superview
+            }
+            return false
+        }
+    }
+}
+
 extension View {
     func clearInitialFocus(trigger: String) -> some View {
         background(ClearInitialFocusView(trigger: trigger).frame(width: 0, height: 0))
+    }
+
+    func clearFocusOnOutsideClick() -> some View {
+        background(ClearFocusOnOutsideClickView().frame(width: 0, height: 0))
     }
 
     func toastOverlay() -> some View {

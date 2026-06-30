@@ -96,6 +96,7 @@ struct SkillGitSyncSheet: View {
         }
         .frame(width: 520, height: 580)
         .clearInitialFocus(trigger: providerRaw)
+        .clearFocusOnOutsideClick()
         .sheet(isPresented: $showAuthSheet) {
             SkillAuthSheet(provider: $providerRaw) {
                 applyConfig(showToast: true)
@@ -456,6 +457,7 @@ struct SkillAuthSheet: View {
         .padding(24)
         .frame(width: 420, height: 330)
         .clearInitialFocus(trigger: provider)
+        .clearFocusOnOutsideClick()
         .onAppear(perform: loadTokensFromKeychain)
     }
 
