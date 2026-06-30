@@ -5,7 +5,7 @@ struct PopoverView: View {
     @ObservedObject private var limitsVM = LimitsViewModel.shared
     @ObservedObject private var currency = CurrencyStore.shared
     @ObservedObject private var l10n = L10n.shared
-    var onOpenMainWindow: (() -> Void)?
+    var onOpenMainWindow: ((String) -> Void)?
     var onClose: (() -> Void)?
 
     // Section visibility (user-configurable in Settings → Menu Bar Panel)
@@ -15,7 +15,6 @@ struct PopoverView: View {
     @AppStorage("panelShowTrend") private var showTrend = true
     @AppStorage("panelShowModels") private var showModels = true
     @AppStorage("limitsVisibleSources") private var limitsVisibleSources = LimitsVisibilityStore.defaultsValue
-    @AppStorage("mainWindowTab") private var mainWindowTab = "usage"
 
     private let maxPopoverHeight: CGFloat = 620
     var onHeightChange: ((CGFloat) -> Void)?
@@ -80,8 +79,7 @@ struct PopoverView: View {
             }
             .buttonStyle(.plain).help(l10n.syncNow)
             Button(action: {
-                mainWindowTab = "settings"
-                onOpenMainWindow?()
+                onOpenMainWindow?("settings")
             }) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 11, weight: .semibold))
@@ -95,12 +93,11 @@ struct PopoverView: View {
 
     private var footer: some View {
         HStack(spacing: 12) {
-            Button(action: { onOpenMainWindow?() }) {
+            Button(action: { onOpenMainWindow?("usage") }) {
                 Label(l10n.dashboard, systemImage: "macwindow").font(.system(size: 11, weight: .medium))
             }.buttonStyle(.plain).foregroundColor(TVColor.brand)
             Button(action: {
-                mainWindowTab = "skills"
-                onOpenMainWindow?()
+                onOpenMainWindow?("skills")
             }) {
                 Label(l10n.skills, systemImage: "puzzlepiece.extension")
                     .font(.system(size: 11, weight: .medium))

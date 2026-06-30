@@ -1,12 +1,21 @@
 import SwiftUI
 
+@MainActor
+final class MainWindowRouter: ObservableObject {
+    static let shared = MainWindowRouter()
+
+    @Published var selectedTab = "usage"
+
+    private init() {}
+}
+
 struct MainWindowView: View {
     @ObservedObject private var viewModel = UsageViewModel.shared
     @ObservedObject private var l10n = L10n.shared
-    @AppStorage("mainWindowTab") private var mainWindowTab = "usage"
+    @ObservedObject private var router = MainWindowRouter.shared
 
     var body: some View {
-        TabView(selection: $mainWindowTab) {
+        TabView(selection: $router.selectedTab) {
             UsageView(viewModel: viewModel)
                 .tag("usage")
                 .tabItem { Label(l10n.usage, systemImage: "chart.bar.fill") }
@@ -28,7 +37,7 @@ struct MainWindowView: View {
                 .tabItem { Label(l10n.about, systemImage: "info.circle") }
         }
         .frame(minWidth: 600, minHeight: 480)
-        .clearInitialFocus(trigger: mainWindowTab)
+        .clearInitialFocus(trigger: router.selectedTab)
         .toastOverlay()
     }
 }

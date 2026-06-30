@@ -22,7 +22,7 @@ final class StatusBarController {
         var hostedController: NSHostingController<PopoverView>?
         hostedController = NSHostingController(
             rootView: PopoverView(
-                onOpenMainWindow: { [weak self] in self?.openMainWindow() },
+                onOpenMainWindow: { [weak self] tab in self?.openMainWindow(tab: tab) },
                 onClose: { [weak self] in self?.close() },
                 onHeightChange: { [weak popover] height in
                     popover?.contentSize = NSSize(width: 420, height: height)
@@ -108,8 +108,9 @@ final class StatusBarController {
         }
     }
 
-    func openMainWindow() {
+    func openMainWindow(tab: String = "usage") {
         popover?.performClose(nil)
+        MainWindowRouter.shared.selectedTab = tab
 
         if let window = mainWindow {
             window.makeKeyAndOrderFront(nil)
