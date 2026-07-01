@@ -132,6 +132,7 @@ private struct ProviderLimitCard: View {
             }
         }
         .padding(16)
+        .frame(minHeight: provider.configured && provider.hasLimitDisplay ? kLimitCardMinHeight : 0, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color(nsColor: .controlBackgroundColor))
@@ -140,6 +141,13 @@ private struct ProviderLimitCard: View {
         .opacity(provider.configured && provider.hasLimitDisplay ? 1 : 0.55)
     }
 }
+
+/// Fixed height for one LimitWindowRow so every bar row is exactly the same.
+/// text(~16pt) + spacing(5pt) + bar(6pt) ≈ 27pt.
+private let kLimitRowHeight: CGFloat = 27
+/// Card minHeight that reserves space for two rows:
+/// padding(32) + header(~18) + gaps(2×10) + 2 rows(2×27) ≈ 124pt.
+private let kLimitCardMinHeight: CGFloat = 124
 
 private struct LimitWindowRow: View {
     let window: LimitWindow
@@ -166,6 +174,7 @@ private struct LimitWindowRow: View {
             }
             .frame(height: 6)
         }
+        .frame(height: kLimitRowHeight)
     }
 
     private var barColor: Color {
