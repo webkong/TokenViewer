@@ -11,10 +11,30 @@ enum LimitsVisibilityStore {
         ProviderRegistry.shared.limitSources
     }
 
+    /// Sources shown by default in the menu-bar popover: the core agents
+    /// (Claude Code, Codex, Gemini, Kiro) plus any other limit-capable agent
+    /// detected as installed on this machine (config dir / CLI present).
+    static let alwaysOnSources = ["claude", "codex", "gemini", "kiro"]
+
     /// Default value for the `limitsVisibleSources` UserDefaults key.
-    /// Always returns the full set joined by comma so that new providers
-    /// are visible by default on first launch.
-    static var defaultsValue: String { allSources.joined(separator: ",") }
+    /// Always includes `alwaysOnSources`, plus any other limits-capable agent
+    /// that's detected as installed. Falls back to all sources if install
+    /// status hasn't been detected yet (e.g. very first read before
+    /// `refreshInstallStatus()` completes), so nothing is hidden prematurely.
+    static var defaultsValue: String {
+        let registry = ProviderRegistry.shared
+        let detected = allSources.filter { source in
+            alwaysOnSources.contains(source) || registry.isInstalled(for: source)
+        }
+        // Guard against reading before install status is ready: if detection
+        // hasn't found anything beyond the always-on set, and there are more
+        // limits-capable sources available, don't prematurely narrow the list.
+        if detected.count <= alwaysOnSources.count && allSources.count > alwaysOnSources.count
+            && !registry.hasDetectedInstalls {
+            return allSources.joined(separator: ",")
+        }
+        return detected.joined(separator: ",")
+    }
 
     // MARK: - Load
 

@@ -17,6 +17,8 @@ final class ProviderRegistry: ObservableObject {
     static let defaultSkillSourcesJSON = "[\"claude\",\"codex\",\"opencode\"]"
 
     @Published private(set) var allProviders: [SkillProvider] = []
+    /// True once `refreshInstallStatus()` has completed at least one detection pass.
+    private(set) var hasDetectedInstalls = false
 
     private var providers: [String: SkillProvider] = [:]
     private var installStatus: [String: Bool] = [:]
@@ -133,6 +135,7 @@ final class ProviderRegistry: ObservableObject {
             await MainActor.run {
                 self.installStatus = finalInstallMap
                 self.applyInstallStatus(finalInstallMap)
+                self.hasDetectedInstalls = true
             }
         }
     }

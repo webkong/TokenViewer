@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ProviderRegistry.shared.loadIfNeeded()
         ProviderRegistry.shared.refreshInstallStatus()
         LimitsVisibilityStore.load()
+        seedLimitsVisibilityDefaultAfterDetection()
         rebuildIfVersionChanged()
         ThemeManager.shared.apply()
         statusBarController = StatusBarController()
@@ -42,6 +43,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = CoreBridge.shared.rebuildAll()
             UserDefaults.standard.set(currentVersion, forKey: "lastDataVersion")
             migrateLimitsVisibility()
+        }
+    }
+
+    /// On first launch (key not yet set), persist the computed default —
+    /// core agents + detected-installed agents — once install detection
+    /// finishes, so the menu-bar popover reflects real detection results
+    /// without requiring the user to open Settings first.
+    private func seedLimitsVisibilityDefaultAfterDetection() {
+        let key = "limitsVisibleSources"
+        guard UserDefaults.standard.string(forKey: key) == nil else { return }
+        Task { @MainActor in
+            while !ProviderRegistry.shared.hasDetectedInstalls {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            guard UserDefaults.standard.string(forKey: key) == nil else { return }
+            UserDefaults.standard.set(LimitsVisibilityStore.defaultsValue, forKey: key)
         }
     }
 
