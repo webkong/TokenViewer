@@ -45,7 +45,10 @@ final class StatusBarController {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
             if let window = popover.contentViewController?.view.window {
-                window.level = .floating
+                // NOTE: do NOT set window.level = .floating here.
+                // Floating windows don't resign key status normally, which
+                // breaks .transient's auto-close-on-focus-loss behavior and
+                // is the root cause of the popover sometimes refusing to close.
                 window.isOpaque = true
                 window.backgroundColor = .windowBackgroundColor
             }
@@ -80,6 +83,7 @@ final class StatusBarController {
     }
 
     private func close() {
+        popover?.performClose(nil)
         stopEventMonitor()
     }
 
