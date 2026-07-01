@@ -51,6 +51,15 @@ struct ProviderIcon: View {
         if m.hasPrefix("qwen") || m.hasPrefix("provider:qwen") || m.hasPrefix("provider:alibaba") || m.hasPrefix("provider:dashscope") { return "qwen" }
         if m.hasPrefix("glm") || m.hasPrefix("chatglm") || m.hasPrefix("provider:zhipu") { return "glm" }
         if m.hasPrefix("mimo") || m.hasPrefix("provider:xiaomi") { return "mimo" }
+        if m.hasPrefix("longcat") { return "longcat" }
+        if m.hasPrefix("step-") || m.hasPrefix("step1") || m.hasPrefix("step2") || m.hasPrefix("provider:stepfun") { return "stepfun" }
+        if m.hasPrefix("ernie") || m.hasPrefix("wenxin") || m.hasPrefix("provider:baidu") { return "wenxin" }
+        if m.hasPrefix("hunyuan") || m.hasPrefix("provider:tencent") { return "hunyuan" }
+        if m.hasPrefix("llama") || m.hasPrefix("provider:meta") { return "llama" }
+        if m.hasPrefix("mistral") || m.hasPrefix("mixtral") || m.hasPrefix("provider:mistral") || m.hasPrefix("codestral") { return "mistral" }
+        if m.hasPrefix("command") || m.hasPrefix("provider:cohere") { return "cohere" }
+        if m.hasPrefix("yi-") || m.hasPrefix("provider:01ai") || m.hasPrefix("provider:zeroone") { return "yi" }
+        if m.hasPrefix("sonar") || m.hasPrefix("provider:perplexity") { return "perplexity" }
         // Fall back to the provider registry for non-model-based sources.
         let registryLogo = ProviderRegistry.shared.logoFile(for: s)
         if !registryLogo.isEmpty { return s }
@@ -63,7 +72,7 @@ struct ProviderIcon: View {
     }
 
     /// Logos drawn with `currentColor` (monochrome) — tint to adapt to light/dark.
-    private static let monoLogos: Set<String> = ["copilot", "cursor", "grok", "kimi", "kiro", "mimo", "aider"]
+    private static let monoLogos: Set<String> = ["copilot", "cursor", "grok", "kimi", "kiro", "mimo", "aider", "yi", "perplexity"]
 
     var body: some View {
         let resolved = resolvedSource.lowercased()
