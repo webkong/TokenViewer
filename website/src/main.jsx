@@ -14,13 +14,14 @@ const copy = {
     htmlLang: "en",
     pageTitle: "TokenViewer - AI Token Usage Tracker for macOS",
     pageDescription:
-      "TokenViewer is a free, native macOS menu-bar app that tracks your AI token usage and costs across 24 providers — Claude, Codex, Kiro, Cursor, Copilot, MiMoCode and more. Local-first, no cloud required.",
+      "TokenViewer is a free, native macOS menu-bar app that tracks your AI token usage and costs across 25 providers — Claude, Codex, Kiro, Cursor, Copilot, ZCode and more. Local-first, no cloud required.",
     pageKeywords:
-      "AI token tracker, token usage macOS, Claude token counter, Codex usage, Kiro token, AI cost tracker, menu bar app macOS",
+      "AI token tracker, token usage macOS, Claude token counter, Codex usage, Kiro token, AI cost tracker, menu bar app macOS, AI skills manager",
     brandHome: "TokenViewer home",
     nav: {
       features: "Features",
       providers: "Providers",
+      skills: "Skills",
       about: "About",
       github: "GitHub",
       download: "Download free",
@@ -30,10 +31,10 @@ const copy = {
     hero: {
       title: "Track your AI token usage, all in one place",
       description:
-        "TokenViewer sits in your menu bar and quietly tracks token usage and costs across 24 AI coding tools. See where your tokens go — today, this week, or over time.",
+        "TokenViewer sits in your menu bar and quietly tracks token usage and costs across 25 AI coding tools. See where your tokens go — today, this week, or over time.",
       primary: "Download for macOS",
       secondary: "See features",
-      proof: ["Free", "24 providers", "Local-first"],
+      proof: ["Free", "25 providers", "Local-first"],
       previewLabel: "TokenViewer menu-bar panel preview",
     },
     features: [
@@ -64,7 +65,7 @@ const copy = {
       ],
     },
     providers: {
-      title: "24 supported providers",
+      title: "25 supported providers",
       description:
         "TokenViewer reads local data from the AI tools you already use — no API keys or logins required.",
       list: [
@@ -72,8 +73,31 @@ const copy = {
         "Gemini CLI", "Opencode", "Roocode", "Kilo Code", "Zed",
         "Goose", "Grok", "Kimi", "Craft", "OpenClaw",
         "Hermes", "Antigravity", "CodeBuddy", "WorkBuddy", "OhMyPi", "Pi",
-        "KiloCLI", "EveryCode", "MiMoCode",
+        "KiloCLI", "EveryCode", "MiMoCode", "ZCode",
       ],
+    },
+    skills: {
+      title: "One skills library for every AI agent",
+      description:
+        "TokenViewer's Skills manager keeps a single shared copy of your SKILL.md files and links them into whichever coding agents you use — Claude Code, Codex, Cursor, Kiro, and 40+ more — so you write a skill once and every agent can use it.",
+      points: [
+        {
+          icon: Layers,
+          title: "One shared source, many agents",
+          text: "Store each skill once in a shared folder. TokenViewer symlinks it into every agent's own skills directory, so agents stay in sync without duplicated files.",
+        },
+        {
+          icon: Zap,
+          title: "One-click organize",
+          text: "Already have skills scattered across different agent folders? Organize pulls them into the shared library and replaces the original with a link — including nested layouts like Codex's built-in skills.",
+        },
+        {
+          icon: Shield,
+          title: "Git-backed sync",
+          text: "Back up your skills library to a Git remote and pull it down on another machine, so your personal skill set travels with you.",
+        },
+      ],
+      cta: "Open the Skills tab in TokenViewer to get started — no extra setup required.",
     },
     footer: {
       download: "Download DMG",
@@ -84,13 +108,14 @@ const copy = {
     htmlLang: "zh-CN",
     pageTitle: "TokenViewer - macOS AI Token 用量追踪器",
     pageDescription:
-      "TokenViewer 是一款免费的原生 macOS 菜单栏应用，追踪 24 个 AI 工具的 Token 用量与费用 — 包括 Claude、Codex、Kiro、Cursor、Copilot、MiMoCode 等。本地优先，无需云端。",
+      "TokenViewer 是一款免费的原生 macOS 菜单栏应用，追踪 25 个 AI 工具的 Token 用量与费用 — 包括 Claude、Codex、Kiro、Cursor、Copilot、ZCode 等。本地优先，无需云端。",
     pageKeywords:
-      "AI Token 追踪, Token 用量 macOS, Claude Token 统计, Codex 用量, Kiro Token, AI 费用追踪, macOS 菜单栏应用",
+      "AI Token 追踪, Token 用量 macOS, Claude Token 统计, Codex 用量, Kiro Token, AI 费用追踪, macOS 菜单栏应用, AI 技能管理",
     brandHome: "TokenViewer 官网首页",
     nav: {
       features: "功能",
       providers: "支持工具",
+      skills: "技能管理",
       about: "关于",
       github: "GitHub",
       download: "免费下载",
@@ -100,10 +125,10 @@ const copy = {
     hero: {
       title: "追踪你的 AI Token 用量，一览无余",
       description:
-        "TokenViewer 静默驻守在菜单栏，实时统计 24 个 AI 编程工具的 Token 用量与费用。今天用了多少、这周花了多少，一目了然。",
+        "TokenViewer 静默驻守在菜单栏，实时统计 25 个 AI 编程工具的 Token 用量与费用。今天用了多少、这周花了多少，一目了然。",
       primary: "下载 macOS 版本",
       secondary: "查看功能",
-      proof: ["永久免费", "支持 24 个工具", "本地优先"],
+      proof: ["永久免费", "支持 25 个工具", "本地优先"],
       previewLabel: "TokenViewer 菜单栏面板预览",
     },
     features: [
@@ -134,7 +159,7 @@ const copy = {
       ],
     },
     providers: {
-      title: "支持 24 个工具",
+      title: "支持 25 个工具",
       description:
         "TokenViewer 直接读取你已使用工具的本地数据——无需 API Key，无需登录。",
       list: [
@@ -142,8 +167,31 @@ const copy = {
         "Gemini CLI", "Opencode", "Roocode", "Kilo Code", "Zed",
         "Goose", "Grok", "Kimi", "Craft", "OpenClaw",
         "Hermes", "Antigravity", "CodeBuddy", "WorkBuddy", "OhMyPi", "Pi",
-        "KiloCLI", "EveryCode", "MiMoCode",
+        "KiloCLI", "EveryCode", "MiMoCode", "ZCode",
       ],
+    },
+    skills: {
+      title: "一份技能库，服务所有 AI Agent",
+      description:
+        "TokenViewer 的技能管理功能把你的 SKILL.md 统一保存在共享目录，并链接到 Claude Code、Codex、Cursor、Kiro 等 40 多个编程 Agent 各自的技能目录——写一次技能，所有 Agent 都能用。",
+      points: [
+        {
+          icon: Layers,
+          title: "统一来源，多端共享",
+          text: "每个技能只保存一份，放在共享目录中。TokenViewer 会将它软链接到每个 Agent 自己的技能目录，各 Agent 保持同步，不再重复维护多份文件。",
+        },
+        {
+          icon: Zap,
+          title: "一键整理",
+          text: "技能散落在各个 Agent 目录里？「整理」会把它们收进共享库，并在原位置留下链接——即使是 Codex 内置的嵌套目录结构也能正确处理。",
+        },
+        {
+          icon: Shield,
+          title: "Git 同步备份",
+          text: "把技能库同步到 Git 远程仓库，在其他电脑上直接拉取——你的个人技能集随身携带。",
+        },
+      ],
+      cta: "打开 TokenViewer 的「技能」标签页即可开始，无需额外配置。",
     },
     footer: {
       download: "下载 DMG",
@@ -185,6 +233,7 @@ function App() {
       <Hero t={t} />
       <FeatureBand t={t} />
       <ProductStory t={t} />
+      <SkillsSection t={t} />
       <ScreenshotRow />
       <ProvidersSection t={t} />
       <Footer t={t} />
@@ -202,6 +251,7 @@ function Navigation({ t, onToggleLanguage }) {
         </a>
         <div className="nav-links">
           <a href="/#features">{t.nav.features}</a>
+          <a href="/#skills">{t.nav.skills}</a>
           <a href="/#providers">{t.nav.providers}</a>
           <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">{t.nav.github}</a>
         </div>
@@ -316,6 +366,28 @@ function ProductStory({ t }) {
   );
 }
 
+function SkillsSection({ t }) {
+  return (
+    <section className="skills-section" id="skills">
+      <div className="skills-copy">
+        <Layers size={34} />
+        <h2>{t.skills.title}</h2>
+        <p>{t.skills.description}</p>
+      </div>
+      <div className="skills-points">
+        {t.skills.points.map(({ icon: Icon, title, text }) => (
+          <article className="skills-point-card" key={title}>
+            <div className="feature-icon"><Icon size={22} /></div>
+            <h3>{title}</h3>
+            <p>{text}</p>
+          </article>
+        ))}
+      </div>
+      <p className="skills-cta">{t.skills.cta}</p>
+    </section>
+  );
+}
+
 // Provider logo mapping
 const PROVIDER_LOGOS = {
   "Claude Code": "claude-code",
@@ -341,6 +413,7 @@ const PROVIDER_LOGOS = {
   "KiloCLI": "kilo",
   "EveryCode": "codex",
   "MiMoCode": "mimo",
+  "ZCode": "zcode.png",
 };
 
 function ScreenshotRow() {
@@ -368,7 +441,7 @@ function ProvidersSection({ t }) {
             <div className="provider-chip" key={name}>
               {logoKey && (
                 <img
-                  src={`/logos/${logoKey}.svg`}
+                  src={logoKey.endsWith(".png") ? `/logos/${logoKey}` : `/logos/${logoKey}.svg`}
                   alt=""
                   width={16} height={16}
                   style={{ display: "inline-block", verticalAlign: "middle", marginRight: 5 }}

@@ -878,6 +878,10 @@ a {
     grid-template-columns: 1fr;
   }
 
+  .skills-points {
+    grid-template-columns: 1fr;
+  }
+
   .about-hero,
   .about-grid {
     grid-template-columns: 1fr;
@@ -1063,6 +1067,44 @@ a {
   background: color-mix(in srgb, #059669 10%, transparent);
   border: 1px solid color-mix(in srgb, #059669 25%, transparent);
   color: inherit;
+}
+
+/* ─── Skills Section ─────────────────────────────────────────────────────── */
+.skills-section {
+  max-width: 1180px; margin: 0 auto; padding: 20px 22px 90px;
+  text-align: center;
+}
+.skills-copy { max-width: 640px; margin: 0 auto 40px; }
+.skills-copy svg { color: #059669; margin-bottom: 12px; }
+.skills-copy h2 { font-size: clamp(1.5rem, 3vw, 2rem); margin: 0 0 10px; }
+.skills-copy p { color: var(--muted); font-size: 16px; line-height: 1.6; }
+.skills-points {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px;
+  text-align: left;
+}
+.skills-point-card {
+  border: 1px solid var(--line);
+  background: rgba(240, 250, 245, 0.8);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 48px rgba(5, 100, 60, 0.06);
+  border-radius: 28px;
+  padding: 26px;
+}
+.skills-point-card h3 {
+  margin: 18px 0 8px;
+  color: var(--ink);
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+.skills-point-card p {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0;
+}
+.skills-cta {
+  margin: 32px auto 0; max-width: 540px;
+  color: var(--muted); font-size: 14px; font-weight: 600;
 }
 
 /* ─── Screenshot Row ─────────────────────────────────────────────────────── */
