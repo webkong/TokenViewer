@@ -5,7 +5,7 @@ struct SkillManagerView: View {
     @State private var showSyncSheet = false
     @State private var showOrganizeAllConfirm = false
     @State private var showRestoreAllConfirm = false
-    @AppStorage("skillsEnabledProviders") private var enabledProvidersJSON: String = "[\"claude\",\"codex\",\"opencode\"]"
+    @AppStorage("skillsEnabledProviders") private var enabledProvidersJSON: String = ProviderRegistry.defaultSkillSourcesJSON
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {

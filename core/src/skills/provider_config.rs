@@ -547,7 +547,6 @@ fn builtin_providers() -> Vec<ProviderSkillsConfig> {
         "codex",
         "gemini",
         "kimi",
-        "opencode",
         "copilot",
         "kiro",
         "cursor",

@@ -11,10 +11,12 @@ struct SettingsView: View {
     @AppStorage("limitsVisibleSources") private var limitsVisibleSources = LimitsVisibilityStore.defaultsValue
     @State private var launchAtLogin = false
     @State private var showRebuildAlert = false
+    @State private var showResetSettingsAlert = false
     @ObservedObject private var theme = ThemeManager.shared
     @ObservedObject private var currency = CurrencyStore.shared
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var viewModel = UsageViewModel.shared
+    @ObservedObject private var providerRegistry = ProviderRegistry.shared
 
     private let dataDir: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -65,7 +67,8 @@ struct SettingsView: View {
             if #available(macOS 13.0, *) {
                 launchAtLogin = SMAppService.mainApp.status == .enabled
             }
-            loadSkillProviders()
+            providerRegistry.loadIfNeeded()
+            providerRegistry.refreshInstallStatus()
         }
     }
 
@@ -148,13 +151,12 @@ struct SettingsView: View {
             Text(l10n.limitsVisibilityDesc)
                 .font(.system(size: 11, weight: .medium))
             FlowLayout(itemSpacing: 6, rowSpacing: 6) {
-                ForEach(sortedMenuBarProviders) { provider in
-                    let isInstalled = agentInstallStatus[provider.source] ?? provider.isInstalled
+                ForEach(providerRegistry.sortedLimitProviders) { provider in
                     agentChip(
                         source: provider.source,
                         label: ProviderRegistry.shared.displayName(for: provider.source),
                         isSelected: visible.contains(provider.source),
-                        isInstalled: isInstalled
+                        isInstalled: provider.isInstalled
                     ) {
                         toggleLimitsVisibility(provider.source)
                     }
@@ -242,6 +244,23 @@ struct SettingsView: View {
                 Text(l10n.rebuildDataDesc)
                     .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
+
+                Divider()
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(l10n.resetSettings).font(.system(size: 13))
+                        Text(l10n.resetSettingsDesc)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button(l10n.resetSettings, role: .destructive) {
+                        showResetSettingsAlert = true
+                    }
+                    .font(.system(size: 13))
+                    .buttonStyle(.bordered)
+                }
             }
             .alert(l10n.rebuildConfirm, isPresented: $showRebuildAlert) {
                 Button(l10n.cancel, role: .cancel) {}
@@ -249,7 +268,40 @@ struct SettingsView: View {
             } message: {
                 Text(l10n.rebuildDataDesc)
             }
+            .alert(l10n.resetSettingsConfirm, isPresented: $showResetSettingsAlert) {
+                Button(l10n.cancel, role: .cancel) {}
+                Button(l10n.resetSettings, role: .destructive) {
+                    resetSettings()
+                }
+            } message: {
+                Text(l10n.resetSettingsConfirmMessage)
+            }
         }
+    }
+
+    private func resetSettings() {
+        AppFocus.clear()
+
+        syncFrequency = 30
+        panelShowSummary = true
+        panelShowLimits = true
+        panelShowHeatmap = true
+        panelShowTrend = true
+        panelShowModels = true
+        limitsVisibleSources = LimitsVisibilityStore.defaultsValue
+        enabledProvidersJSON = ProviderRegistry.defaultSkillSourcesJSON
+
+        theme.theme = AppTheme.system.rawValue
+        l10n.language = .system
+        currency.currency = "USD"
+        currency.rate = 1.0
+        currency.rateFetchedAt = nil
+        UserDefaults.standard.removeObject(forKey: "currencyRate")
+
+        UsageViewModel.shared.startAutoSync()
+        SkillManagerViewModel.shared.ensureValidFilter()
+        SkillManagerViewModel.shared.refresh()
+        ToastCenter.shared.success(l10n.toastSettingsReset)
     }
 
     private func toggleLimitsVisibility(_ source: String) {
@@ -319,14 +371,12 @@ struct SettingsView: View {
     // MARK: Skills
 
     @State private var skillsSourceRoot: String = ""
-    @State private var skillProviders: [SkillProvider] = []
-    @State private var agentInstallStatus: [String: Bool] = [:]
-    @AppStorage("skillsEnabledProviders") private var enabledProvidersJSON: String = "[\"claude\",\"codex\",\"opencode\"]"
+    @AppStorage("skillsEnabledProviders") private var enabledProvidersJSON: String = ProviderRegistry.defaultSkillSourcesJSON
 
     private var enabledProviders: Set<String> {
         guard let data = enabledProvidersJSON.data(using: .utf8),
               let arr = try? JSONDecoder().decode([String].self, from: data)
-        else { return ["claude", "codex", "opencode"] }
+        else { return Set(ProviderRegistry.defaultSkillSources) }
         return Set(arr)
     }
 
@@ -386,17 +436,16 @@ struct SettingsView: View {
                 Text(l10n.skillAgentParticipationDesc)
                     .font(.system(size: 10)).foregroundStyle(.secondary)
 
-                if skillProviders.isEmpty {
+                if providerRegistry.skillProviders.isEmpty {
                     Text(l10n.loading).font(.system(size: 11)).foregroundStyle(.secondary)
                 } else {
                     FlowLayout(itemSpacing: 6, rowSpacing: 6) {
-                        ForEach(sortedSkillProviders) { p in
-                            let isInstalled = agentInstallStatus[p.source] ?? p.isInstalled
+                        ForEach(providerRegistry.sortedSkillProviders) { p in
                             agentChip(
                                 source: p.source,
                                 label: ProviderRegistry.shared.displayName(for: p.source),
                                 isSelected: enabledProviders.contains(p.source),
-                                isInstalled: isInstalled
+                                isInstalled: p.isInstalled
                             ) {
                                 toggleProvider(p.source)
                             }
@@ -407,69 +456,8 @@ struct SettingsView: View {
         }
         .onAppear {
             loadSkillsConfig()
-            loadSkillProviders()
-        }
-    }
-
-    private var sortedSkillProviders: [SkillProvider] {
-        skillProviders.sorted { lhs, rhs in
-            let lhsInstalled = agentInstallStatus[lhs.source] ?? lhs.isInstalled
-            let rhsInstalled = agentInstallStatus[rhs.source] ?? rhs.isInstalled
-            if lhsInstalled != rhsInstalled {
-                return lhsInstalled && !rhsInstalled
-            }
-            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
-        }
-    }
-
-    private var sortedMenuBarProviders: [SkillProvider] {
-        let providers = skillProviders.filter(\.hasLimits)
-        if providers.isEmpty {
-            return LimitsVisibilityStore.allSources.map { source in
-                SkillProvider(
-                    source: source,
-                    displayName: LimitsVisibilityStore.displayName(for: source),
-                    skillsPath: "",
-                    linkType: "Directory",
-                    isLinked: false,
-                    linkedSkills: [],
-                    hasParser: false,
-                    hasLimits: true,
-                    detectCmd: nil,
-                    isInstalled: false
-                )
-            }
-        }
-
-        return providers.sorted { lhs, rhs in
-            let lhsInstalled = agentInstallStatus[lhs.source] ?? lhs.isInstalled
-            let rhsInstalled = agentInstallStatus[rhs.source] ?? rhs.isInstalled
-            if lhsInstalled != rhsInstalled {
-                return lhsInstalled && !rhsInstalled
-            }
-            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
-        }
-    }
-
-    private func loadSkillProviders() {
-        guard skillProviders.isEmpty else { return }
-        // Phase 1: load agent list immediately (fast, in-memory read)
-        Task.detached {
-            guard let data = CoreBridge.shared.skillsListAgents() else { return }
-            let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
-            let providers = (try? decoder.decode([SkillProvider].self, from: data)) ?? []
-            await MainActor.run { skillProviders = providers }
-        }
-        // Phase 2: detect install status in background (cached → fast; fresh → ~2s)
-        Task.detached {
-            var installMap: [String: Bool] = [:]
-            if let detectData = CoreBridge.shared.skillsDetectInstalled(),
-               let detected = try? JSONDecoder().decode([String: Bool].self, from: detectData) {
-                installMap = detected
-            }
-            let finalInstallMap = installMap
-            await MainActor.run { agentInstallStatus = finalInstallMap }
+            providerRegistry.loadIfNeeded()
+            providerRegistry.refreshInstallStatus()
         }
     }
 
@@ -506,7 +494,7 @@ struct SettingsView: View {
     private func decodeEnabledProviders() -> Set<String> {
         guard let data = enabledProvidersJSON.data(using: .utf8),
               let arr = try? JSONDecoder().decode([String].self, from: data)
-        else { return ["claude", "codex", "opencode"] }
+        else { return Set(ProviderRegistry.defaultSkillSources) }
         return Set(arr)
     }
 

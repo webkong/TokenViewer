@@ -11,10 +11,15 @@ import SwiftUI
 /// Falls back to generic formatting when the Rust data isn't available yet
 /// (early launch or first load).
 @MainActor
-final class ProviderRegistry {
+final class ProviderRegistry: ObservableObject {
     static let shared = ProviderRegistry()
+    static let defaultSkillSources = ["claude", "codex", "opencode"]
+    static let defaultSkillSourcesJSON = "[\"claude\",\"codex\",\"opencode\"]"
+
+    @Published private(set) var allProviders: [SkillProvider] = []
 
     private var providers: [String: SkillProvider] = [:]
+    private var installStatus: [String: Bool] = [:]
     private var loaded = false
 
     private init() {}
@@ -32,10 +37,29 @@ final class ProviderRegistry {
         loadIfNeeded()
     }
 
-    /// Returns all cached providers.
-    var allProviders: [SkillProvider] {
-        loadIfNeeded()
-        return Array(providers.values)
+    /// Canonical list of providers that support subscription/quota tracking.
+    var limitSources: [String] {
+        loadedProviders.filter(\.hasLimits).map(\.source)
+    }
+
+    /// Canonical list of providers available to the skills manager.
+    var skillProviders: [SkillProvider] {
+        loadedProviders
+    }
+
+    /// Installed providers first, then display-name sorted.
+    var sortedProviders: [SkillProvider] {
+        sortInstalledFirst(loadedProviders)
+    }
+
+    /// Skills-capable providers sorted for Settings.
+    var sortedSkillProviders: [SkillProvider] {
+        sortInstalledFirst(skillProviders)
+    }
+
+    /// Limits-capable providers sorted for Settings.
+    var sortedLimitProviders: [SkillProvider] {
+        sortInstalledFirst(loadedProviders.filter(\.hasLimits))
     }
 
     // MARK: - Lookups
@@ -96,6 +120,23 @@ final class ProviderRegistry {
         return false
     }
 
+    /// Refresh install status through the Rust core and publish one consistent agent snapshot.
+    func refreshInstallStatus() {
+        Task.detached {
+            var installMap: [String: Bool] = [:]
+            if let detectData = CoreBridge.shared.skillsDetectInstalled(),
+               let detected = try? JSONDecoder().decode([String: Bool].self, from: detectData) {
+                installMap = detected
+            }
+
+            let finalInstallMap = installMap
+            await MainActor.run {
+                self.installStatus = finalInstallMap
+                self.applyInstallStatus(finalInstallMap)
+            }
+        }
+    }
+
     // MARK: - Load
 
     private func loadFromRust() -> Bool {
@@ -103,8 +144,41 @@ final class ProviderRegistry {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         guard let decoded = try? decoder.decode([SkillProvider].self, from: data) else { return false }
-        providers = Dictionary(uniqueKeysWithValues: decoded.map { ($0.source, $0) })
+        allProviders = decoded.map { provider in
+            var updated = provider
+            if let isInstalled = installStatus[provider.source] {
+                updated.isInstalled = isInstalled
+            }
+            return updated
+        }
+        providers = Dictionary(uniqueKeysWithValues: allProviders.map { ($0.source, $0) })
         return true
+    }
+
+    private var loadedProviders: [SkillProvider] {
+        loadIfNeeded()
+        return allProviders
+    }
+
+    private func applyInstallStatus(_ installMap: [String: Bool]) {
+        guard !installMap.isEmpty else { return }
+        allProviders = allProviders.map { provider in
+            var updated = provider
+            if let isInstalled = installMap[provider.source] {
+                updated.isInstalled = isInstalled
+            }
+            return updated
+        }
+        providers = Dictionary(uniqueKeysWithValues: allProviders.map { ($0.source, $0) })
+    }
+
+    private func sortInstalledFirst(_ items: [SkillProvider]) -> [SkillProvider] {
+        items.sorted { lhs, rhs in
+            if lhs.isInstalled != rhs.isInstalled {
+                return lhs.isInstalled && !rhs.isInstalled
+            }
+            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+        }
     }
 
     // MARK: - Alias Resolution

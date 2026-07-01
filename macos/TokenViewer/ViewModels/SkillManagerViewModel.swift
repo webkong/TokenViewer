@@ -8,7 +8,7 @@ final class SkillManagerViewModel: ObservableObject {
     @Published private(set) var providers: [SkillProvider] = []
     @Published var selectedFilter: String = "all"
 
-    /// Providers enabled in Settings (defaults to claude, codex, opencode).
+    /// Providers enabled in Settings.
     var visibleProviders: [SkillProvider] {
         let enabled = enabledProviderSet
         return providers
@@ -25,7 +25,7 @@ final class SkillManagerViewModel: ObservableObject {
         guard let raw = UserDefaults.standard.string(forKey: "skillsEnabledProviders"),
               let data = raw.data(using: .utf8),
               let arr = try? JSONDecoder().decode([String].self, from: data)
-        else { return ["claude", "codex", "opencode"] }
+        else { return Set(ProviderRegistry.defaultSkillSources) }
         return Set(arr)
     }
     @Published var searchText: String = ""
@@ -49,12 +49,12 @@ final class SkillManagerViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         let enabled = enabledProviderSet
+        ProviderRegistry.shared.reload()
+        let providers = ProviderRegistry.shared.skillProviders
 
         Task.detached {
-            let agentsData = CoreBridge.shared.skillsListAgents()
             let decoder = JSONDecoder()
             decoder.keyDecodingStrategy = .convertFromSnakeCase
-            let providers = (try? decoder.decode([SkillProvider].self, from: agentsData ?? Data())) ?? []
             let agentIDs = providers
                 .map(\.source)
                 .filter { enabled.contains($0) }
@@ -177,6 +177,7 @@ final class SkillManagerViewModel: ObservableObject {
                 if let resultData,
                    let result = try? JSONDecoder().decode(SkillOperationResult.self, from: resultData),
                    result.ok {
+                    ProviderRegistry.shared.reload()
                     self.refresh()
                     ToastCenter.shared.success(L10n.shared.toastReset)
                 } else {
@@ -195,6 +196,7 @@ final class SkillManagerViewModel: ObservableObject {
                 if let resultData,
                    let result = try? JSONDecoder().decode(SkillOperationResult.self, from: resultData),
                    result.ok {
+                    ProviderRegistry.shared.reload()
                     self.refresh()
                     ToastCenter.shared.success(L10n.shared.toastSaved)
                 } else {

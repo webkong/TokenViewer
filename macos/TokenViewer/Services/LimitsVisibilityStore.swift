@@ -5,24 +5,10 @@ import Foundation
 /// keeping the limits panel in sync with the unified agent registry.
 @MainActor
 enum LimitsVisibilityStore {
-    // MARK: - Fallback (used only before Rust core is available)
-
-    private static let fallbackSources: [String] = [
-        "claude", "codex", "cursor", "gemini", "kiro", "copilot",
-        "kimi", "antigravity", "zed", "trae", "windsurf", "qoder",
-        "codebuddy", "workbuddy", "zcode",
-    ]
-
-    // MARK: - Cached Rust data
-
-    private static var cachedSources: [String]?
-
     /// All provider sources that have subscription/quota tracking (`has_limits: true`).
-    /// Loaded from the Rust core; falls back to a hardcoded list during early launch.
+    /// Loaded from the Rust core through `ProviderRegistry`.
     static var allSources: [String] {
-        if let cached = cachedSources { return cached }
-        load()
-        return cachedSources ?? fallbackSources
+        ProviderRegistry.shared.limitSources
     }
 
     /// Default value for the `limitsVisibleSources` UserDefaults key.
@@ -32,14 +18,9 @@ enum LimitsVisibilityStore {
 
     // MARK: - Load
 
-    /// Call from `onAppear` to eagerly populate the cache so UI renders without a flash.
+    /// Eagerly load the provider registry before dependent views render.
     static func load() {
-        guard cachedSources == nil else { return }
         ProviderRegistry.shared.loadIfNeeded()
-        let hasLimits = ProviderRegistry.shared.allProviders.filter(\.hasLimits)
-        if !hasLimits.isEmpty {
-            cachedSources = hasLimits.map(\.source)
-        }
     }
 
     // MARK: - Helpers

@@ -3,9 +3,9 @@ import SwiftUI
 struct AboutView: View {
     @ObservedObject private var updater = UpdateChecker.shared
     @ObservedObject private var l10n = L10n.shared
+    @ObservedObject private var providerRegistry = ProviderRegistry.shared
     @State private var autoDownloadVersion: String?
     @State private var showAgents = false
-    @State private var allProviders: [SkillProvider] = []
 
     private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
 
@@ -143,21 +143,11 @@ struct AboutView: View {
             updater.install(autoTriggered: true)
         }
         .onAppear {
-            loadProviders()
+            providerRegistry.loadIfNeeded()
         }
     }
 
-    private func loadProviders() {
-        guard allProviders.isEmpty else { return }
-        Task.detached {
-            guard let data = CoreBridge.shared.skillsListAgents() else { return }
-            let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
-            let providers = (try? decoder.decode([SkillProvider].self, from: data)) ?? []
-            await MainActor.run { allProviders = providers }
-        }
-    }
-
+    private var allProviders: [SkillProvider] { providerRegistry.allProviders }
     private var limitsCount: Int { allProviders.filter(\.hasLimits).count }
     private var otherCount: Int { allProviders.filter { !$0.hasLimits }.count }
 

@@ -149,6 +149,10 @@ final class L10n: ObservableObject {
     var rebuildDataHint: String { isZh ? "当数据看起来缺失、过旧，或同步游标异常时使用。" : "Use when data looks stale, missing, or sync cursors are out of date." }
     var rebuildConfirm: String { isZh ? "确认重建" : "Confirm Rebuild" }
     var rebuildDone: String { isZh ? "数据重建完成，请稍后刷新查看。" : "Data rebuild complete. Refresh to view the latest data." }
+    var resetSettings: String { isZh ? "重置设置" : "Reset Settings" }
+    var resetSettingsDesc: String { isZh ? "恢复主题、语言、货币、同步频率、菜单栏和 Agent 显示偏好。不删除数据、Git 配置或令牌。" : "Restore theme, language, currency, sync frequency, menu bar, and agent display preferences. Data, Git config, and tokens are kept." }
+    var resetSettingsConfirm: String { isZh ? "确认重置设置？" : "Reset Settings?" }
+    var resetSettingsConfirmMessage: String { isZh ? "这会恢复应用偏好设置，但不会删除用量数据、skills 文件、Git 配置或 Keychain 令牌。" : "This restores app preferences without deleting usage data, skills files, Git config, or Keychain tokens." }
     var cancel: String { isZh ? "取消" : "Cancel" }
     var about: String { isZh ? "关于" : "About" }
     var aboutSupportedAgents: String { isZh ? "支持的 Agent" : "Supported Agents" }
@@ -200,6 +204,7 @@ final class L10n: ObservableObject {
     var toastLinked: String { isZh ? "链接成功" : "Linked" }
     var toastUnlinked: String { isZh ? "取消链接成功" : "Unlinked" }
     var toastReset: String { isZh ? "重置成功" : "Reset" }
+    var toastSettingsReset: String { isZh ? "设置已重置" : "Settings reset" }
 
     // MARK: - Skill Git Sync Sheet
     var gitSync: String { isZh ? "Git 同步" : "Git Sync" }

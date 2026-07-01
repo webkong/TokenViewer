@@ -20,15 +20,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Initialize Rust core early to create database
         _ = CoreBridge.shared
         ProviderRegistry.shared.loadIfNeeded()
+        ProviderRegistry.shared.refreshInstallStatus()
         LimitsVisibilityStore.load()
         rebuildIfVersionChanged()
         ThemeManager.shared.apply()
         statusBarController = StatusBarController()
         UpdateChecker.shared.startAutoCheck()
 
-        if ProcessInfo.processInfo.environment["TV_OPEN_MAIN_WINDOW"] == "1" {
-            DispatchQueue.main.async { [weak self] in
-                self?.statusBarController?.openMainWindow()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if ProcessInfo.processInfo.environment["TV_OPEN_MAIN_WINDOW"] == "1" || NSApp.isActive {
+                self.statusBarController?.openMainWindow()
             }
         }
     }

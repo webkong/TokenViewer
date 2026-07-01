@@ -39,22 +39,42 @@ extension ProviderLimit {
 /// based — runs entirely client-side using the user's own local credentials.
 enum LimitsService {
     static func fetchAll() async -> [ProviderLimit] {
-        async let codex = fetchCodex()
-        async let copilot = fetchCopilot()
-        async let claude = fetchClaude()
-        async let kiro = fetchKiro()
-        async let cursor = fetchCursor()
-        async let gemini = fetchGemini()
-        async let kimi = fetchKimi()
-        async let antigravity = fetchAntigravity()
-        async let zed = fetchZed()
-        async let trae = fetchTrae()
-        async let windsurf = fetchWindsurf()
-        async let qoder = fetchQoder()
-        async let codebuddy = fetchCodebuddy()
-        async let workbuddy = fetchWorkBuddy()
-        async let zcode = fetchZcode()
-        return await [claude, codex, copilot, kiro, cursor, gemini, kimi, antigravity, zed, trae, windsurf, qoder, codebuddy, workbuddy, zcode]
+        let sources = await MainActor.run { ProviderRegistry.shared.limitSources }
+        return await withTaskGroup(of: (String, ProviderLimit).self) { group in
+            for source in sources {
+                group.addTask {
+                    (source, await fetch(source: source))
+                }
+            }
+
+            var results: [String: ProviderLimit] = [:]
+            for await (source, limit) in group {
+                results[source] = limit
+            }
+            return sources.compactMap { results[$0] }
+        }
+    }
+
+    private static func fetch(source: String) async -> ProviderLimit {
+        switch source {
+        case "claude": return await fetchClaude()
+        case "codex": return await fetchCodex()
+        case "copilot": return await fetchCopilot()
+        case "kiro": return await fetchKiro()
+        case "cursor": return await fetchCursor()
+        case "gemini": return await fetchGemini()
+        case "kimi": return await fetchKimi()
+        case "antigravity": return await fetchAntigravity()
+        case "zed": return await fetchZed()
+        case "trae": return await fetchTrae()
+        case "windsurf": return await fetchWindsurf()
+        case "qoder": return await fetchQoder()
+        case "codebuddy": return await fetchCodebuddy()
+        case "workbuddy": return await fetchWorkBuddy()
+        case "zcode": return await fetchZcode()
+        default:
+            return ProviderLimit(name: source, planLabel: nil, configured: false, error: "Unsupported limits provider", windows: [])
+        }
     }
 
     // MARK: Claude (Keychain → Anthropic OAuth usage API)
