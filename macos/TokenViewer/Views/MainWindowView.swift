@@ -39,12 +39,11 @@ struct MainWindowView: View {
         .frame(minWidth: 600, minHeight: 480)
         .clearInitialFocus(trigger: router.selectedTab)
         .clearFocusOnOutsideClick()
-        .toastOverlay()
     }
 }
 
 @MainActor
-final class ToastCenter: ObservableObject {
+final class ToastCenter {
     static let shared = ToastCenter()
 
     struct Message: Identifiable, Equatable {
@@ -58,9 +57,10 @@ final class ToastCenter: ObservableObject {
         let style: Style
     }
 
-    @Published private(set) var message: Message?
-
     private var hideTask: Task<Void, Never>?
+    private var panel: NSPanel?
+    private var hostingView: NSHostingView<GlobalToastView>?
+    private var presentationSerial = 0
 
     func success(_ text: String) {
         show(text, style: .success)
@@ -72,16 +72,138 @@ final class ToastCenter: ObservableObject {
 
     private func show(_ text: String, style: Message.Style) {
         hideTask?.cancel()
-        message = Message(text: text, style: style)
+        presentationSerial += 1
+        let serial = presentationSerial
+        render(Message(text: text, style: style))
         hideTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 1_800_000_000)
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                withAnimation(.easeOut(duration: 0.16)) {
-                    self?.message = nil
-                }
+                self?.hide(serial: serial)
             }
         }
+    }
+
+    private func render(_ message: Message) {
+        let rootView = GlobalToastView(message: message)
+        let hostingView: NSHostingView<GlobalToastView>
+
+        if let currentHostingView = self.hostingView {
+            currentHostingView.rootView = rootView
+            hostingView = currentHostingView
+        } else {
+            hostingView = NSHostingView(rootView: rootView)
+            hostingView.translatesAutoresizingMaskIntoConstraints = false
+            hostingView.wantsLayer = true
+            hostingView.layer?.backgroundColor = NSColor.clear.cgColor
+            self.hostingView = hostingView
+        }
+
+        let panel = self.panel ?? makePanel()
+        if panel.contentView !== hostingView {
+            panel.contentView = hostingView
+        }
+        self.panel = panel
+
+        let fittingSize = hostingView.fittingSize
+        let size = NSSize(width: max(fittingSize.width, 1), height: max(fittingSize.height, 1))
+        let finalFrame = frame(for: size)
+
+        if panel.isVisible {
+            panel.alphaValue = 1
+            panel.setFrame(finalFrame, display: true)
+        } else {
+            panel.alphaValue = 0
+            panel.setFrame(finalFrame.offsetBy(dx: 0, dy: 12), display: true)
+            panel.orderFrontRegardless()
+
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.18
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().alphaValue = 1
+                panel.animator().setFrame(finalFrame, display: true)
+            }
+        }
+    }
+
+    private func makePanel() -> NSPanel {
+        let panel = NSPanel(
+            contentRect: .zero,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.contentView?.wantsLayer = true
+        panel.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
+        panel.hasShadow = false
+        panel.ignoresMouseEvents = true
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .transient, .fullScreenAuxiliary]
+        panel.level = .popUpMenu
+        return panel
+    }
+
+    private func frame(for size: NSSize) -> NSRect {
+        let frame = targetFrame()
+        let origin = NSPoint(
+            x: frame.midX - size.width / 2,
+            y: frame.maxY - size.height - 16
+        )
+        return NSRect(origin: origin, size: size)
+    }
+
+    private func targetFrame() -> NSRect {
+        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+            return window.frame
+        }
+        if let window = NSApp.windows.first(where: { $0.isVisible && !($0 is NSPanel) }) {
+            return window.frame
+        }
+        return NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
+    }
+
+    private func hide(serial: Int) {
+        guard serial == presentationSerial, let panel, panel.isVisible else { return }
+        let hiddenFrame = panel.frame.offsetBy(dx: 0, dy: 12)
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.16
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            panel.animator().alphaValue = 0
+            panel.animator().setFrame(hiddenFrame, display: true)
+        } completionHandler: { [weak self, weak panel] in
+            Task { @MainActor in
+                guard serial == self?.presentationSerial else { return }
+                panel?.orderOut(nil)
+            }
+        }
+    }
+}
+
+private struct GlobalToastView: View {
+    let message: ToastCenter.Message
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: message.style == .success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .font(.system(size: 13, weight: .semibold))
+            Text(message.text)
+                .font(.system(size: 13, weight: .medium))
+                .lineLimit(1)
+                .layoutPriority(1)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(message.style == .success ? TVColor.brand : Color.red)
+        )
+        .background(Color.clear)
+        .fixedSize(horizontal: true, vertical: true)
     }
 }
 
@@ -89,38 +211,6 @@ enum AppFocus {
     @MainActor
     static func clear() {
         NSApp.keyWindow?.makeFirstResponder(nil)
-    }
-}
-
-private struct ToastOverlayView: View {
-    @ObservedObject private var toast = ToastCenter.shared
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            if let message = toast.message {
-                HStack(spacing: 8) {
-                    Image(systemName: message.style == .success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                    Text(message.text)
-                        .font(.system(size: 13, weight: .medium))
-                        .lineLimit(2)
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(message.style == .success ? TVColor.brand : Color.red)
-                        .shadow(color: Color.black.opacity(0.18), radius: 12, y: 5)
-                )
-                .padding(.top, 16)
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .zIndex(1000)
-                .id(message.id)
-            }
-        }
-        .animation(.spring(response: 0.24, dampingFraction: 0.86), value: toast.message)
-        .allowsHitTesting(false)
     }
 }
 
@@ -225,11 +315,5 @@ extension View {
 
     func clearFocusOnOutsideClick() -> some View {
         background(ClearFocusOnOutsideClickView().frame(width: 0, height: 0))
-    }
-
-    func toastOverlay() -> some View {
-        overlay(alignment: .top) {
-            ToastOverlayView()
-        }
     }
 }

@@ -48,6 +48,8 @@ struct SkillGitSyncSheet: View {
     @AppStorage("syncTokenSaved_github") private var tokenSavedGithub = false
     @AppStorage("syncTokenSaved_gitlab") private var tokenSavedGitlab = false
     @AppStorage("syncTokenSaved_other") private var tokenSavedOther = false
+    @AppStorage("syncGitUserName") private var storedGitUserName = ""
+    @AppStorage("syncGitUserEmail") private var storedGitUserEmail = ""
 
     @State private var showAuthSheet = false
     @State private var isCheckingConnectivity = false
@@ -98,8 +100,8 @@ struct SkillGitSyncSheet: View {
         .clearInitialFocus(trigger: providerRaw)
         .clearFocusOnOutsideClick()
         .sheet(isPresented: $showAuthSheet) {
-            SkillAuthSheet(provider: $providerRaw) {
-                applyConfig(showToast: true)
+            SkillAuthSheet(provider: $providerRaw) { userName, userEmail in
+                applyConfig(showToast: true, userName: userName, userEmail: userEmail)
             }
         }
         .onAppear {
@@ -135,9 +137,13 @@ struct SkillGitSyncSheet: View {
                 viewModel.refreshGitStatus(showToast: true)
                 checkConnectivity()
             } label: {
-                Image(systemName: "arrow.clockwise")
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 13, weight: .semibold))
+                    .rotationEffect(.degrees(isCheckingConnectivity ? 360 : 0))
+                    .animation(isCheckingConnectivity ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: isCheckingConnectivity)
             }
             .buttonStyle(.borderless)
+            .disabled(isCheckingConnectivity)
             .quickHelp(l10n.gitRefreshStatusTip)
 
             Button(l10n.gitDone) { dismiss() }
@@ -231,7 +237,13 @@ struct SkillGitSyncSheet: View {
         HStack(spacing: 12) {
             Button {
                 AppFocus.clear()
-                viewModel.pullSkills(remoteURL: repoURL, platform: provider.key, token: currentToken)
+                viewModel.pullSkills(
+                    remoteURL: repoURL,
+                    platform: provider.key,
+                    token: currentToken,
+                    userName: storedGitUserName,
+                    userEmail: storedGitUserEmail
+                )
                 checkConnectivity()
             } label: {
                 Label(l10n.pull, systemImage: "arrow.down.circle.fill")
@@ -244,7 +256,13 @@ struct SkillGitSyncSheet: View {
 
             Button {
                 AppFocus.clear()
-                viewModel.pushSkills(remoteURL: repoURL, platform: provider.key, token: currentToken)
+                viewModel.pushSkills(
+                    remoteURL: repoURL,
+                    platform: provider.key,
+                    token: currentToken,
+                    userName: storedGitUserName,
+                    userEmail: storedGitUserEmail
+                )
                 checkConnectivity()
             } label: {
                 Label(l10n.push, systemImage: "arrow.up.circle.fill")
@@ -321,15 +339,20 @@ struct SkillGitSyncSheet: View {
 
     private func checkConnectivity() {
         isCheckingConnectivity = true
-        viewModel.refreshGitConnectivity()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        viewModel.refreshGitConnectivity {
             isCheckingConnectivity = false
         }
     }
 
-    private func applyConfig(showToast: Bool) {
+    private func applyConfig(showToast: Bool, userName: String? = nil, userEmail: String? = nil) {
         let token = currentToken
-        guard viewModel.applyGitConfig(remoteURL: repoURL, platform: provider.key, token: token) else { return }
+        guard viewModel.applyGitConfig(
+            remoteURL: repoURL,
+            platform: provider.key,
+            token: token,
+            userName: userName ?? storedGitUserName,
+            userEmail: userEmail ?? storedGitUserEmail
+        ) else { return }
         viewModel.refreshGitStatus()
         if showToast {
             ToastCenter.shared.success(l10n.toastSaved)
@@ -341,6 +364,8 @@ struct SkillGitSyncSheet: View {
         struct Config: Codable {
             let gitRemoteUrl: String
             let gitPlatform: String
+            let gitUserName: String?
+            let gitUserEmail: String?
         }
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
@@ -351,16 +376,20 @@ struct SkillGitSyncSheet: View {
         case "gitlab": providerRaw = SkillGitProvider.gitlab.rawValue
         default: providerRaw = SkillGitProvider.other.rawValue
         }
+        storedGitUserName = config.gitUserName ?? ""
+        storedGitUserEmail = config.gitUserEmail ?? ""
     }
 }
 
 struct SkillAuthSheet: View {
     @Binding var provider: String
-    var onSave: (() -> Void)?
+    var onSave: ((String, String) -> Void)?
 
     @AppStorage("syncTokenSaved_github") private var tokenSavedGithub = false
     @AppStorage("syncTokenSaved_gitlab") private var tokenSavedGitlab = false
     @AppStorage("syncTokenSaved_other") private var tokenSavedOther = false
+    @AppStorage("syncGitUserName") private var storedGitUserName = ""
+    @AppStorage("syncGitUserEmail") private var storedGitUserEmail = ""
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var l10n = L10n.shared
 
@@ -368,6 +397,10 @@ struct SkillAuthSheet: View {
     @State private var tokenGithub = ""
     @State private var tokenGitlab = ""
     @State private var tokenOther = ""
+    @State private var gitUserName = ""
+    @State private var gitUserEmail = ""
+    @State private var defaultGitUserName = ""
+    @State private var defaultGitUserEmail = ""
 
     private var currentProvider: SkillGitProvider {
         SkillGitProvider(rawValue: provider) ?? .github
@@ -395,6 +428,26 @@ struct SkillAuthSheet: View {
                     }
                 }
                 .pickerStyle(.segmented)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(l10n.gitCommitIdentity)
+                    .font(.subheadline.weight(.medium))
+
+                TextField(l10n.gitUserName, text: $gitUserName)
+                    .textFieldStyle(.roundedBorder)
+
+                TextField(l10n.gitUserEmail, text: $gitUserEmail)
+                    .textFieldStyle(.roundedBorder)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(defaultIdentityText)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(l10n.gitCommitIdentityDesc)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -445,8 +498,8 @@ struct SkillAuthSheet: View {
                 }
                 Button(tokenSaved ? l10n.gitUpdateToken : l10n.save) {
                     AppFocus.clear()
-                    saveCurrentToken()
-                    onSave?()
+                    guard saveCurrentToken() else { return }
+                    onSave?(gitUserName, gitUserEmail)
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -455,10 +508,13 @@ struct SkillAuthSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 420, height: 330)
+        .frame(width: 420, height: 455)
         .clearInitialFocus(trigger: provider)
         .clearFocusOnOutsideClick()
-        .onAppear(perform: loadTokensFromKeychain)
+        .onAppear {
+            loadTokensFromKeychain()
+            loadGitIdentityConfig()
+        }
     }
 
     @ViewBuilder
@@ -488,20 +544,57 @@ struct SkillAuthSheet: View {
         .frame(width: 280)
     }
 
+    private var defaultIdentityText: String {
+        let name = defaultGitUserName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let email = defaultGitUserEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !name.isEmpty, !email.isEmpty {
+            return l10n.gitDefaultIdentity("\(name) <\(email)>")
+        }
+        if !name.isEmpty {
+            return l10n.gitDefaultIdentity(name)
+        }
+        if !email.isEmpty {
+            return l10n.gitDefaultIdentity(email)
+        }
+        return l10n.gitDefaultIdentityMissing
+    }
+
     private func loadTokensFromKeychain() {
         tokenGithub = KeychainManager.shared.getToken(for: "github") ?? ""
         tokenGitlab = KeychainManager.shared.getToken(for: "gitlab") ?? ""
         tokenOther = KeychainManager.shared.getToken(for: "other") ?? ""
     }
 
-    private func saveCurrentToken() {
+    private func loadGitIdentityConfig() {
+        guard let data = CoreBridge.shared.skillsGetConfig() else { return }
+        struct Config: Codable {
+            let gitUserName: String?
+            let gitUserEmail: String?
+            let defaultGitUserName: String?
+            let defaultGitUserEmail: String?
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let config = try? decoder.decode(Config.self, from: data) else { return }
+        gitUserName = config.gitUserName ?? storedGitUserName
+        gitUserEmail = config.gitUserEmail ?? storedGitUserEmail
+        defaultGitUserName = config.defaultGitUserName ?? ""
+        defaultGitUserEmail = config.defaultGitUserEmail ?? ""
+    }
+
+    private func saveCurrentToken() -> Bool {
         let token = currentTokenBinding.wrappedValue
-        guard !token.isEmpty else { return }
+        guard !token.isEmpty else { return false }
         do {
             try KeychainManager.shared.saveToken(token, for: currentProvider.key)
             setTokenSaved(true)
+            storedGitUserName = gitUserName.trimmingCharacters(in: .whitespacesAndNewlines)
+            storedGitUserEmail = gitUserEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+            return true
         } catch {
             ToastCenter.shared.error(l10n.toastSaveFailed)
+            return false
         }
     }
 

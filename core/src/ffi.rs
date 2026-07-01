@@ -83,6 +83,8 @@ pub extern "C" fn tt_init(db_path: *const c_char) -> *mut CoreHandle {
             if let Some(config) = persisted_config {
                 skills.git_remote_url = config.git_remote_url;
                 skills.git_platform = config.git_platform;
+                skills.git_user_name = config.git_user_name;
+                skills.git_user_email = config.git_user_email;
             }
 
             Box::into_raw(Box::new(CoreHandle {
@@ -877,8 +879,10 @@ pub extern "C" fn tt_skills_git_pull(handle: *mut CoreHandle) -> *mut c_char {
         ));
     }
     let token = handle.skills.git_token.clone();
+    let user_name = handle.skills.git_user_name.clone();
+    let user_email = handle.skills.git_user_email.clone();
     match &mut handle.skills.git {
-        Some(git) => match git.pull(token.as_deref()) {
+        Some(git) => match git.pull(token.as_deref(), user_name.as_deref(), user_email.as_deref()) {
             Ok(status) => to_json_cstring(&status),
             Err(e) => to_json_cstring(&crate::skills::models::GitStatusInfo::error(&e)),
         },
@@ -923,8 +927,15 @@ pub extern "C" fn tt_skills_git_push(handle: *mut CoreHandle) -> *mut c_char {
         ));
     }
     let token = handle.skills.git_token.clone();
+    let user_name = handle.skills.git_user_name.clone();
+    let user_email = handle.skills.git_user_email.clone();
     match &mut handle.skills.git {
-        Some(git) => match git.stage_and_push("skill: sync", token.as_deref()) {
+        Some(git) => match git.stage_and_push(
+            "skill: sync",
+            token.as_deref(),
+            user_name.as_deref(),
+            user_email.as_deref(),
+        ) {
             Ok(status) => to_json_cstring(&status),
             Err(e) => to_json_cstring(&crate::skills::models::GitStatusInfo::error(&e)),
         },
@@ -992,6 +1003,8 @@ pub extern "C" fn tt_skills_set_git_config(
         remote_url: Option<String>,
         token: Option<String>,
         platform: Option<String>,
+        user_name: Option<String>,
+        user_email: Option<String>,
     }
 
     let req: ConfigReq = match unsafe { from_cstring_json(json) } {
@@ -1046,6 +1059,24 @@ pub extern "C" fn tt_skills_set_git_config(
         handle.skills.git_platform = Some(platform);
     }
 
+    if let Some(user_name) = req.user_name {
+        let user_name = user_name.trim();
+        handle.skills.git_user_name = if user_name.is_empty() {
+            None
+        } else {
+            Some(user_name.to_string())
+        };
+    }
+
+    if let Some(user_email) = req.user_email {
+        let user_email = user_email.trim();
+        handle.skills.git_user_email = if user_email.is_empty() {
+            None
+        } else {
+            Some(user_email.to_string())
+        };
+    }
+
     if let Err(e) = persist_skills_config(&handle.skills.config_dir, &handle.skills) {
         return to_json_cstring(&crate::skills::models::SkillCommandResult::error(e));
     }
@@ -1063,6 +1094,12 @@ pub extern "C" fn tt_skills_get_config(handle: *mut CoreHandle) -> *mut c_char {
         Some(h) => h,
         None => return std::ptr::null_mut(),
     };
+    let (default_git_user_name, default_git_user_email) = handle
+        .skills
+        .git
+        .as_ref()
+        .map(|git| git.default_identity())
+        .unwrap_or((None, None));
     let config = serde_json::json!({
         "source_root": if handle.skills.source_root_display.is_empty() {
             display_path(&handle.skills.source_root, &handle.home_dir)
@@ -1072,6 +1109,10 @@ pub extern "C" fn tt_skills_get_config(handle: *mut CoreHandle) -> *mut c_char {
         "git_remote_url": handle.skills.git_remote_url.as_deref().unwrap_or(""),
         "git_platform": handle.skills.git_platform.as_deref().unwrap_or("custom"),
         "git_token_configured": handle.skills.git_token.is_some(),
+        "git_user_name": handle.skills.git_user_name.as_deref().unwrap_or(""),
+        "git_user_email": handle.skills.git_user_email.as_deref().unwrap_or(""),
+        "default_git_user_name": default_git_user_name.unwrap_or_default(),
+        "default_git_user_email": default_git_user_email.unwrap_or_default(),
     });
     to_json_cstring(&config)
 }
@@ -1109,6 +1150,10 @@ struct PersistedSkillsConfig {
     git_remote_url: Option<String>,
     #[serde(default)]
     git_platform: Option<String>,
+    #[serde(default)]
+    git_user_name: Option<String>,
+    #[serde(default)]
+    git_user_email: Option<String>,
 }
 
 fn skills_config_path(config_dir: &std::path::Path) -> PathBuf {
@@ -1136,6 +1181,8 @@ fn persist_skills_config(
         },
         git_remote_url: skills.git_remote_url.clone(),
         git_platform: skills.git_platform.clone(),
+        git_user_name: skills.git_user_name.clone(),
+        git_user_email: skills.git_user_email.clone(),
     };
     let data = serde_json::to_string_pretty(&config)
         .map_err(|e| format!("Failed to serialize skills config: {}", e))?;

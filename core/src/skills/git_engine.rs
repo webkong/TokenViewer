@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use git2::{Cred, RemoteCallbacks, Repository, Status, StatusOptions};
+use git2::{Cred, RemoteCallbacks, Repository, Signature, Status, StatusOptions};
 
 use crate::skills::models::{GitConnectivity, GitStatusInfo, PendingChange};
 
@@ -131,6 +131,45 @@ impl GitEngine {
         callbacks.certificate_check(|_cert, _host| Ok(git2::CertificateCheckStatus::CertificateOk));
 
         callbacks
+    }
+
+    /// Return the repository's configured default git identity.
+    pub fn default_identity(&self) -> (Option<String>, Option<String>) {
+        match self.repo.signature() {
+            Ok(sig) => (
+                sig.name().map(ToString::to_string),
+                sig.email().map(ToString::to_string),
+            ),
+            Err(_) => (None, None),
+        }
+    }
+
+    fn signature(
+        &self,
+        name: Option<&str>,
+        email: Option<&str>,
+    ) -> Result<Signature<'static>, String> {
+        let default = self.repo.signature().ok();
+        let default_name = default.as_ref().and_then(|sig| sig.name());
+        let default_email = default.as_ref().and_then(|sig| sig.email());
+
+        let name = name
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .or(default_name);
+        let email = email
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .or(default_email);
+
+        match (name, email) {
+            (Some(name), Some(email)) => Signature::now(name, email)
+                .map_err(|e| format!("Failed to create git signature: {}", e)),
+            _ => self
+                .repo
+                .signature()
+                .map_err(|e| format!("Failed to get signature: {}", e)),
+        }
     }
 
     /// Get the current git status with branch info, ahead/behind, and pending changes.
@@ -321,7 +360,11 @@ impl GitEngine {
 
     /// Auto-commit any pending changes before sync operations.
     /// Handles both initial commit (unborn HEAD) and subsequent commits.
-    fn auto_commit(&mut self) -> Result<(), String> {
+    fn auto_commit(
+        &mut self,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<(), String> {
         debug_log!(" auto_commit: checking pending changes");
         let changes = self.get_pending_changes()?;
         if changes.is_empty() {
@@ -359,10 +402,7 @@ impl GitEngine {
             .find_tree(tree_oid)
             .map_err(|e| format!("Failed to find tree: {}", e))?;
 
-        let sig = self
-            .repo
-            .signature()
-            .map_err(|e| format!("Failed to get signature: {}", e))?;
+        let sig = self.signature(user_name, user_email)?;
 
         let message = format!(
             "Auto-commit before sync ({} file{})",
@@ -403,9 +443,14 @@ impl GitEngine {
     }
 
     /// Pull (fetch + rebase) from origin. Auto-commits pending changes first.
-    pub fn pull(&mut self, token: Option<&str>) -> Result<GitStatusInfo, String> {
+    pub fn pull(
+        &mut self,
+        token: Option<&str>,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<GitStatusInfo, String> {
         debug_log!(" pull: start");
-        self.auto_commit()?;
+        self.auto_commit(user_name, user_email)?;
         let branch = self.current_branch()?;
 
         // Fetch
@@ -447,10 +492,7 @@ impl GitEngine {
                 )
                 .map_err(|e| format!("Failed to start rebase: {}", e))?;
 
-            let sig = self
-                .repo
-                .signature()
-                .map_err(|e| format!("Failed to get signature: {}", e))?;
+            let sig = self.signature(user_name, user_email)?;
 
             while let Some(op) = rebase.next() {
                 op.map_err(|e| format!("Rebase step failed: {}", e))?;
@@ -473,13 +515,15 @@ impl GitEngine {
         &mut self,
         _message: &str,
         token: Option<&str>,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
     ) -> Result<GitStatusInfo, String> {
         debug_log!(" stage_and_push: start");
-        self.auto_commit()?;
+        self.auto_commit(user_name, user_email)?;
 
         if self.has_remote() {
             debug_log!(" stage_and_push: has remote, starting pull_rebase");
-            if let Err(e) = self.pull_rebase(token) {
+            if let Err(e) = self.pull_rebase(token, user_name, user_email) {
                 debug_log!(" stage_and_push: pull_rebase failed: {}", e);
                 return Ok(GitStatusInfo::error(&format!("Pull rebase failed: {}", e)));
             }
@@ -499,7 +543,12 @@ impl GitEngine {
     }
 
     /// Execute git pull --rebase (fetch + rebase).
-    fn pull_rebase(&mut self, token: Option<&str>) -> Result<(), String> {
+    fn pull_rebase(
+        &mut self,
+        token: Option<&str>,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<(), String> {
         debug_log!(" pull_rebase: start");
 
         let branch = match self.current_branch() {
@@ -570,10 +619,7 @@ impl GitEngine {
             )
             .map_err(|e| format!("Failed to start rebase: {}", e))?;
 
-        let sig = self
-            .repo
-            .signature()
-            .map_err(|e| format!("Failed to get signature: {}", e))?;
+        let sig = self.signature(user_name, user_email)?;
 
         // Iterate rebase steps
         while let Some(op) = rebase.next() {
@@ -760,7 +806,7 @@ mod tests {
         init_git_repo(dir.path());
         fs::write(dir.path().join("README.md"), "# Updated\n").unwrap();
         let mut engine = GitEngine::open(dir.path()).unwrap();
-        let result = engine.stage_and_push("test: update README", None);
+        let result = engine.stage_and_push("test: update README", None, None, None);
         assert!(result.is_ok());
         let status = engine.get_status().unwrap();
         assert_eq!(status.status, "idle");

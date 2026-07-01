@@ -81,8 +81,23 @@ struct SkillManagerView: View {
     // MARK: - Agent Filter Bar
 
     private var agentFilterBar: some View {
-        HStack(spacing: 8) {
-            // All agents chip
+        HStack(alignment: .top, spacing: 12) {
+            filterChips
+                .layoutPriority(1)
+
+            Spacer(minLength: 0)
+
+            filterActions
+                .fixedSize()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary, lineWidth: 0.5))
+    }
+
+    private var filterChips: some View {
+        FlowLayout(itemSpacing: 6, rowSpacing: 6) {
             FilterChip(
                 icon: "square.grid.2x2",
                 label: L10n.shared.skillAll,
@@ -91,24 +106,21 @@ struct SkillManagerView: View {
                 action: { viewModel.selectedFilter = "all" }
             )
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(viewModel.visibleProviders) { p in
-                        FilterChip(
-                            icon: nil,
-                            providerIcon: p.source,
-                            label: p.displayName,
-                            isSelected: viewModel.selectedFilter == p.source,
-                            tooltip: L10n.shared.skillAgentFilterTip(p.displayName),
-                            action: { viewModel.selectedFilter = p.source }
-                        )
-                    }
-                }
-                .padding(.horizontal, 4)
+            ForEach(viewModel.visibleProviders) { p in
+                FilterChip(
+                    icon: nil,
+                    providerIcon: p.source,
+                    label: p.displayName,
+                    isSelected: viewModel.selectedFilter == p.source,
+                    tooltip: L10n.shared.skillAgentFilterTip(p.displayName),
+                    action: { viewModel.selectedFilter = p.source }
+                )
             }
+        }
+    }
 
-            Spacer(minLength: 6)
-
+    private var filterActions: some View {
+        HStack(spacing: 8) {
             // Search field
             HStack(spacing: 4) {
                 Image(systemName: "magnifyingglass")
@@ -156,12 +168,7 @@ struct SkillManagerView: View {
             }
             .buttonStyle(.borderless)
             .quickHelp(L10n.shared.skillGitSyncTip)
-
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary, lineWidth: 0.5))
     }
 
     // MARK: - Empty State

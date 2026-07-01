@@ -1,16 +1,34 @@
-import AppKit
 import SwiftUI
 
 struct SkillListView: View {
     @ObservedObject var viewModel: SkillManagerViewModel
     @ObservedObject private var l10n = L10n.shared
 
+    private let horizontalPadding: CGFloat = 30
+
     var body: some View {
-        List(filteredSkills) { skill in
-            SkillRowView(skill: skill, viewModel: viewModel)
-                .padding(.vertical, 2)
+        VStack(spacing: 0) {
+            SkillListHeader()
+                .padding(.horizontal, horizontalPadding)
+
+            Divider()
+                .padding(.horizontal, horizontalPadding)
+
+            ScrollView(.vertical, showsIndicators: false) {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(filteredSkills.enumerated()), id: \.element.id) { index, skill in
+                        SkillRowView(skill: skill, viewModel: viewModel)
+                            .padding(.vertical, 2)
+                            .padding(.horizontal, horizontalPadding)
+
+                        if index < filteredSkills.count - 1 {
+                            Divider()
+                                .padding(.horizontal, horizontalPadding)
+                        }
+                    }
+                }
+            }
         }
-        .listStyle(.inset)
     }
 
     private var filteredSkills: [SkillEntry] {
@@ -21,6 +39,45 @@ struct SkillListView: View {
     }
 }
 
+private enum SkillListMetrics {
+    static let columnSpacing: CGFloat = 12
+    static let actionColumnWidth: CGFloat = 92
+    static let agentsColumnWidth: CGFloat = 300
+    static let columnInset: CGFloat = 14
+}
+
+private struct SkillListHeader: View {
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        HStack(alignment: .center, spacing: SkillListMetrics.columnSpacing) {
+            Text(l10n.skillColumnSkill)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+
+            Text(l10n.skillColumnActions)
+                .padding(.leading, SkillListMetrics.columnInset)
+                .frame(width: SkillListMetrics.actionColumnWidth, alignment: .leading)
+                .overlay(alignment: .leading) { columnDivider }
+                .overlay(alignment: .trailing) { columnDivider }
+
+            Text(l10n.skillColumnAgents)
+                .padding(.leading, SkillListMetrics.columnInset)
+                .frame(width: SkillListMetrics.agentsColumnWidth, alignment: .leading)
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .textCase(.uppercase)
+        .padding(.vertical, 7)
+    }
+
+    private var columnDivider: some View {
+        Rectangle()
+            .fill(Color(nsColor: .separatorColor).opacity(0.85))
+            .frame(width: 1, height: 18)
+    }
+}
+
 // MARK: - Skill Row
 
 struct SkillRowView: View {
@@ -28,24 +85,31 @@ struct SkillRowView: View {
     @ObservedObject var viewModel: SkillManagerViewModel
     @ObservedObject private var l10n = L10n.shared
 
-    private let actionColumnWidth: CGFloat = 112
-    private let agentsColumnWidth: CGFloat = 300
-
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: SkillListMetrics.columnSpacing) {
             skillInfo
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(1)
 
             actionButtons
-                .frame(width: actionColumnWidth, alignment: .leading)
+                .padding(.leading, SkillListMetrics.columnInset)
+                .frame(width: SkillListMetrics.actionColumnWidth, alignment: .leading)
+                .overlay(alignment: .leading) { columnDivider }
+                .overlay(alignment: .trailing) { columnDivider }
 
             agentLinkTags
-                .frame(width: agentsColumnWidth, alignment: .leading)
+                .padding(.leading, SkillListMetrics.columnInset)
+                .frame(width: SkillListMetrics.agentsColumnWidth, alignment: .leading)
         }
         .padding(.vertical, 4)
         .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
         .alignmentGuide(.listRowSeparatorTrailing) { dimensions in dimensions[.trailing] }
+    }
+
+    private var columnDivider: some View {
+        Rectangle()
+            .fill(Color(nsColor: .separatorColor).opacity(0.75))
+            .frame(width: 1)
     }
 
     private var skillInfo: some View {
@@ -115,15 +179,15 @@ struct SkillRowView: View {
     // MARK: - Action Buttons
 
     private var actionButtons: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: 6) {
             if !viewModel.isInSourceRoot(skill), let sourceAgent = viewModel.sourceAgent(for: skill) {
                 let displayName = ProviderRegistry.shared.displayName(for: sourceAgent)
                 Button {
                     viewModel.organize(skill: skill, agentID: sourceAgent)
                 } label: {
-                    Label(L10n.shared.skillOrganize, systemImage: "arrow.triangle.swap")
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 10).padding(.vertical, 5)
+                    Image(systemName: "arrow.triangle.swap")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 26, height: 22)
                         .foregroundStyle(.blue)
                         .background(.blue.opacity(0.10), in: Capsule())
                         .overlay(Capsule().strokeBorder(.blue.opacity(0.18), lineWidth: 0.5))
@@ -135,9 +199,9 @@ struct SkillRowView: View {
                 Button {
                     viewModel.restore(skill: skill, agentID: sourceAgent)
                 } label: {
-                    Label(L10n.shared.skillRestore, systemImage: "arrow.uturn.backward")
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 10).padding(.vertical, 5)
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 26, height: 22)
                         .foregroundStyle(.orange)
                         .background(.orange.opacity(0.10), in: Capsule())
                         .overlay(Capsule().strokeBorder(.orange.opacity(0.18), lineWidth: 0.5))
@@ -148,9 +212,9 @@ struct SkillRowView: View {
             Button(role: .destructive) {
                 viewModel.delete(skill: skill)
             } label: {
-                Label(L10n.shared.skillDelete, systemImage: "trash")
-                    .font(.caption.weight(.medium))
-                    .padding(.horizontal, 10).padding(.vertical, 5)
+                Image(systemName: "trash")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 26, height: 22)
                     .foregroundStyle(.red)
                     .background(.red.opacity(0.10), in: Capsule())
                     .overlay(Capsule().strokeBorder(.red.opacity(0.18), lineWidth: 0.5))
@@ -173,111 +237,17 @@ struct SkillRowView: View {
             if agents.isEmpty {
                 Text(l10n.skillNoAgentsEnabled).font(.caption2).foregroundStyle(.secondary)
             } else {
-                AgentTagClusterView(
-                    agents: linked + active + inactive,
-                    maxWidth: agentsColumnWidth
-                ) { agent in
-                    agentLinkChip(
-                        agent: agent,
-                        isLinked: linked.contains(agent),
-                        isSource: active.contains(agent)
-                    )
-                }
-            }
-        }
-    }
-
-    private struct AgentTagClusterView<Content: View>: View {
-        let agents: [SkillProvider]
-        let maxWidth: CGFloat
-        let tagContent: (SkillProvider) -> Content
-
-        private let itemSpacing: CGFloat = 4
-        private let rowSpacing: CGFloat = 4
-
-        var body: some View {
-            let layout = AgentTagClusterLayout(
-                agents: agents,
-                maxWidth: maxWidth,
-                itemSpacing: itemSpacing
-            )
-
-            VStack(alignment: .leading, spacing: rowSpacing) {
-                ForEach(Array(layout.rows.enumerated()), id: \.offset) { index, rowAgents in
-                    HStack(spacing: itemSpacing) {
-                        ForEach(rowAgents) { agent in
-                            tagContent(agent)
-                        }
-
-                        if index == layout.rows.count - 1, layout.hiddenCount > 0 {
-                            Text("+\(layout.hiddenCount)")
-                                .font(.caption2)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(.gray.opacity(0.12), in: Capsule())
-                                .foregroundStyle(.secondary)
-                        }
+                FlowLayout(itemSpacing: 4, rowSpacing: 4) {
+                    ForEach(linked + active + inactive) { agent in
+                        agentLinkChip(
+                            agent: agent,
+                            isLinked: linked.contains(agent),
+                            isSource: active.contains(agent)
+                        )
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private struct AgentTagClusterLayout {
-        let rows: [[SkillProvider]]
-        let hiddenCount: Int
-
-        init(agents: [SkillProvider], maxWidth: CGFloat, itemSpacing: CGFloat) {
-            let badgeFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
-            let badgeWidths = agents.map { agent in
-                let textWidth = agent.displayName.size(withAttributes: [.font: badgeFont]).width
-                return ceil(textWidth + 37)
-            }
-
-            var firstRow: [SkillProvider] = []
-            var secondRow: [SkillProvider] = []
-            var firstWidth: CGFloat = 0
-            var secondWidth: CGFloat = 0
-            var hidden = 0
-
-            func rowWidth(_ current: CGFloat, adding itemWidth: CGFloat, isEmpty: Bool) -> CGFloat {
-                isEmpty ? itemWidth : current + itemSpacing + itemWidth
-            }
-
-            func overflowWidth(for hiddenCount: Int) -> CGFloat {
-                let text = "+\(hiddenCount)"
-                let width = text.size(withAttributes: [.font: badgeFont]).width
-                return ceil(width + 16)
-            }
-
-            for (index, agent) in agents.enumerated() {
-                let itemWidth = badgeWidths[index]
-                let remainingAfter = agents.count - index - 1
-
-                let firstCandidate = rowWidth(firstWidth, adding: itemWidth, isEmpty: firstRow.isEmpty)
-                let firstReserve = remainingAfter > 0 ? itemSpacing + overflowWidth(for: remainingAfter) : 0
-                if firstCandidate + firstReserve <= maxWidth {
-                    firstRow.append(agent)
-                    firstWidth = firstCandidate
-                    continue
-                }
-
-                let secondCandidate = rowWidth(secondWidth, adding: itemWidth, isEmpty: secondRow.isEmpty)
-                let secondReserve = remainingAfter > 0 ? itemSpacing + overflowWidth(for: remainingAfter) : 0
-                if secondCandidate + secondReserve <= maxWidth {
-                    secondRow.append(agent)
-                    secondWidth = secondCandidate
-                    continue
-                }
-
-                hidden = agents.count - index
-                break
-            }
-
-            let computedRows = [firstRow, secondRow].filter { !$0.isEmpty }
-            rows = computedRows.isEmpty ? [[]] : computedRows
-            hiddenCount = hidden
         }
     }
 

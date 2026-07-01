@@ -168,6 +168,9 @@ final class L10n: ObservableObject {
     var skillRestore: String { isZh ? "还原" : "Restore" }
     var skillDelete: String { isZh ? "删除" : "Delete" }
     var skillAgents: String { isZh ? "代理" : "Agents" }
+    var skillColumnSkill: String { isZh ? "技能" : "Skill" }
+    var skillColumnActions: String { isZh ? "操作" : "Actions" }
+    var skillColumnAgents: String { isZh ? "Agent" : "Agents" }
     var skillSync: String { isZh ? "同步" : "Sync" }
     var skillSettings: String { isZh ? "设置" : "Settings" }
     var skillAll: String { isZh ? "全部" : "All" }
@@ -242,6 +245,12 @@ final class L10n: ObservableObject {
     var gitTokenHelpStep2: String { isZh ? "创建新的个人访问令牌" : "Create a new personal access token" }
     var gitTokenHelpStep3: String { isZh ? "选择仓库读写权限" : "Select repository read/write scopes" }
     var gitTokenHelpStep4: String { isZh ? "复制令牌并粘贴到这里" : "Copy the token and paste it here" }
+    var gitCommitIdentity: String { isZh ? "提交身份" : "Commit Identity" }
+    var gitUserName: String { isZh ? "用户名" : "User name" }
+    var gitUserEmail: String { isZh ? "邮箱" : "Email" }
+    func gitDefaultIdentity(_ identity: String) -> String { isZh ? "默认: \(identity)" : "Default: \(identity)" }
+    var gitDefaultIdentityMissing: String { isZh ? "未检测到默认 Git 用户名和邮箱" : "No default git user name and email detected" }
+    var gitCommitIdentityDesc: String { isZh ? "留空时使用当前 git 默认配置；填写后 sync 提交会使用这里的用户名和邮箱。" : "Leave blank to use the current git default. Sync commits use these values when provided." }
 
     // MARK: - Skill Manager additional
     var skillGlobalBadge: String { isZh ? "全局" : "Global" }

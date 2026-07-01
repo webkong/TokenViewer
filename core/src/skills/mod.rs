@@ -30,6 +30,10 @@ pub struct SkillsCore {
     pub git_remote_url: Option<String>,
     /// Git platform: "github", "gitlab", or "custom".
     pub git_platform: Option<String>,
+    /// Optional commit author/committer name for sync commits.
+    pub git_user_name: Option<String>,
+    /// Optional commit author/committer email for sync commits.
+    pub git_user_email: Option<String>,
 }
 
 impl SkillsCore {
@@ -62,6 +66,8 @@ impl SkillsCore {
             git_token: None,
             git_remote_url: None,
             git_platform: None,
+            git_user_name: None,
+            git_user_email: None,
         })
     }
 

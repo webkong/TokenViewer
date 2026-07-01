@@ -231,43 +231,109 @@ final class SkillManagerViewModel: ObservableObject {
         }
     }
 
-    func refreshGitConnectivity() {
+    func refreshGitConnectivity(completion: (() -> Void)? = nil) {
+        guard applyStoredGitConfig(showErrorToast: false) else {
+            gitConnectivity = nil
+            completion?()
+            return
+        }
+
         Task.detached {
             let data = CoreBridge.shared.skillsGitConnectivity()
             await MainActor.run {
                 self.gitConnectivity = try? self.decoder.decode(SkillGitConnectivity.self, from: data ?? Data())
+                completion?()
             }
         }
     }
 
-    func applyGitConfig(remoteURL: String, platform: String, token: String) -> Bool {
+    func applyStoredGitConfig(showErrorToast: Bool = true) -> Bool {
+        let defaults = UserDefaults.standard
+        let providerRaw = defaults.string(forKey: "syncProvider") ?? "GitHub"
+        let platform: String
+        let tokenSaved: Bool
+
+        switch providerRaw {
+        case "GitLab":
+            platform = "gitlab"
+            tokenSaved = defaults.bool(forKey: "syncTokenSaved_gitlab")
+        case "Other":
+            platform = "other"
+            tokenSaved = defaults.bool(forKey: "syncTokenSaved_other")
+        default:
+            platform = "github"
+            tokenSaved = defaults.bool(forKey: "syncTokenSaved_github")
+        }
+
+        let remoteURL = defaults.string(forKey: "syncRepoURL") ?? ""
+        let token = tokenSaved ? (KeychainManager.shared.getToken(for: platform) ?? "") : ""
+        let userName = defaults.string(forKey: "syncGitUserName") ?? ""
+        let userEmail = defaults.string(forKey: "syncGitUserEmail") ?? ""
+        return applyGitConfig(
+            remoteURL: remoteURL,
+            platform: platform,
+            token: token,
+            userName: userName,
+            userEmail: userEmail,
+            showErrorToast: showErrorToast
+        )
+    }
+
+    func applyGitConfig(
+        remoteURL: String,
+        platform: String,
+        token: String,
+        userName: String = "",
+        userEmail: String = "",
+        showErrorToast: Bool = true
+    ) -> Bool {
         let trimmedURL = remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedUserName = userName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedUserEmail = userEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedURL.isEmpty, !trimmedToken.isEmpty else {
-            ToastCenter.shared.error(L10n.shared.gitConfigRequired)
+            if showErrorToast {
+                ToastCenter.shared.error(L10n.shared.gitConfigRequired)
+            }
             return false
         }
         let payload = try? JSONEncoder().encode([
             "remote_url": trimmedURL,
             "platform": platform,
             "token": trimmedToken,
+            "user_name": trimmedUserName,
+            "user_email": trimmedUserEmail,
         ])
         guard let payload,
               let resultData = CoreBridge.shared.skillsSetGitConfig(payload),
               let result = try? decoder.decode(SkillOperationResult.self, from: resultData),
               result.ok
         else {
-            ToastCenter.shared.error(L10n.shared.toastSaveFailed)
+            if showErrorToast {
+                ToastCenter.shared.error(L10n.shared.toastSaveFailed)
+            }
             return false
         }
         return true
     }
 
-    func pullSkills(remoteURL: String? = nil, platform: String? = nil, token: String? = nil) {
+    func pullSkills(
+        remoteURL: String? = nil,
+        platform: String? = nil,
+        token: String? = nil,
+        userName: String? = nil,
+        userEmail: String? = nil
+    ) {
         Task.detached {
             if let remoteURL, let platform, let token {
                 let configured = await MainActor.run {
-                    self.applyGitConfig(remoteURL: remoteURL, platform: platform, token: token)
+                    self.applyGitConfig(
+                        remoteURL: remoteURL,
+                        platform: platform,
+                        token: token,
+                        userName: userName ?? "",
+                        userEmail: userEmail ?? ""
+                    )
                 }
                 guard configured else { return }
             }
@@ -290,11 +356,23 @@ final class SkillManagerViewModel: ObservableObject {
         runSkillCommand(skillID: skillID, agentID: agentID, successMessage: L10n.shared.toastUnlinked, call: CoreBridge.shared.skillsUnlink)
     }
 
-    func pushSkills(remoteURL: String? = nil, platform: String? = nil, token: String? = nil) {
+    func pushSkills(
+        remoteURL: String? = nil,
+        platform: String? = nil,
+        token: String? = nil,
+        userName: String? = nil,
+        userEmail: String? = nil
+    ) {
         Task.detached {
             if let remoteURL, let platform, let token {
                 let configured = await MainActor.run {
-                    self.applyGitConfig(remoteURL: remoteURL, platform: platform, token: token)
+                    self.applyGitConfig(
+                        remoteURL: remoteURL,
+                        platform: platform,
+                        token: token,
+                        userName: userName ?? "",
+                        userEmail: userEmail ?? ""
+                    )
                 }
                 guard configured else { return }
             }
