@@ -3,7 +3,6 @@ import SwiftUI
 struct LimitsView: View {
     @ObservedObject var viewModel: LimitsViewModel
     @ObservedObject private var l10n = L10n.shared
-    @AppStorage("limitsVisibleSources") private var limitsVisibleSources = LimitsVisibilityStore.defaultsValue
 
     var body: some View {
         GeometryReader { geo in
@@ -11,16 +10,17 @@ struct LimitsView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 16) {
                     header
-                    let visibleSet = LimitsVisibilityStore.visibleSet(from: limitsVisibleSources)
+                    // The Limits page always shows every agent that supports quota
+                    // tracking, regardless of the menu-bar popover visibility toggle
+                    // (Settings > Menu Bar), which only affects the popover cards.
                     let providerBySource = Dictionary(uniqueKeysWithValues: viewModel.providers.map { ($0.name, $0) })
-                    let visibleProviders = LimitsVisibilityStore.allSources
-                        .filter { visibleSet.contains($0) }
+                    let allProviders = LimitsVisibilityStore.allSources
                         .map { source in
                             providerBySource[source] ?? ProviderLimit(name: source, planLabel: nil, configured: false, error: nil, windows: [])
                         }
-                    let activeProviders = visibleProviders.filter { $0.configured && $0.hasLimitDisplay }
-                    let inactiveProviders = visibleProviders.filter { !$0.configured || !$0.hasLimitDisplay }
-                    if visibleProviders.isEmpty {
+                    let activeProviders = allProviders.filter { $0.configured && $0.hasLimitDisplay }
+                    let inactiveProviders = allProviders.filter { !$0.configured || !$0.hasLimitDisplay }
+                    if allProviders.isEmpty {
                         emptyState
                     } else {
                         twoColumnSection(providers: activeProviders, cardWidth: cardW)
