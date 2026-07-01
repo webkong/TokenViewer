@@ -183,6 +183,9 @@ final class L10n: ObservableObject {
     var skillDeleteConfirm: String { isZh ? "确认删除此技能？此操作不可撤销。" : "Are you sure you want to delete this skill? This cannot be undone." }
     var skillNoSkills: String { isZh ? "暂无技能" : "No skills" }
     var skillNoSkillsDesc: String { isZh ? "在技能根目录或已选 Agent 的 skills 目录下添加包含 SKILL.md 的目录即可显示。" : "Add directories with SKILL.md under the skills source root or any selected agent skills directory." }
+    var skillPreviewTip: String { isZh ? "预览此技能的 SKILL.md" : "Preview this skill's SKILL.md" }
+    var skillPreviewMissingFile: String { isZh ? "未找到 SKILL.md 文件。" : "SKILL.md was not found." }
+    func skillPreviewReadFailed(_ reason: String) -> String { isZh ? "无法读取 SKILL.md：\(reason)" : "Unable to read SKILL.md: \(reason)" }
     var agentName: String { isZh ? "名称" : "Name" }
     var agentSkillsPath: String { isZh ? "技能路径" : "Skills Path" }
     var linkStrategy: String { isZh ? "链接策略" : "Link Strategy" }

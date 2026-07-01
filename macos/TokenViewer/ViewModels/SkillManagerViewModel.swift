@@ -119,16 +119,16 @@ final class SkillManagerViewModel: ObservableObject {
 
     /// Get the primary source agent for actions that need a single target.
     func sourceAgent(for skill: SkillEntry) -> String? {
-        if let linked = providers.first(where: { $0.linkedSkills.contains(skill.id) })?.source {
-            return linked
-        }
         if let scanned = skill.agentIds.first {
             return scanned
         }
         let sourceDir = standardizedPath(skill.sourceDir)
-        return providers.first { provider in
+        if let physicalSource = providers.first(where: { provider in
             sourceDir.hasPrefix(standardizedPath(provider.skillsPath) + "/")
-        }?.source
+        })?.source {
+            return physicalSource
+        }
+        return providers.first(where: { $0.linkedSkills.contains(skill.id) })?.source
     }
 
     func sourceAgent(for skillID: String) -> String? {
@@ -147,6 +147,33 @@ final class SkillManagerViewModel: ObservableObject {
 
     private func standardizedPath(_ path: String) -> String {
         (NSString(string: path).expandingTildeInPath as NSString).standardizingPath
+    }
+
+    func skillMarkdownPreview(for skill: SkillEntry) -> SkillMarkdownPreview {
+        let skillDir = standardizedPath(skill.sourceDir)
+        let fileManager = FileManager.default
+        let candidates = ["SKILL.md", "skill.md"].map {
+            URL(fileURLWithPath: skillDir).appendingPathComponent($0)
+        }
+
+        guard let markdownURL = candidates.first(where: { fileManager.fileExists(atPath: $0.path) }) else {
+            return SkillMarkdownPreview(
+                skill: skill,
+                filePath: URL(fileURLWithPath: skillDir).appendingPathComponent("SKILL.md").path,
+                content: L10n.shared.skillPreviewMissingFile
+            )
+        }
+
+        do {
+            let content = try String(contentsOf: markdownURL, encoding: .utf8)
+            return SkillMarkdownPreview(skill: skill, filePath: markdownURL.path, content: content)
+        } catch {
+            return SkillMarkdownPreview(
+                skill: skill,
+                filePath: markdownURL.path,
+                content: L10n.shared.skillPreviewReadFailed(error.localizedDescription)
+            )
+        }
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from data: Data?) throws -> T {
@@ -442,12 +469,16 @@ final class SkillManagerViewModel: ObservableObject {
                     "skill_id": target.skillID,
                     "agent_id": target.agentID,
                 ])
-                guard let payload,
-                      let resultData = call(payload),
-                      let result = try? JSONDecoder().decode(SkillOperationResult.self, from: resultData),
-                      result.ok
-                else {
+                guard let payload, let resultData = call(payload) else {
                     firstError = firstError ?? L10n.shared.skillOperationFailed
+                    continue
+                }
+                guard let result = try? JSONDecoder().decode(SkillOperationResult.self, from: resultData) else {
+                    firstError = firstError ?? L10n.shared.skillOperationFailed
+                    continue
+                }
+                guard result.ok else {
+                    firstError = firstError ?? result.error ?? L10n.shared.skillOperationFailed
                     continue
                 }
                 successCount += 1
@@ -481,8 +512,9 @@ final class SkillManagerViewModel: ObservableObject {
                     self.refresh()
                     ToastCenter.shared.success(successMessage)
                 } else {
-                    self.errorMessage = "Skill operation failed"
-                    ToastCenter.shared.error(L10n.shared.skillOperationFailed)
+                    let result = resultData.flatMap { try? JSONDecoder().decode(SkillOperationResult.self, from: $0) }
+                    self.errorMessage = result?.error ?? L10n.shared.skillOperationFailed
+                    ToastCenter.shared.error(self.errorMessage ?? L10n.shared.skillOperationFailed)
                 }
             }
         }

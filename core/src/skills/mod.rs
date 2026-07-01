@@ -36,6 +36,99 @@ pub struct SkillsCore {
     pub git_user_email: Option<String>,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn test_core(source_root: PathBuf, codex_skills: PathBuf, config_dir: PathBuf) -> SkillsCore {
+        test_core_for_agent(source_root, "codex", codex_skills, config_dir)
+    }
+
+    fn test_core_for_agent(
+        source_root: PathBuf,
+        agent_id: &str,
+        skills_path: PathBuf,
+        config_dir: PathBuf,
+    ) -> SkillsCore {
+        let mut registry = ProviderSkillsRegistry::new(&config_dir).unwrap();
+        registry
+            .set_override(
+                agent_id,
+                Some(skills_path.to_string_lossy().to_string()),
+                None,
+            )
+            .unwrap();
+
+        SkillsCore {
+            registry,
+            scanner: Scanner::new(source_root.clone()),
+            symlink: SymlinkManager::new(source_root.clone()),
+            git: None,
+            config_dir,
+            source_root,
+            source_root_display: String::new(),
+            known_skill_ids: HashSet::new(),
+            git_token: None,
+            git_remote_url: None,
+            git_platform: None,
+            git_user_name: None,
+            git_user_email: None,
+        }
+    }
+
+    #[test]
+    fn organize_codex_nested_system_skill() {
+        let dir = TempDir::new().unwrap();
+        let source_root = dir.path().join("shared-skills");
+        let codex_skills = dir.path().join(".codex").join("skills");
+        let config_dir = dir.path().join(".agents");
+        fs::create_dir_all(&source_root).unwrap();
+        fs::create_dir_all(&config_dir).unwrap();
+
+        let codex_skill = codex_skills.join(".system").join("imagegen");
+        fs::create_dir_all(&codex_skill).unwrap();
+        fs::write(codex_skill.join("SKILL.md"), "# Imagegen\n").unwrap();
+
+        let mut core = test_core(source_root.clone(), codex_skills, config_dir);
+        core.organize_skill("imagegen", "codex").unwrap();
+
+        let shared_skill = source_root.join("imagegen");
+        assert!(shared_skill.exists());
+        assert!(codex_skill.is_symlink());
+        assert_eq!(fs::read_link(&codex_skill).unwrap(), shared_skill);
+        assert!(core.registry.is_skill_linked("codex", "imagegen"));
+    }
+
+    /// The nested-layout fallback must work for any agent, not just Codex.
+    #[test]
+    fn organize_nested_skill_for_generic_agent() {
+        let dir = TempDir::new().unwrap();
+        let source_root = dir.path().join("shared-skills");
+        let agent_skills = dir.path().join(".cursor").join("skills");
+        let config_dir = dir.path().join(".agents");
+        fs::create_dir_all(&source_root).unwrap();
+        fs::create_dir_all(&config_dir).unwrap();
+
+        let nested_skill = agent_skills.join("bundled").join("formatter");
+        fs::create_dir_all(&nested_skill).unwrap();
+        fs::write(nested_skill.join("SKILL.md"), "# Formatter\n").unwrap();
+
+        // Use "cursor" (a builtin agent) with an overridden skills_path, to prove
+        // the fallback generalizes across agents rather than being Codex-specific.
+        let mut core = test_core_for_agent(source_root.clone(), "cursor", agent_skills, config_dir);
+
+        core.organize_skill("formatter", "cursor").unwrap();
+
+        let shared_skill = source_root.join("formatter");
+        assert!(shared_skill.exists());
+        assert!(nested_skill.is_symlink());
+        assert_eq!(fs::read_link(&nested_skill).unwrap(), shared_skill);
+        assert!(core.registry.is_skill_linked("cursor", "formatter"));
+    }
+}
+
 impl SkillsCore {
     pub fn new(db: &Database, source_root: PathBuf) -> Result<Self, String> {
         db.migrate_skills_schema().map_err(|e| e.to_string())?;
@@ -86,7 +179,11 @@ impl SkillsCore {
             .registry
             .find(agent_id)
             .ok_or_else(|| format!("Agent not found: {}", agent_id))?;
-        self.symlink.organize_skill(&agent, skill_id)?;
+        let source_dir = self
+            .symlink
+            .resolve_agent_skill_dir(&agent, skill_id, &self.scanner)?;
+        self.symlink
+            .organize_skill_from_source(skill_id, &source_dir)?;
         self.registry.link_skill(agent_id, skill_id)?;
         Ok(())
     }

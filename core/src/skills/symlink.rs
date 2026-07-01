@@ -236,6 +236,36 @@ impl SymlinkManager {
         Ok(())
     }
 
+    /// Resolve the on-disk directory for `skill_id` under `agent`'s skills root.
+    /// Tries the direct `skills_path/skill_id` join first (fast path), then falls
+    /// back to scanning the agent's skills tree for a nested match (e.g. Codex's
+    /// `.system/<skill>` layout). Generic across all agents/providers.
+    pub fn resolve_agent_skill_dir(
+        &self,
+        agent: &ProviderSkillsConfig,
+        skill_id: &str,
+        scanner: &Scanner,
+    ) -> Result<PathBuf, String> {
+        let target_base = expand_path(&agent.skills_path)?;
+        let direct_dir = target_base.join(skill_id);
+        if direct_dir.exists() {
+            return Ok(direct_dir);
+        }
+
+        let skills = scanner.scan_path(&target_base)?;
+        skills
+            .into_iter()
+            .find(|skill| skill.id == skill_id)
+            .map(|skill| PathBuf::from(skill.source_dir))
+            .ok_or_else(|| {
+                format!(
+                    "Skill directory not found for {} under {}",
+                    skill_id,
+                    target_base.display()
+                )
+            })
+    }
+
     /// Organize a single skill: move from agent directory to source_root, create symlink at original location.
     pub fn organize_skill(
         &self,
@@ -244,7 +274,26 @@ impl SymlinkManager {
     ) -> Result<(), String> {
         let target_base = expand_path(&agent.skills_path)?;
         let source_dir = target_base.join(skill_id);
+        self.organize_skill_from_source(skill_id, &source_dir)
+    }
 
+    /// Organize a single skill, resolving its real on-disk location first via
+    /// `resolve_agent_skill_dir` (so nested layouts like `.system/<skill>` work).
+    pub fn organize_skill_resolved(
+        &self,
+        agent: &ProviderSkillsConfig,
+        skill_id: &str,
+        scanner: &Scanner,
+    ) -> Result<(), String> {
+        let source_dir = self.resolve_agent_skill_dir(agent, skill_id, scanner)?;
+        self.organize_skill_from_source(skill_id, &source_dir)
+    }
+
+    pub fn organize_skill_from_source(
+        &self,
+        skill_id: &str,
+        source_dir: &Path,
+    ) -> Result<(), String> {
         if !source_dir.exists() {
             return Err(format!(
                 "Skill directory not found: {}",
@@ -259,9 +308,17 @@ impl SymlinkManager {
 
         let dest_dir = self.source_root.join(skill_id);
 
-        // If destination already exists, skip
+        // If the shared skill already exists, keep it as the canonical copy and
+        // replace the agent-side directory with a link.
         if dest_dir.exists() {
-            return Ok(());
+            let target_base = source_dir
+                .parent()
+                .ok_or_else(|| format!("Invalid skill path: {}", source_dir.display()))?;
+            let target_name = source_dir
+                .file_name()
+                .and_then(|name| name.to_str())
+                .ok_or_else(|| format!("Invalid skill path: {}", source_dir.display()))?;
+            return self.link_directory(&dest_dir, target_base, target_name);
         }
 
         // Create destination parent
@@ -316,7 +373,7 @@ impl SymlinkManager {
                     continue;
                 }
 
-                match self.organize_skill(agent, &skill.id) {
+                match self.organize_skill_resolved(agent, &skill.id, scanner) {
                     Ok(()) => {
                         organized.push((skill.id.clone(), agent.source.clone()));
                     }
@@ -537,5 +594,86 @@ mod tests {
         let backup = target_base.join("code-review.bak");
         assert!(backup.exists());
         assert!(backup.join("old-file.txt").exists());
+    }
+
+    #[test]
+    fn test_organize_nested_skill_from_source() {
+        let dir = TempDir::new().unwrap();
+        let source_root = dir.path().join("skills");
+        let nested_root = dir.path().join("agent-dir").join(".system");
+        fs::create_dir_all(&nested_root).unwrap();
+
+        let nested_skill = nested_root.join("code-review");
+        fs::create_dir_all(&nested_skill).unwrap();
+        fs::write(nested_skill.join("SKILL.md"), "# Review\n").unwrap();
+
+        let manager = SymlinkManager::new(source_root.clone());
+        manager
+            .organize_skill_from_source("code-review", &nested_skill)
+            .unwrap();
+
+        let canonical_skill = source_root.join("code-review");
+        assert!(canonical_skill.exists());
+        assert!(nested_skill.is_symlink());
+        assert_eq!(fs::read_link(&nested_skill).unwrap(), canonical_skill);
+    }
+
+    #[test]
+    fn test_organize_existing_shared_skill_links_agent_copy() {
+        let dir = TempDir::new().unwrap();
+        let source_root = dir.path().join("skills");
+        fs::create_dir_all(&source_root).unwrap();
+
+        let canonical_skill = source_root.join("code-review");
+        fs::create_dir_all(&canonical_skill).unwrap();
+        fs::write(canonical_skill.join("SKILL.md"), "# Shared\n").unwrap();
+
+        let agent_root = dir.path().join("agent-dir");
+        let agent_skill = agent_root.join("code-review");
+        fs::create_dir_all(&agent_skill).unwrap();
+        fs::write(agent_skill.join("SKILL.md"), "# Agent Copy\n").unwrap();
+
+        let manager = SymlinkManager::new(source_root.clone());
+        manager
+            .organize_skill_from_source("code-review", &agent_skill)
+            .unwrap();
+
+        assert!(agent_skill.is_symlink());
+        assert_eq!(fs::read_link(&agent_skill).unwrap(), canonical_skill);
+        assert!(agent_root.join("code-review.bak").exists());
+    }
+
+    /// Any agent with a nested skills layout (not just Codex's `.system/`) must be
+    /// organizable via `organize_all`, which relies on the scanner-backed resolver.
+    #[test]
+    fn test_organize_all_handles_nested_layout_for_generic_agent() {
+        let dir = TempDir::new().unwrap();
+        let source_root = dir.path().join("shared-skills");
+        fs::create_dir_all(&source_root).unwrap();
+
+        // Simulate a generic agent ("some-agent") that nests skills under a
+        // subdirectory, analogous to Codex's `.system/<skill>` layout.
+        let agent_root = dir.path().join("some-agent-dir");
+        let nested_skill = agent_root.join("bundled").join("formatter");
+        fs::create_dir_all(&nested_skill).unwrap();
+        fs::write(nested_skill.join("SKILL.md"), "# Formatter\n").unwrap();
+
+        let manager = SymlinkManager::new(source_root.clone());
+        let scanner = Scanner::new(source_root.clone());
+
+        let agent = ProviderSkillsConfig::custom(
+            "some-agent",
+            "Some Agent",
+            &agent_root.to_string_lossy(),
+            LinkType::Directory,
+        );
+
+        let organized = manager.organize_all(&[agent], &scanner).unwrap();
+
+        assert_eq!(organized, vec![("formatter".to_string(), "some-agent".to_string())]);
+        let shared_skill = source_root.join("formatter");
+        assert!(shared_skill.exists());
+        assert!(nested_skill.is_symlink());
+        assert_eq!(fs::read_link(&nested_skill).unwrap(), shared_skill);
     }
 }

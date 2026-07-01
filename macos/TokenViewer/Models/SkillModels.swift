@@ -47,6 +47,13 @@ struct SkillEntry: Codable, Identifiable, Hashable {
     }
 }
 
+struct SkillMarkdownPreview: Identifiable, Hashable {
+    let id = UUID()
+    let skill: SkillEntry
+    let filePath: String
+    let content: String
+}
+
 struct SkillProvider: Codable, Identifiable, Hashable {
     let source: String
     var id: String { source }

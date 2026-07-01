@@ -3,6 +3,7 @@ import SwiftUI
 struct SkillListView: View {
     @ObservedObject var viewModel: SkillManagerViewModel
     @ObservedObject private var l10n = L10n.shared
+    @State private var preview: SkillMarkdownPreview?
 
     private let horizontalPadding: CGFloat = 30
 
@@ -17,7 +18,9 @@ struct SkillListView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(spacing: 0) {
                     ForEach(Array(filteredSkills.enumerated()), id: \.element.id) { index, skill in
-                        SkillRowView(skill: skill, viewModel: viewModel)
+                        SkillRowView(skill: skill, viewModel: viewModel) {
+                            preview = viewModel.skillMarkdownPreview(for: skill)
+                        }
                             .padding(.vertical, 2)
                             .padding(.horizontal, horizontalPadding)
 
@@ -28,6 +31,9 @@ struct SkillListView: View {
                     }
                 }
             }
+        }
+        .sheet(item: $preview) { preview in
+            SkillMarkdownPreviewSheet(preview: preview)
         }
     }
 
@@ -83,6 +89,7 @@ private struct SkillListHeader: View {
 struct SkillRowView: View {
     let skill: SkillEntry
     @ObservedObject var viewModel: SkillManagerViewModel
+    let onPreview: () -> Void
     @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
@@ -145,6 +152,9 @@ struct SkillRowView: View {
                 }
             }
         }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onPreview)
+        .quickHelp(l10n.skillPreviewTip)
     }
 
     // MARK: - Source Badge
@@ -289,5 +299,62 @@ struct SkillRowView: View {
         if isLinked { return l10n.skillUnlinkTip(agent.displayName) }
         if isSource { return l10n.skillSourceLinkTip(agent.displayName) }
         return l10n.skillLinkTip(agent.displayName)
+    }
+}
+
+private struct SkillMarkdownPreviewSheet: View {
+    let preview: SkillMarkdownPreview
+    @ObservedObject private var l10n = L10n.shared
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+
+            Divider()
+
+            ScrollView {
+                Text(preview.content)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.primary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(18)
+            }
+            .background(Color(nsColor: .textBackgroundColor))
+        }
+        .frame(minWidth: 680, idealWidth: 760, minHeight: 520, idealHeight: 620)
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "doc.text")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.blue)
+                .frame(width: 30, height: 30)
+                .background(.blue.opacity(0.10), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(preview.skill.manifest.name)
+                    .font(.headline)
+                    .lineLimit(1)
+                Text(preview.filePath)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+            }
+
+            Spacer()
+
+            Button(l10n.gitDone) {
+                dismiss()
+            }
+            .keyboardShortcut(.cancelAction)
+            .quickHelp(l10n.gitDoneTip)
+        }
     }
 }
