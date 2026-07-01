@@ -41,7 +41,7 @@ struct SkillListView: View {
 
 private enum SkillListMetrics {
     static let columnSpacing: CGFloat = 12
-    static let actionColumnWidth: CGFloat = 92
+    static let actionColumnWidth: CGFloat = 104
     static let agentsColumnWidth: CGFloat = 300
     static let columnInset: CGFloat = 14
 }
@@ -179,15 +179,15 @@ struct SkillRowView: View {
     // MARK: - Action Buttons
 
     private var actionButtons: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             if !viewModel.isInSourceRoot(skill), let sourceAgent = viewModel.sourceAgent(for: skill) {
                 let displayName = ProviderRegistry.shared.displayName(for: sourceAgent)
                 Button {
                     viewModel.organize(skill: skill, agentID: sourceAgent)
                 } label: {
                     Image(systemName: "arrow.triangle.swap")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 26, height: 22)
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 36, height: 22)
                         .foregroundStyle(.blue)
                         .background(.blue.opacity(0.10), in: Capsule())
                         .overlay(Capsule().strokeBorder(.blue.opacity(0.18), lineWidth: 0.5))
@@ -200,8 +200,8 @@ struct SkillRowView: View {
                     viewModel.restore(skill: skill, agentID: sourceAgent)
                 } label: {
                     Image(systemName: "arrow.uturn.backward")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 26, height: 22)
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 36, height: 22)
                         .foregroundStyle(.orange)
                         .background(.orange.opacity(0.10), in: Capsule())
                         .overlay(Capsule().strokeBorder(.orange.opacity(0.18), lineWidth: 0.5))
@@ -213,8 +213,8 @@ struct SkillRowView: View {
                 viewModel.delete(skill: skill)
             } label: {
                 Image(systemName: "trash")
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 26, height: 22)
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 36, height: 22)
                     .foregroundStyle(.red)
                     .background(.red.opacity(0.10), in: Capsule())
                     .overlay(Capsule().strokeBorder(.red.opacity(0.18), lineWidth: 0.5))

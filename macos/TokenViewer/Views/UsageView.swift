@@ -48,28 +48,7 @@ struct UsageView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     header
 
-                    Picker("Range", selection: $viewModel.selectedRange) {
-                        ForEach(UsageViewModel.TimeRange.allCases, id: \.self) { range in
-                            Text(range.localizedTitle).tag(range)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .onChange(of: viewModel.selectedRange) { viewModel.refresh() }
-
-                    if viewModel.selectedRange == .custom {
-                        HStack(spacing: 12) {
-                            DatePicker(l10n.rangeFrom, selection: $viewModel.customFrom,
-                                       in: ...viewModel.customTo, displayedComponents: .date)
-                            DatePicker(l10n.rangeTo, selection: $viewModel.customTo,
-                                       in: viewModel.customFrom...Date(), displayedComponents: .date)
-                            Spacer()
-                        }
-                        .datePickerStyle(.compact)
-                        .font(.system(size: 12))
-                        .onChange(of: viewModel.customFrom) { viewModel.refresh() }
-                        .onChange(of: viewModel.customTo) { viewModel.refresh() }
-                    }
+                    rangeSelector
 
                     if let s = viewModel.summary {
                         // Overview
@@ -142,6 +121,100 @@ struct UsageView: View {
             .buttonStyle(.borderless)
             .help(l10n.syncNow)
         }
+    }
+
+    private var rangeSelector: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Picker("Range", selection: $viewModel.selectedRange) {
+                ForEach(UsageViewModel.TimeRange.allCases, id: \.self) { range in
+                    Text(range.localizedTitle).tag(range)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 430)
+            .onChange(of: viewModel.selectedRange) { viewModel.refresh() }
+
+            if viewModel.selectedRange == .custom {
+                customDateRangePicker
+                    .transition(.opacity.combined(with: .move(edge: .leading)))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .animation(.easeInOut(duration: 0.18), value: viewModel.selectedRange)
+    }
+
+    private var customDateRangePicker: some View {
+        HStack(spacing: 8) {
+            UsageDateField(
+                title: l10n.rangeFrom,
+                selection: $viewModel.customFrom,
+                range: ...viewModel.customTo
+            )
+
+            Image(systemName: "arrow.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.tertiary)
+
+            UsageDateField(
+                title: l10n.rangeTo,
+                selection: $viewModel.customTo,
+                range: viewModel.customFrom...Date()
+            )
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color(nsColor: .controlBackgroundColor), in: Capsule())
+        .overlay(Capsule().strokeBorder(.quaternary, lineWidth: 0.5))
+        .onChange(of: viewModel.customFrom) { viewModel.refresh() }
+        .onChange(of: viewModel.customTo) { viewModel.refresh() }
+    }
+}
+
+private struct UsageDateField: View {
+    let title: String
+    @Binding var selection: Date
+    let range: PartialRangeThrough<Date>?
+    let closedRange: ClosedRange<Date>?
+
+    init(title: String, selection: Binding<Date>, range: PartialRangeThrough<Date>) {
+        self.title = title
+        self._selection = selection
+        self.range = range
+        self.closedRange = nil
+    }
+
+    init(title: String, selection: Binding<Date>, range: ClosedRange<Date>) {
+        self.title = title
+        self._selection = selection
+        self.range = nil
+        self.closedRange = range
+    }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(title)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            if let range {
+                DatePicker("", selection: $selection, in: range, displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+            } else if let closedRange {
+                DatePicker("", selection: $selection, in: closedRange, displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+            }
+        }
+        .font(.system(size: 11))
+        .controlSize(.small)
+        .padding(.leading, 8)
+        .padding(.trailing, 2)
+        .padding(.vertical, 3)
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.75), in: Capsule())
+        .overlay(Capsule().strokeBorder(.quaternary.opacity(0.7), lineWidth: 0.5))
     }
 }
 
