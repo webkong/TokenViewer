@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.regular)
         // Default sync frequency (30 min) so an unset value isn't read as 0/manual.
         UserDefaults.standard.register(defaults: ["syncFrequencyMinutes": 30])
         // Initialize Rust core early to create database

@@ -114,7 +114,7 @@ enum LimitsService {
     }
 
     static func codexLimitWindows(from json: [String: Any]) -> [LimitWindow] {
-        guard let rl = json["rate_limit"] as? [String: Any] else { return [] }
+        guard let rl = codexRateLimitPayload(from: json) else { return [] }
         var windows = codexStandardWindows(from: rl)
         windows.append(contentsOf: codexSparkWindows(from: json["additional_rate_limits"]))
         return windows
@@ -125,12 +125,21 @@ enum LimitsService {
         case weekly
     }
 
+    private static func codexRateLimitPayload(from json: [String: Any]) -> [String: Any]? {
+        (json["rate_limit"] as? [String: Any])
+            ?? (json["rateLimits"] as? [String: Any])
+    }
+
     private static func codexStandardWindows(from rateLimit: [String: Any]) -> [LimitWindow] {
-        ["primary_window", "secondary_window"].compactMap { key in
-            guard let window = rateLimit[key] as? [String: Any],
-                  let usedPercent = codexUsedPercent(window) else { return nil }
-            let label = codexWindowLabel(for: codexWindowKind(window), fallback: "Window")
-            return LimitWindow(label: label, usedPercent: usedPercent, resetAt: parseDate(window["reset_at"]))
+        [
+            ("primary_window", "primary", CodexRateWindowKind.session),
+            ("secondary_window", "secondary", CodexRateWindowKind.weekly),
+        ].compactMap { snakeKey, camelKey, fallbackKind in
+            guard let window = (rateLimit[snakeKey] as? [String: Any]) ?? (rateLimit[camelKey] as? [String: Any]) else { return nil }
+            return codexWindow(
+                window,
+                label: codexWindowLabel(for: codexWindowKind(window) ?? fallbackKind, fallback: "Window")
+            )
         }
     }
 
@@ -207,18 +216,22 @@ enum LimitsService {
 
     private static func codexWindow(_ window: [String: Any], label: String) -> LimitWindow? {
         guard let usedPercent = codexUsedPercent(window) else { return nil }
-        return LimitWindow(label: label, usedPercent: usedPercent, resetAt: parseDate(window["reset_at"]))
+        return LimitWindow(label: label, usedPercent: usedPercent, resetAt: codexResetDate(window))
     }
 
     private static func codexUsedPercent(_ window: [String: Any]) -> Double? {
-        numeric(window["used_percent"]).map { min(max($0.rounded(), 0), 100) }
+        numeric(window["used_percent"] ?? window["usedPercent"]).map { min(max($0.rounded(), 0), 100) }
     }
 
     private static func codexWindowKind(_ window: [String: Any]) -> CodexRateWindowKind? {
-        guard let seconds = numeric(window["limit_window_seconds"]) else { return nil }
+        guard let seconds = numeric(window["limit_window_seconds"] ?? window["limitWindowSeconds"]) else { return nil }
         if seconds == 18_000 { return .session }
         if seconds == 604_800 { return .weekly }
         return nil
+    }
+
+    private static func codexResetDate(_ window: [String: Any]) -> Date? {
+        parseDate(window["reset_at"] ?? window["resets_at"] ?? window["resetsAt"] ?? window["resetAt"])
     }
 
     private static func codexWindowLabel(for kind: CodexRateWindowKind?, fallback: String) -> String {
@@ -674,20 +687,62 @@ enum LimitsService {
     // MARK: Codex subscription expiry
 
     private static func codexSubscriptionExpiresAt(accessToken: String, idToken: String?, accountId: String?) async -> Date? {
-        if let date = jwtClaimDate(accessToken, "chatgpt_subscription_active_until")
-            ?? idToken.flatMap({ jwtClaimDate($0, "chatgpt_subscription_active_until") }) {
-            return date
-        }
+        if let date = codexJwtSubscriptionExpiresAt(accessToken: accessToken, idToken: idToken) { return date }
 
         let accountCheck = await fetchCodexAccountCheckSubscription(accessToken: accessToken, accountId: accountId)
-        if let date = accountCheck.expiresAt, date > Date() { return date }
+        if let date = futureDate(accountCheck.expiresAt) { return date }
 
         let resolvedAccountId = accountCheck.accountId ?? accountId ?? jwtClaim(accessToken, "chatgpt_account_id")
         guard let resolvedAccountId,
               let subscription = await fetchCodexSubscription(accessToken: accessToken, accountId: resolvedAccountId) else {
-            return accountCheck.expiresAt
+            return futureDate(accountCheck.expiresAt)
         }
-        return subscription
+        return futureDate(subscription)
+    }
+
+    private static func codexJwtSubscriptionExpiresAt(accessToken: String, idToken: String?) -> Date? {
+        [idToken, accessToken].compactMap { $0 }.compactMap { token in
+            let start = jwtClaimDate(token, "chatgpt_subscription_active_start")
+            let until = jwtClaimDate(token, "chatgpt_subscription_active_until")
+            return projectedSubscriptionEnd(start: start, until: until)
+        }.first
+    }
+
+    private static func projectedSubscriptionEnd(start: Date?, until: Date?) -> Date? {
+        guard let until else { return nil }
+        let now = Date()
+        if until > now { return until }
+
+        guard let start else { return nil }
+        let interval = until.timeIntervalSince(start)
+        guard interval > 0 else { return nil }
+
+        let day: TimeInterval = 86_400
+        var candidate = until
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+
+        if interval >= 25 * day, interval <= 35 * day {
+            while candidate <= now {
+                candidate = calendar.date(byAdding: .month, value: 1, to: candidate) ?? candidate.addingTimeInterval(interval)
+            }
+            return candidate
+        }
+
+        if interval >= 350 * day, interval <= 380 * day {
+            while candidate <= now {
+                candidate = calendar.date(byAdding: .year, value: 1, to: candidate) ?? candidate.addingTimeInterval(interval)
+            }
+            return candidate
+        }
+
+        let periods = ceil(now.timeIntervalSince(until) / interval)
+        return until.addingTimeInterval(max(1, periods) * interval)
+    }
+
+    private static func futureDate(_ date: Date?) -> Date? {
+        guard let date, date > Date() else { return nil }
+        return date
     }
 
     private static func fetchCodexAccountCheckSubscription(accessToken: String, accountId: String?) async -> (accountId: String?, expiresAt: Date?) {
