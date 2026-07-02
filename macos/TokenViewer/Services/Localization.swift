@@ -112,6 +112,9 @@ final class L10n: ObservableObject {
     var launchAtLogin: String { isZh ? "开机启动" : "Launch at Login" }
     var showDockIcon: String { isZh ? "显示 Dock 图标" : "Show Dock Icon" }
     var showDockIconDesc: String { isZh ? "关闭后 TokenViewer 只在菜单栏显示，不再出现在 Dock 中。" : "When off, TokenViewer only shows in the menu bar and is hidden from the Dock." }
+    var showMenuBarIcon: String { isZh ? "显示菜单栏图标" : "Show Menu Bar Icon" }
+    var showMenuBarIconDesc: String { isZh ? "关闭后 TokenViewer 不再出现在菜单栏中。" : "When off, TokenViewer's icon is hidden from the menu bar." }
+    var showBothHiddenWarning: String { isZh ? "Dock 图标和菜单栏图标不能同时关闭，已自动恢复另一个。" : "Dock and menu bar icons can't both be hidden — the other one was turned back on." }
     var syncFrequency: String { isZh ? "同步频率" : "Sync Frequency" }
     var manual: String { isZh ? "手动" : "Manual" }
     var updates: String { isZh ? "更新" : "Updates" }

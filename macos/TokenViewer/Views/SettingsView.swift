@@ -8,6 +8,8 @@ struct SettingsView: View {
     @AppStorage("panelShowHeatmap") private var panelShowHeatmap = true
     @AppStorage("panelShowTrend") private var panelShowTrend = true
     @AppStorage("panelShowModels") private var panelShowModels = true
+    @AppStorage("showDockIcon") private var showDockIcon = false
+    @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @AppStorage("limitsVisibleSources") private var limitsVisibleSources = LimitsVisibilityStore.defaultsValue
     @State private var launchAtLogin = false
     @State private var showRebuildAlert = false
@@ -180,6 +182,43 @@ struct SettingsView: View {
                     }
                 }
             Divider()
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle(l10n.showMenuBarIcon, isOn: $showMenuBarIcon)
+                    .onChange(of: showMenuBarIcon) {
+                        if !showMenuBarIcon && !showDockIcon {
+                            // Never allow hiding both — the user would have no
+                            // way left to open or interact with the app.
+                            showDockIcon = true
+                            NSApp.setActivationPolicy(.regular)
+                            NSApp.activate(ignoringOtherApps: true)
+                            ToastCenter.shared.error(l10n.showBothHiddenWarning)
+                        }
+                        StatusBarController.shared.setMenuBarIconVisible(showMenuBarIcon)
+                    }
+                Text(l10n.showMenuBarIconDesc)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle(l10n.showDockIcon, isOn: $showDockIcon)
+                    .onChange(of: showDockIcon) {
+                        if !showDockIcon && !showMenuBarIcon {
+                            // Same safeguard in the other direction.
+                            showMenuBarIcon = true
+                            StatusBarController.shared.setMenuBarIconVisible(true)
+                            ToastCenter.shared.error(l10n.showBothHiddenWarning)
+                        }
+                        NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
+                        if showDockIcon {
+                            NSApp.activate(ignoringOtherApps: true)
+                        }
+                    }
+                Text(l10n.showDockIconDesc)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Divider()
             HStack {
                 Text(l10n.syncFrequency).font(.system(size: 13))
                 Picker("", selection: $syncFrequency) {
@@ -288,6 +327,10 @@ struct SettingsView: View {
         panelShowHeatmap = true
         panelShowTrend = true
         panelShowModels = true
+        showDockIcon = false
+        showMenuBarIcon = true
+        StatusBarController.shared.setMenuBarIconVisible(true)
+        NSApp.setActivationPolicy(.accessory)
         limitsVisibleSources = LimitsVisibilityStore.defaultsValue
         enabledProvidersJSON = ProviderRegistry.defaultSkillSourcesJSON
 

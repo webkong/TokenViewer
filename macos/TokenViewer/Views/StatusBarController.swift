@@ -2,6 +2,8 @@ import SwiftUI
 
 @MainActor
 final class StatusBarController {
+    static let shared = StatusBarController()
+
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var mainWindow: NSWindow?
@@ -10,6 +12,7 @@ final class StatusBarController {
 
     init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem?.isVisible = UserDefaults.standard.bool(forKey: "showMenuBarIcon")
         if let button = statusItem?.button {
             button.image = makeMenuBarIcon()
             button.action = #selector(togglePopover)
@@ -110,6 +113,11 @@ final class StatusBarController {
             NSEvent.removeMonitor(monitor)
             localMonitor = nil
         }
+    }
+
+    /// Show or hide the menu-bar status item live (Settings toggle).
+    func setMenuBarIconVisible(_ visible: Bool) {
+        statusItem?.isVisible = visible
     }
 
     func openMainWindow(tab: String = "usage") {

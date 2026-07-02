@@ -14,7 +14,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        // Dock icon defaults to hidden; menu-bar icon defaults to shown —
+        // the app is menu-bar-first, so an unset value should not hide both.
+        UserDefaults.standard.register(defaults: [
+            "showDockIcon": false,
+            "showMenuBarIcon": true,
+        ])
+        NSApp.setActivationPolicy(UserDefaults.standard.bool(forKey: "showDockIcon") ? .regular : .accessory)
         // Default sync frequency (30 min) so an unset value isn't read as 0/manual.
         UserDefaults.standard.register(defaults: ["syncFrequencyMinutes": 30])
         // Initialize Rust core early to create database
@@ -25,7 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         seedLimitsVisibilityDefaultAfterDetection()
         rebuildIfVersionChanged()
         ThemeManager.shared.apply()
-        statusBarController = StatusBarController()
+        statusBarController = StatusBarController.shared
         UpdateChecker.shared.startAutoCheck()
 
         DispatchQueue.main.async { [weak self] in
