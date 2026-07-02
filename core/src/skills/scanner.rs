@@ -366,4 +366,91 @@ mod tests {
         assert_eq!(skill.manifest.version, "1.0.0");
         assert!(!skill.installed_at.is_empty());
     }
+
+    /// End-to-end regression test: a manifest-less skill lives in source_root,
+    /// and an agent dir holds a symlink pointing back at it (post-organize
+    /// state). Scanning source_root first then the agent dir must NOT narrow
+    /// compatible_agents from ["*"] to the agent's id. This is the exact
+    /// scenario that core/src/ffi.rs guards with the source_root_ids HashSet.
+    #[test]
+    fn test_global_skill_symlinked_to_agent_keeps_wildcard() {
+        let dir = TempDir::new().unwrap();
+        let source_root = dir.path().join("shared-skills");
+        let agent_skills = dir.path().join(".codex").join("skills");
+        fs::create_dir_all(&source_root).unwrap();
+        fs::create_dir_all(&agent_skills).unwrap();
+
+        // Create a manifest-less skill in source_root (the "global" skill).
+        let global_skill = source_root.join("code-review");
+        fs::create_dir_all(&global_skill).unwrap();
+        fs::write(global_skill.join("SKILL.md"), "# Code Review\n").unwrap();
+
+        // Create a symlink inside the agent dir pointing back to it
+        // (mimics the state after organize_skill moves + symlinks).
+        let agent_link = agent_skills.join("code-review");
+        std::os::unix::fs::symlink(&global_skill, &agent_link).unwrap();
+
+        // 1) Scan source_root to discover global skills (this populates the
+        //    source_root_ids set in the real FFI path).
+        let scanner = Scanner::new(source_root.clone());
+        let root_skills = scanner.scan_all().unwrap();
+        let root_ids: HashSet<String> = root_skills.iter().map(|s| s.id.clone()).collect();
+        assert!(root_ids.contains("code-review"));
+
+        // 2) Scan the agent dir — the scanner follows the symlink and returns
+        //    the same skill id.
+        let agent_scanner = Scanner::new(source_root.clone());
+        let mut agent_skills_found = agent_scanner.scan_path(&agent_skills).unwrap();
+        assert_eq!(agent_skills_found.len(), 1);
+        let mut skill = agent_skills_found.pop().unwrap();
+        assert_eq!(skill.id, "code-review");
+
+        // 3) Apply the same merge logic as ffi.rs scan_skills_for_agents:
+        //    skip merge for skills already registered in source_root.
+        let agent_id = "codex";
+        if !root_ids.contains(&skill.id) {
+            skill.manifest.merge_compatible_agent(agent_id);
+        }
+
+        // The global skill's wildcard must survive.
+        assert_eq!(skill.manifest.compatible_agents, vec!["*".to_string()]);
+        assert!(!skill.manifest.has_manifest);
+    }
+
+    /// End-to-end inverse test: a manifest-less skill discovered ONLY via an
+    /// agent dir (never in source_root) must accumulate the agent into its
+    /// compatible_agents, so the UI correctly marks it agent-scoped.
+    #[test]
+    fn test_agent_only_skill_accumulates_via_scan() {
+        let dir = TempDir::new().unwrap();
+        let source_root = dir.path().join("shared-skills");
+        let agent_skills = dir.path().join(".codex").join("skills");
+        fs::create_dir_all(&source_root).unwrap();
+        fs::create_dir_all(&agent_skills).unwrap();
+
+        // A manifest-less skill that lives ONLY in the agent dir.
+        let agent_skill_dir = agent_skills.join("codex-only-thing");
+        fs::create_dir_all(&agent_skill_dir).unwrap();
+        fs::write(agent_skill_dir.join("SKILL.md"), "# Codex-only\n").unwrap();
+
+        // source_root scan finds nothing global.
+        let scanner = Scanner::new(source_root.clone());
+        let root_skills = scanner.scan_all().unwrap();
+        let root_ids: HashSet<String> = root_skills.iter().map(|s| s.id.clone()).collect();
+
+        // Agent scan discovers the skill.
+        let agent_scanner = Scanner::new(source_root.clone());
+        let mut agent_skills_found = agent_scanner.scan_path(&agent_skills).unwrap();
+        assert_eq!(agent_skills_found.len(), 1);
+        let mut skill = agent_skills_found.pop().unwrap();
+
+        // Apply the same merge guard as ffi.rs.
+        let agent_id = "codex";
+        if !root_ids.contains(&skill.id) {
+            skill.manifest.merge_compatible_agent(agent_id);
+        }
+
+        // The agent-only skill should be scoped to its agent.
+        assert_eq!(skill.manifest.compatible_agents, vec!["codex".to_string()]);
+    }
 }
