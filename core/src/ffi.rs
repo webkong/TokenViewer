@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::path::PathBuf;
@@ -408,7 +408,12 @@ fn scan_skills_for_agents(
 ) -> Result<Vec<crate::skills::models::SkillEntry>, String> {
     let mut by_id: HashMap<String, crate::skills::models::SkillEntry> = HashMap::new();
 
+    // Track skill IDs discovered directly in source_root. Those are global
+    // skills — their compatible_agents=["*"] must NOT be narrowed just because
+    // an agent dir holds a symlink pointing back at them after organize.
+    let mut source_root_ids: HashSet<String> = HashSet::new();
     for skill in handle.skills.scanner.scan_all()? {
+        source_root_ids.insert(skill.id.clone());
         by_id.insert(skill.id.clone(), skill);
     }
 
@@ -431,16 +436,25 @@ fn scan_skills_for_agents(
                 // concrete agent(s) whose on-disk dirs contain it. This lets the
                 // UI distinguish built-in/agent-scoped skills from generic ones
                 // without hardcoding any specific agent.
-                skill.manifest.merge_compatible_agent(agent_id);
+                //
+                // Skip this merge for skills already registered in source_root:
+                // they are global/universal, and re-discovering them through an
+                // agent's post-organize symlink must not narrow ["*"].
+                if !source_root_ids.contains(&skill.id) {
+                    skill.manifest.merge_compatible_agent(agent_id);
+                }
 
                 let agent_id = agent_id.clone();
+                let is_global = source_root_ids.contains(&skill.id);
                 by_id
                     .entry(skill.id.clone())
                     .and_modify(|existing| {
                         if !existing.agent_ids.contains(&agent_id) {
                             existing.agent_ids.push(agent_id.clone());
                         }
-                        existing.manifest.merge_compatible_agent(&agent_id);
+                        if !is_global {
+                            existing.manifest.merge_compatible_agent(&agent_id);
+                        }
                     })
                     .or_insert(skill);
             }

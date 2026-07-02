@@ -98,11 +98,16 @@ private struct SkillListHeader: View {
         .textCase(.uppercase)
         .padding(.vertical, 7)
         .overlay(alignment: .trailing) {
-            Toggle(l10n.skillShowBuiltIn, isOn: $viewModel.showBuiltInSkills)
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .labelsHidden()
-                .quickHelp(l10n.skillShowBuiltIn)
+            HStack(spacing: 4) {
+                Text(l10n.skillShowBuiltIn)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Toggle("", isOn: $viewModel.showBuiltInSkills)
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .labelsHidden()
+                    .quickHelp(l10n.skillShowBuiltIn)
+            }
         }
     }
 

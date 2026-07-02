@@ -148,6 +148,63 @@ mod tests {
         m.merge_compatible_agent("codex");
         assert_eq!(m.compatible_agents, vec!["opencode".to_string(), "codex".to_string()]);
     }
+
+    /// Simulates the ffi.rs scan ordering: a manifest-less global skill is
+    /// inserted first with ["*"] (source_root scan), then re-encountered via an
+    /// agent's post-organize symlink. With the global-skill guard in place, the
+    /// wildcard must survive — otherwise the skill falsely appears single-agent.
+    #[test]
+    fn global_skill_not_narrowed_by_agent_symlink() {
+        use std::collections::HashSet;
+
+        let global_id = "global-review";
+        let source_root_ids: HashSet<String> = [global_id.to_string()].into();
+
+        // Simulate source_root scan insert.
+        let mut global_manifest = SkillManifest {
+            name: "global-review".into(),
+            description: "review skill".into(),
+            tags: vec![],
+            compatible_agents: vec!["*".into()],
+            version: "unknown".into(),
+            has_manifest: false,
+        };
+
+        // Simulate an agent-scan encounter of the same skill via symlink.
+        // The guard `!source_root_ids.contains(...)` means merge is skipped.
+        let is_global = source_root_ids.contains(global_id);
+        if !is_global {
+            global_manifest.merge_compatible_agent("codex");
+        }
+
+        assert_eq!(global_manifest.compatible_agents, vec!["*".to_string()]);
+    }
+
+    /// The inverse: a skill discovered only via agent dirs (never source_root)
+    /// must accumulate agents normally.
+    #[test]
+    fn agent_only_skill_accumulates_agents() {
+        use std::collections::HashSet;
+
+        let agent_only_id = "codex-review";
+        let source_root_ids: HashSet<String> = HashSet::new();
+
+        let mut m = SkillManifest {
+            name: "codex-review".into(),
+            description: "review skill".into(),
+            tags: vec![],
+            compatible_agents: vec!["*".into()],
+            version: "unknown".into(),
+            has_manifest: false,
+        };
+
+        let is_global = source_root_ids.contains(agent_only_id);
+        if !is_global {
+            m.merge_compatible_agent("codex");
+        }
+
+        assert_eq!(m.compatible_agents, vec!["codex".to_string()]);
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
