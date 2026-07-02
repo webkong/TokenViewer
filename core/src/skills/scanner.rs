@@ -172,21 +172,27 @@ impl Scanner {
             .to_string();
 
         let manifest_path = path.join("manifest.json");
-        let manifest = if manifest_path.is_file() {
+        let mut manifest = if manifest_path.is_file() {
             let manifest_content = fs::read_to_string(&manifest_path)
                 .map_err(|e| format!("Failed to read {}: {}", manifest_path.display(), e))?;
-            serde_json::from_str(&manifest_content)
-                .map_err(|e| format!("Failed to parse {}: {}", manifest_path.display(), e))?
+            let m: SkillManifest = serde_json::from_str(&manifest_content)
+                .map_err(|e| format!("Failed to parse {}: {}", manifest_path.display(), e))?;
+            m
         } else {
-            // Generate default manifest from directory name
+            // Generate default manifest from directory name.
+            // has_manifest stays false (the serde default) — not user-authored.
             SkillManifest {
                 name: id.clone(),
                 description: format!("{} skill", id),
                 tags: Vec::new(),
                 compatible_agents: vec!["*".to_string()],
                 version: "unknown".to_string(),
+                has_manifest: false,
             }
         };
+        if manifest_path.is_file() {
+            manifest.has_manifest = true;
+        }
 
         let installed_at = chrono::Utc::now().to_rfc3339();
 

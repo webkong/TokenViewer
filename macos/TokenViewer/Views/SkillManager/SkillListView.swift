@@ -9,7 +9,7 @@ struct SkillListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SkillListHeader()
+            SkillListHeader(viewModel: viewModel)
                 .padding(.horizontal, horizontalPadding)
 
             Divider()
@@ -35,6 +35,27 @@ struct SkillListView: View {
         .sheet(item: $preview) { preview in
             SkillMarkdownPreviewSheet(preview: preview)
         }
+        .alert(
+            l10n.skillCompatTitle,
+            isPresented: Binding(
+                get: { viewModel.compatibilityAlert != nil },
+                set: { if !$0 { viewModel.compatibilityAlert = nil } }
+            )
+        ) {
+            Button(l10n.skillCompatConfirm) {
+                if let alert = viewModel.compatibilityAlert {
+                    viewModel.linkSkill(skillID: alert.skillID, agentID: alert.agentID)
+                }
+                viewModel.compatibilityAlert = nil
+            }
+            Button(l10n.gitCancel, role: .cancel) {
+                viewModel.compatibilityAlert = nil
+            }
+        } message: {
+            if let alert = viewModel.compatibilityAlert {
+                Text(l10n.skillCompatWarning(alert.skillName, alert.agentName))
+            }
+        }
     }
 
     private var filteredSkills: [SkillEntry] {
@@ -53,6 +74,7 @@ private enum SkillListMetrics {
 }
 
 private struct SkillListHeader: View {
+    @ObservedObject var viewModel: SkillManagerViewModel
     @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
@@ -75,6 +97,13 @@ private struct SkillListHeader: View {
         .foregroundStyle(.secondary)
         .textCase(.uppercase)
         .padding(.vertical, 7)
+        .overlay(alignment: .trailing) {
+            Toggle(l10n.skillShowBuiltIn, isOn: $viewModel.showBuiltInSkills)
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .labelsHidden()
+                .quickHelp(l10n.skillShowBuiltIn)
+        }
     }
 
     private var columnDivider: some View {
@@ -184,6 +213,16 @@ struct SkillRowView: View {
                     .foregroundStyle(.orange)
             }
         }
+        // Skills shipped by an agent (no user-authored manifest.json) get a
+        // "Built-in" marker so users can spot agent-scoped skills at a glance.
+        if !skill.manifest.hasManifest {
+            Text(l10n.skillBuiltIn)
+                .font(.caption2)
+                .padding(.horizontal, 5).padding(.vertical, 1)
+                .background(.orange.opacity(0.12), in: Capsule())
+                .foregroundStyle(.orange)
+                .quickHelp(l10n.skillBuiltInTip)
+        }
     }
 
     // MARK: - Action Buttons
@@ -265,6 +304,15 @@ struct SkillRowView: View {
         Button {
             if isLinked {
                 viewModel.unlinkSkill(skillID: skill.id, agentID: agent.source)
+            } else if viewModel.requiresCompatibilityConfirmation(skillID: skill.id, agentID: agent.source) {
+                // Cross-agent link: the skill declares specific compatible agents
+                // and this one isn't among them. Surface a confirmation alert.
+                viewModel.compatibilityAlert = CompatibilityAlert(
+                    skillID: skill.id,
+                    agentID: agent.source,
+                    skillName: skill.manifest.name,
+                    agentName: agent.displayName
+                )
             } else {
                 viewModel.linkSkill(skillID: skill.id, agentID: agent.source)
             }

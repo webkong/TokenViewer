@@ -1,5 +1,15 @@
 import Foundation
 
+/// Payload for the compatibility confirmation alert shown in the skill list
+/// when the user tries to link a skill to an agent outside its `compatible_agents`.
+struct CompatibilityAlert: Identifiable {
+    let id = UUID()
+    let skillID: String
+    let agentID: String
+    let skillName: String
+    let agentName: String
+}
+
 @MainActor
 final class SkillManagerViewModel: ObservableObject {
     static let shared = SkillManagerViewModel()
@@ -7,6 +17,11 @@ final class SkillManagerViewModel: ObservableObject {
     @Published private(set) var skills: [SkillEntry] = []
     @Published private(set) var providers: [SkillProvider] = []
     @Published var selectedFilter: String = "all"
+    /// Drives the cross-agent compatibility alert in the skill list.
+    @Published var compatibilityAlert: CompatibilityAlert?
+    /// When false (default), skills that ship with an agent (no manifest.json)
+    /// are hidden unless explicitly shown. Reduces clutter from built-ins.
+    @Published var showBuiltInSkills: Bool = false
 
     /// Providers enabled in Settings.
     var visibleProviders: [SkillProvider] {
@@ -80,6 +95,11 @@ final class SkillManagerViewModel: ObservableObject {
                 || skill.manifest.name.localizedCaseInsensitiveContains(searchText)
                 || skill.manifest.description.localizedCaseInsensitiveContains(searchText)
 
+            // Hide agent-built-in skills (no user manifest) unless the user opts in.
+            if !showBuiltInSkills && !skill.manifest.hasManifest && !isInSourceRoot(skill) {
+                return false
+            }
+
             guard selectedFilter != "all" else { return matchesSearch }
             return matchesSearch && skillMatchesAgent(skill, agentID: selectedFilter)
         }
@@ -99,6 +119,16 @@ final class SkillManagerViewModel: ObservableObject {
     /// Check if a skill is linked (via symlink) to a given agent.
     func isSkillLinked(skillID: String, agentID: String) -> Bool {
         providers.first(where: { $0.source == agentID })?.linkedSkills.contains(skillID) == true
+    }
+
+    /// True when linking `agentID` for `skillID` should trigger a compatibility
+    /// confirmation — i.e. the skill declares specific (non-wildcard) compatible
+    /// agents and `agentID` isn't among them.
+    func requiresCompatibilityConfirmation(skillID: String, agentID: String) -> Bool {
+        guard let skill = skills.first(where: { $0.id == skillID }) else { return false }
+        let compat = skill.manifest.compatibleAgents
+        if compat.contains("*") { return false }
+        return !compat.contains(agentID)
     }
 
     /// Get all agents that currently have this skill, either from scan results or persisted links.

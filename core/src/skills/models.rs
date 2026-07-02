@@ -46,6 +46,108 @@ pub struct SkillManifest {
     pub tags: Vec<String>,
     pub compatible_agents: Vec<String>,
     pub version: String,
+    /// false (default) when synthesized because no manifest.json was found;
+    /// true when loaded from a user-authored manifest.json on disk.
+    #[serde(default)]
+    pub has_manifest: bool,
+}
+
+impl SkillManifest {
+    /// Source-aware compatible_agents merge. When a skill has no user-authored
+    /// manifest, replace the default `["*"]` wildcard with the concrete agent
+    /// whose on-disk `skills_path` is known to contain the skill. Subsequent
+    /// agents accumulate into the list. Skills with a manifest keep their
+    /// author-declared list untouched (this function is a no-op for them).
+    pub fn merge_compatible_agent(&mut self, agent_id: &str) {
+        if self.has_manifest {
+            return;
+        }
+        if self.compatible_agents.len() == 1 && self.compatible_agents[0] == "*" {
+            self.compatible_agents = vec![agent_id.to_string()];
+        } else if !self.compatible_agents.contains(&agent_id.to_string()) {
+            self.compatible_agents.push(agent_id.to_string());
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn merge_compat_replaces_wildcard_with_first_agent() {
+        let mut m = SkillManifest {
+            name: "review".into(),
+            description: "review skill".into(),
+            tags: vec![],
+            compatible_agents: vec!["*".into()],
+            version: "unknown".into(),
+            has_manifest: false,
+        };
+        m.merge_compatible_agent("codex");
+        assert_eq!(m.compatible_agents, vec!["codex".to_string()]);
+    }
+
+    #[test]
+    fn merge_compat_accumulates_multiple_agents() {
+        let mut m = SkillManifest {
+            name: "review".into(),
+            description: "review skill".into(),
+            tags: vec![],
+            compatible_agents: vec!["*".into()],
+            version: "unknown".into(),
+            has_manifest: false,
+        };
+        m.merge_compatible_agent("codex");
+        m.merge_compatible_agent("claude");
+        assert_eq!(m.compatible_agents, vec!["codex".to_string(), "claude".to_string()]);
+    }
+
+    #[test]
+    fn merge_compat_does_not_duplicate() {
+        let mut m = SkillManifest {
+            name: "review".into(),
+            description: "review skill".into(),
+            tags: vec![],
+            compatible_agents: vec!["*".into()],
+            version: "unknown".into(),
+            has_manifest: false,
+        };
+        m.merge_compatible_agent("codex");
+        m.merge_compatible_agent("codex");
+        assert_eq!(m.compatible_agents, vec!["codex".to_string()]);
+    }
+
+    #[test]
+    fn merge_compat_respects_user_manifest() {
+        let mut m = SkillManifest {
+            name: "review".into(),
+            description: "review skill".into(),
+            tags: vec![],
+            compatible_agents: vec!["codex".into(), "cursor".into()],
+            version: "1.0".into(),
+            has_manifest: true,
+        };
+        // Even if called for another agent, user-authored values win.
+        m.merge_compatible_agent("claude");
+        assert_eq!(m.compatible_agents, vec!["codex".to_string(), "cursor".to_string()]);
+    }
+
+    #[test]
+    fn merge_compat_noop_on_non_wildcard_without_manifest() {
+        // Edge: a synthesized manifest shouldn't normally have a non-wildcard
+        // list, but if it does, we still accumulate without clobbering.
+        let mut m = SkillManifest {
+            name: "review".into(),
+            description: "review skill".into(),
+            tags: vec![],
+            compatible_agents: vec!["opencode".into()],
+            version: "unknown".into(),
+            has_manifest: false,
+        };
+        m.merge_compatible_agent("codex");
+        assert_eq!(m.compatible_agents, vec!["opencode".to_string(), "codex".to_string()]);
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

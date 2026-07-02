@@ -110,6 +110,8 @@ final class L10n: ObservableObject {
     var heatmap: String { isZh ? "热力图" : "Heatmap" }
     var general: String { isZh ? "通用" : "General" }
     var launchAtLogin: String { isZh ? "开机启动" : "Launch at Login" }
+    var showDockIcon: String { isZh ? "显示 Dock 图标" : "Show Dock Icon" }
+    var showDockIconDesc: String { isZh ? "关闭后 TokenViewer 只在菜单栏显示，不再出现在 Dock 中。" : "When off, TokenViewer only shows in the menu bar and is hidden from the Dock." }
     var syncFrequency: String { isZh ? "同步频率" : "Sync Frequency" }
     var manual: String { isZh ? "手动" : "Manual" }
     var updates: String { isZh ? "更新" : "Updates" }
@@ -186,6 +188,11 @@ final class L10n: ObservableObject {
     var skillPreviewTip: String { isZh ? "预览此技能的 SKILL.md" : "Preview this skill's SKILL.md" }
     var skillPreviewMissingFile: String { isZh ? "未找到 SKILL.md 文件。" : "SKILL.md was not found." }
     func skillPreviewReadFailed(_ reason: String) -> String { isZh ? "无法读取 SKILL.md：\(reason)" : "Unable to read SKILL.md: \(reason)" }
+    var skillBuiltIn: String { isZh ? "内置" : "Built-in" }
+    var skillBuiltInTip: String { isZh ? "代理自带的内置技能，默认仅兼容来源代理" : "Bundled with the agent; marked compatible with the source agent by default" }
+    func skillCompatWarning(_ skill: String, _ agent: String) -> String { isZh ? "「\(skill)」标记为仅兼容部分代理。仍要为 \(agent) 创建链接吗？" : "This skill is marked compatible with specific agents only. Link it to \(agent) anyway?" }
+    var skillCompatConfirm: String { isZh ? "仍然链接" : "Link Anyway" }
+    var skillShowBuiltIn: String { isZh ? "显示内置技能" : "Show built-in skills" }
     var agentName: String { isZh ? "名称" : "Name" }
     var agentSkillsPath: String { isZh ? "技能路径" : "Skills Path" }
     var linkStrategy: String { isZh ? "链接策略" : "Link Strategy" }
@@ -225,6 +232,8 @@ final class L10n: ObservableObject {
     var gitRemoteFormat: String { isZh ? "远程: %@" : "Remote: %@" }
     var gitSaveConfig: String { isZh ? "保存配置" : "Save Config" }
     var gitDone: String { isZh ? "完成" : "Done" }
+    var gitCancel: String { isZh ? "取消" : "Cancel" }
+    var skillCompatTitle: String { isZh ? "跨代理链接" : "Cross-Agent Link" }
     var gitTokenPlaceholder: String { "Personal access token" }
     var gitRepository: String { isZh ? "仓库" : "Repository" }
     func gitRepositoryDesc(_ provider: String) -> String { isZh ? "输入用于同步 skills 的 \(provider) 仓库地址。" : "Enter the \(provider) repository URL used to sync skills." }

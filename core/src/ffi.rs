@@ -426,12 +426,21 @@ fn scan_skills_for_agents(
                     skill.agent_ids.push(agent_id.clone());
                 }
 
+                // Source-aware compatible_agents: when the skill has no
+                // user-authored manifest, rewrite the default wildcard to the
+                // concrete agent(s) whose on-disk dirs contain it. This lets the
+                // UI distinguish built-in/agent-scoped skills from generic ones
+                // without hardcoding any specific agent.
+                skill.manifest.merge_compatible_agent(agent_id);
+
+                let agent_id = agent_id.clone();
                 by_id
                     .entry(skill.id.clone())
                     .and_modify(|existing| {
-                        if !existing.agent_ids.contains(agent_id) {
+                        if !existing.agent_ids.contains(&agent_id) {
                             existing.agent_ids.push(agent_id.clone());
                         }
+                        existing.manifest.merge_compatible_agent(&agent_id);
                     })
                     .or_insert(skill);
             }

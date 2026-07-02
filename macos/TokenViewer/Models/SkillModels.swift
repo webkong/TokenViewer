@@ -6,6 +6,28 @@ struct SkillManifest: Codable, Hashable {
     let tags: [String]
     let compatibleAgents: [String]
     let version: String
+    /// false (default) when the manifest was synthesized because no
+    /// manifest.json existed; true when loaded from a user-authored file.
+    let hasManifest: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case description
+        case tags
+        case compatibleAgents
+        case version
+        case hasManifest
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        description = try c.decode(String.self, forKey: .description)
+        tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
+        compatibleAgents = try c.decodeIfPresent([String].self, forKey: .compatibleAgents) ?? []
+        version = try c.decodeIfPresent(String.self, forKey: .version) ?? "unknown"
+        hasManifest = try c.decodeIfPresent(Bool.self, forKey: .hasManifest) ?? false
+    }
 }
 
 struct SkillEntry: Codable, Identifiable, Hashable {
