@@ -56,6 +56,27 @@ struct SkillListView: View {
                 Text(l10n.skillCompatWarning(alert.skillName, alert.agentName))
             }
         }
+        .alert(
+            l10n.skillBuiltInOrganizeTitle,
+            isPresented: Binding(
+                get: { viewModel.builtInOrganizeAlert != nil },
+                set: { if !$0 { viewModel.builtInOrganizeAlert = nil } }
+            )
+        ) {
+            Button(l10n.skillBuiltInOrganizeConfirm) {
+                if let alert = viewModel.builtInOrganizeAlert {
+                    viewModel.organizeSkill(skillID: alert.skillID, agentID: alert.agentID)
+                }
+                viewModel.builtInOrganizeAlert = nil
+            }
+            Button(l10n.cancel, role: .cancel) {
+                viewModel.builtInOrganizeAlert = nil
+            }
+        } message: {
+            if let alert = viewModel.builtInOrganizeAlert {
+                Text(l10n.skillBuiltInOrganizeWarning(alert.skillName, alert.agentName))
+            }
+        }
     }
 
     private var filteredSkills: [SkillEntry] {
@@ -204,23 +225,16 @@ struct SkillRowView: View {
         }
         if let sourceAgent = viewModel.sourceAgent(for: skill) {
             if !viewModel.isInSourceRoot(skill) {
+                let tint = ProviderRegistry.shared.brandColor(for: sourceAgent)
                 Text(ProviderRegistry.shared.displayName(for: sourceAgent))
                     .font(.caption2)
                     .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(.gray.opacity(0.1), in: Capsule())
-                    .foregroundStyle(.secondary)
-            }
-            if sourceAgent == "claude" {
-                Text(ProviderRegistry.shared.displayName(for: "claude"))
-                    .font(.caption2)
-                    .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(.orange.opacity(0.1), in: Capsule())
-                    .foregroundStyle(.orange)
+                    .background(tint.opacity(0.12), in: Capsule())
+                    .foregroundStyle(tint)
             }
         }
-        // Skills shipped by an agent (no user-authored manifest.json) get a
-        // "Built-in" marker so users can spot agent-scoped skills at a glance.
-        if !skill.manifest.hasManifest {
+        // Skills from an agent-owned system container get a "Built-in" marker.
+        if viewModel.isBuiltInSkill(skill) {
             Text(l10n.skillBuiltIn)
                 .font(.caption2)
                 .padding(.horizontal, 5).padding(.vertical, 1)
@@ -237,7 +251,16 @@ struct SkillRowView: View {
             if !viewModel.isInSourceRoot(skill), let sourceAgent = viewModel.sourceAgent(for: skill) {
                 let displayName = ProviderRegistry.shared.displayName(for: sourceAgent)
                 Button {
-                    viewModel.organize(skill: skill, agentID: sourceAgent)
+                    if viewModel.isBuiltInSkill(skill) {
+                        viewModel.builtInOrganizeAlert = BuiltInOrganizeAlert(
+                            skillID: skill.id,
+                            agentID: sourceAgent,
+                            skillName: skill.manifest.name,
+                            agentName: displayName
+                        )
+                    } else {
+                        viewModel.organize(skill: skill, agentID: sourceAgent)
+                    }
                 } label: {
                     Image(systemName: "arrow.triangle.swap")
                         .font(.system(size: 11, weight: .semibold))
@@ -322,29 +345,35 @@ struct SkillRowView: View {
                 viewModel.linkSkill(skillID: skill.id, agentID: agent.source)
             }
         } label: {
+            let tint = ProviderRegistry.shared.brandColor(for: agent.source)
             HStack(spacing: 3) {
                 ProviderIcon(source: agent.source, size: 12)
                 Text(agent.displayName)
                     .font(.caption2)
             }
             .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(linkBackground(isLinked: isLinked, isSource: isSource))
-            .foregroundStyle(linkForeground(isLinked: isLinked, isSource: isSource))
+            .background(linkBackground(tint: tint, isLinked: isLinked, isSource: isSource))
+            .foregroundStyle(linkForeground(tint: tint, isLinked: isLinked, isSource: isSource))
             .clipShape(Capsule())
+            .overlay(
+                Capsule().strokeBorder(
+                    (isLinked || isSource ? tint : Color.gray).opacity(isLinked || isSource ? 0.22 : 0.08),
+                    lineWidth: 0.5
+                )
+            )
         }
         .buttonStyle(.plain)
         .quickHelp(linkTooltip(isLinked: isLinked, isSource: isSource, agent: agent))
     }
 
-    private func linkBackground(isLinked: Bool, isSource: Bool) -> Color {
-        if isLinked { return Color.green.opacity(0.15) }
-        if isSource { return Color.purple.opacity(0.1) }
+    private func linkBackground(tint: Color, isLinked: Bool, isSource: Bool) -> Color {
+        if isLinked { return tint.opacity(0.18) }
+        if isSource { return tint.opacity(0.14) }
         return Color.gray.opacity(0.1)
     }
 
-    private func linkForeground(isLinked: Bool, isSource: Bool) -> Color {
-        if isLinked { return .green }
-        if isSource { return .purple }
+    private func linkForeground(tint: Color, isLinked: Bool, isSource: Bool) -> Color {
+        if isLinked || isSource { return tint }
         return .secondary
     }
 

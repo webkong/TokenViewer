@@ -85,6 +85,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    func applicationDidBecomeActive(_ notification: Notification) {
+        statusBarController?.openMainWindowForAppActivationIfNeeded()
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         CoreBridge.shared.shutdown()
     }

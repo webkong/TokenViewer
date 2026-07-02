@@ -37,6 +37,8 @@ pub struct SkillEntry {
     pub installed_at: String,
     #[serde(default)]
     pub agent_ids: Vec<String>,
+    #[serde(default)]
+    pub is_built_in: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -125,6 +125,9 @@ final class StatusBarController {
         MainWindowRouter.shared.selectedTab = tab
 
         if let window = mainWindow {
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
+            }
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -144,5 +147,26 @@ final class StatusBarController {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.mainWindow = window
+    }
+
+    func openMainWindowForAppActivationIfNeeded() {
+        guard UserDefaults.standard.bool(forKey: "showDockIcon") else { return }
+        guard popover?.isShown != true else { return }
+
+        if let window = mainWindow {
+            if window.isVisible && !window.isMiniaturized {
+                window.makeKeyAndOrderFront(nil)
+                return
+            }
+            openMainWindow(tab: MainWindowRouter.shared.selectedTab)
+            return
+        }
+
+        let hasVisibleWindow = NSApp.windows.contains { window in
+            window.isVisible && !window.isMiniaturized && !(window is NSPanel)
+        }
+        if !hasVisibleWindow {
+            openMainWindow(tab: MainWindowRouter.shared.selectedTab)
+        }
     }
 }

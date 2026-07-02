@@ -36,6 +36,7 @@ struct SkillEntry: Codable, Identifiable, Hashable {
     let sourceDir: String
     let installedAt: String
     let agentIds: [String]
+    let isBuiltIn: Bool
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -43,6 +44,7 @@ struct SkillEntry: Codable, Identifiable, Hashable {
         case sourceDir
         case installedAt
         case agentIds
+        case isBuiltIn
     }
 
     init(
@@ -50,13 +52,15 @@ struct SkillEntry: Codable, Identifiable, Hashable {
         manifest: SkillManifest,
         sourceDir: String,
         installedAt: String,
-        agentIds: [String] = []
+        agentIds: [String] = [],
+        isBuiltIn: Bool = false
     ) {
         self.id = id
         self.manifest = manifest
         self.sourceDir = sourceDir
         self.installedAt = installedAt
         self.agentIds = agentIds
+        self.isBuiltIn = isBuiltIn
     }
 
     init(from decoder: Decoder) throws {
@@ -66,6 +70,7 @@ struct SkillEntry: Codable, Identifiable, Hashable {
         sourceDir = try container.decode(String.self, forKey: .sourceDir)
         installedAt = try container.decode(String.self, forKey: .installedAt)
         agentIds = try container.decodeIfPresent([String].self, forKey: .agentIds) ?? []
+        isBuiltIn = try container.decodeIfPresent(Bool.self, forKey: .isBuiltIn) ?? false
     }
 }
 

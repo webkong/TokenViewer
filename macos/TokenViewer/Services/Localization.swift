@@ -193,6 +193,9 @@ final class L10n: ObservableObject {
     func skillPreviewReadFailed(_ reason: String) -> String { isZh ? "无法读取 SKILL.md：\(reason)" : "Unable to read SKILL.md: \(reason)" }
     var skillBuiltIn: String { isZh ? "内置" : "Built-in" }
     var skillBuiltInTip: String { isZh ? "代理自带的内置技能，默认仅兼容来源代理" : "Bundled with the agent; marked compatible with the source agent by default" }
+    var skillBuiltInOrganizeTitle: String { isZh ? "整理内置技能？" : "Organize Built-in Skill?" }
+    func skillBuiltInOrganizeWarning(_ skill: String, _ agent: String) -> String { isZh ? "「\(skill)」是 \(agent) 的内置技能。整理后会移动到全局技能目录并保留链接，可能影响此 Agent 的内置技能更新。仍要整理吗？" : "\"\(skill)\" is built into \(agent). Organizing it will move it into the global skills directory and keep a link, which may affect future built-in skill updates. Continue?" }
+    var skillBuiltInOrganizeConfirm: String { isZh ? "仍然整理" : "Organize Anyway" }
     func skillCompatWarning(_ skill: String, _ agent: String) -> String { isZh ? "「\(skill)」标记为仅兼容部分代理。仍要为 \(agent) 创建链接吗？" : "This skill is marked compatible with specific agents only. Link it to \(agent) anyway?" }
     var skillCompatConfirm: String { isZh ? "仍然链接" : "Link Anyway" }
     var skillShowBuiltIn: String { isZh ? "显示内置技能" : "Show built-in skills" }

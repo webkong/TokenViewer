@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::storage::Database;
 use crate::sync;
@@ -427,6 +427,9 @@ fn scan_skills_for_agents(
         };
         if let Ok(skills) = handle.skills.scanner.scan_path(&path) {
             for mut skill in skills {
+                if is_agent_built_in_skill(agent_id, &path, Path::new(&skill.source_dir)) {
+                    skill.is_built_in = true;
+                }
                 if !skill.agent_ids.contains(agent_id) {
                     skill.agent_ids.push(agent_id.clone());
                 }
@@ -446,12 +449,14 @@ fn scan_skills_for_agents(
 
                 let agent_id = agent_id.clone();
                 let is_global = source_root_ids.contains(&skill.id);
+                let is_built_in = skill.is_built_in;
                 by_id
                     .entry(skill.id.clone())
                     .and_modify(|existing| {
                         if !existing.agent_ids.contains(&agent_id) {
                             existing.agent_ids.push(agent_id.clone());
                         }
+                        existing.is_built_in |= is_built_in;
                         if !is_global {
                             existing.manifest.merge_compatible_agent(&agent_id);
                         }
@@ -470,6 +475,82 @@ fn scan_skills_for_agents(
             .then_with(|| a.id.cmp(&b.id))
     });
     Ok(skills)
+}
+
+fn is_agent_built_in_skill(agent_id: &str, skills_path: &Path, skill_path: &Path) -> bool {
+    if agent_id != "codex" {
+        return false;
+    }
+
+    let system_dir = skills_path.join(".system");
+    if !system_dir.join(".codex-system-skills.marker").is_file() {
+        return false;
+    }
+
+    if skill_path
+        .parent()
+        .is_some_and(|parent| parent == system_dir)
+    {
+        return true;
+    }
+
+    let Some(skill_name) = skill_path.file_name() else {
+        return false;
+    };
+    system_dir.join(skill_name).symlink_metadata().is_ok()
+}
+
+#[cfg(test)]
+mod skills_scan_tests {
+    use super::is_agent_built_in_skill;
+    use std::fs;
+
+    #[test]
+    fn codex_system_marker_marks_built_in_skill() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let skills_path = dir.path().join(".codex").join("skills");
+        let system_dir = skills_path.join(".system");
+        let skill_dir = system_dir.join("imagegen");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(system_dir.join(".codex-system-skills.marker"), "codex").unwrap();
+
+        assert!(is_agent_built_in_skill("codex", &skills_path, &skill_dir));
+    }
+
+    #[test]
+    fn ordinary_agent_skill_is_not_built_in() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let codex_skills = dir.path().join(".codex").join("skills");
+        let codex_skill = codex_skills.join("imagegen");
+        fs::create_dir_all(&codex_skill).unwrap();
+
+        let claude_skills = dir.path().join(".claude").join("skills");
+        let claude_skill = claude_skills.join("test-driven-development");
+        fs::create_dir_all(&claude_skill).unwrap();
+
+        assert!(!is_agent_built_in_skill("codex", &codex_skills, &codex_skill));
+        assert!(!is_agent_built_in_skill("claude", &claude_skills, &claude_skill));
+    }
+
+    #[test]
+    fn codex_system_entry_marks_duplicate_plain_skill_built_in() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let skills_path = dir.path().join(".codex").join("skills");
+        let system_dir = skills_path.join(".system");
+        let skill_dir = skills_path.join("imagegen");
+        fs::create_dir_all(&system_dir).unwrap();
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(system_dir.join(".codex-system-skills.marker"), "codex").unwrap();
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(
+            dir.path().join("missing-global-skill"),
+            system_dir.join("imagegen"),
+        )
+        .unwrap();
+
+        assert!(is_agent_built_in_skill("codex", &skills_path, &skill_dir));
+    }
 }
 
 /// List all registered agents (builtin + custom). Returns JSON array.

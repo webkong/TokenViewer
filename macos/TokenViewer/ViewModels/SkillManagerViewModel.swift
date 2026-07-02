@@ -10,6 +10,14 @@ struct CompatibilityAlert: Identifiable {
     let agentName: String
 }
 
+struct BuiltInOrganizeAlert: Identifiable {
+    let id = UUID()
+    let skillID: String
+    let agentID: String
+    let skillName: String
+    let agentName: String
+}
+
 @MainActor
 final class SkillManagerViewModel: ObservableObject {
     static let shared = SkillManagerViewModel()
@@ -19,6 +27,8 @@ final class SkillManagerViewModel: ObservableObject {
     @Published var selectedFilter: String = "all"
     /// Drives the cross-agent compatibility alert in the skill list.
     @Published var compatibilityAlert: CompatibilityAlert?
+    /// Drives the confirmation shown before organizing an agent built-in skill.
+    @Published var builtInOrganizeAlert: BuiltInOrganizeAlert?
     /// When false (default), skills that ship with an agent (no manifest.json)
     /// are hidden unless explicitly shown. Reduces clutter from built-ins.
     @Published var showBuiltInSkills: Bool = false
@@ -95,8 +105,8 @@ final class SkillManagerViewModel: ObservableObject {
                 || skill.manifest.name.localizedCaseInsensitiveContains(searchText)
                 || skill.manifest.description.localizedCaseInsensitiveContains(searchText)
 
-            // Hide agent-built-in skills (no user manifest) unless the user opts in.
-            if !showBuiltInSkills && !skill.manifest.hasManifest && !isInSourceRoot(skill) {
+            // Hide agent-built-in skills unless the user opts in.
+            if !showBuiltInSkills && isBuiltInSkill(skill) {
                 return false
             }
 
@@ -175,6 +185,30 @@ final class SkillManagerViewModel: ObservableObject {
         }
     }
 
+    func isBuiltInSkill(_ skill: SkillEntry) -> Bool {
+        skill.isBuiltIn || isCodexSystemSkill(skill)
+    }
+
+    private func isCodexSystemSkill(_ skill: SkillEntry) -> Bool {
+        guard skillAgentIDs(for: skill).contains("codex"),
+              let codex = providers.first(where: { $0.source == "codex" }) else {
+            return false
+        }
+
+        let systemDir = URL(fileURLWithPath: standardizedPath(codex.skillsPath))
+            .appendingPathComponent(".system")
+        let marker = systemDir.appendingPathComponent(".codex-system-skills.marker")
+        guard FileManager.default.fileExists(atPath: marker.path) else {
+            return false
+        }
+
+        let systemEntry = systemDir.appendingPathComponent(skill.id).path
+        if FileManager.default.fileExists(atPath: systemEntry) {
+            return true
+        }
+        return (try? FileManager.default.destinationOfSymbolicLink(atPath: systemEntry)) != nil
+    }
+
     private func standardizedPath(_ path: String) -> String {
         (NSString(string: path).expandingTildeInPath as NSString).standardizingPath
     }
@@ -218,7 +252,11 @@ final class SkillManagerViewModel: ObservableObject {
     }
 
     func organize(skill: SkillEntry, agentID: String? = nil) {
-        runSkillCommand(skillID: skill.id, agentID: agentID, successMessage: L10n.shared.toastOrganized, call: CoreBridge.shared.skillsOrganize)
+        organizeSkill(skillID: skill.id, agentID: agentID)
+    }
+
+    func organizeSkill(skillID: String, agentID: String? = nil) {
+        runSkillCommand(skillID: skillID, agentID: agentID, successMessage: L10n.shared.toastOrganized, call: CoreBridge.shared.skillsOrganize)
     }
 
     func restore(skill: SkillEntry, agentID: String? = nil) {
