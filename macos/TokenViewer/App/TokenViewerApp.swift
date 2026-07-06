@@ -29,8 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "showMenuBarIcon": true,
         ])
         NSApp.setActivationPolicy(UserDefaults.standard.bool(forKey: "showDockIcon") ? .regular : .accessory)
-        // Default sync frequency (30 min) so an unset value isn't read as 0/manual.
-        UserDefaults.standard.register(defaults: ["syncFrequencyMinutes": 30])
+        // Default sync frequency (10 min) so an unset value isn't read as 0/manual.
+        UserDefaults.standard.register(defaults: ["syncFrequencyMinutes": 10])
         // Initialize Rust core early to create database
         _ = CoreBridge.shared
         ProviderRegistry.shared.loadIfNeeded()

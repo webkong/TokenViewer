@@ -316,8 +316,8 @@ final class L10n: ObservableObject {
     func usageActiveDays(_ n: Int) -> String { isZh ? "\(n) 天活跃" : "\(n) active days" }
 
     // MARK: - Sync frequency
-    var sync2min: String { "2 min" }
     var sync5min: String { "5 min" }
+    var sync10min: String { "10 min" }
     var sync15min: String { "15 min" }
     var sync30min: String { "30 min" }
     var sync1hour: String { "1 hour" }

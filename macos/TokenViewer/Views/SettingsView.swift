@@ -2,7 +2,7 @@ import SwiftUI
 import ServiceManagement
 
 struct SettingsView: View {
-    @AppStorage("syncFrequencyMinutes") private var syncFrequency: Int = 30
+    @AppStorage("syncFrequencyMinutes") private var syncFrequency: Int = 10
     @AppStorage("panelShowSummary") private var panelShowSummary = true
     @AppStorage("panelShowLimits") private var panelShowLimits = true
     @AppStorage("panelShowHeatmap") private var panelShowHeatmap = true
@@ -222,8 +222,8 @@ struct SettingsView: View {
             HStack {
                 Text(l10n.syncFrequency).font(.system(size: 13))
                 Picker("", selection: $syncFrequency) {
-                    Text(l10n.sync2min).tag(2)
                     Text(l10n.sync5min).tag(5)
+                    Text(l10n.sync10min).tag(10)
                     Text(l10n.sync15min).tag(15)
                     Text(l10n.sync30min).tag(30)
                     Text(l10n.sync1hour).tag(60)
@@ -321,7 +321,7 @@ struct SettingsView: View {
     private func resetSettings() {
         AppFocus.clear()
 
-        syncFrequency = 30
+        syncFrequency = 10
         panelShowSummary = true
         panelShowLimits = true
         panelShowHeatmap = true
