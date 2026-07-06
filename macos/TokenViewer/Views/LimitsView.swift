@@ -60,8 +60,7 @@ struct LimitsView: View {
             }
             Spacer()
             Button(action: {
-                viewModel.refresh()
-                ToastCenter.shared.success(l10n.toastRefreshed)
+                viewModel.refresh(force: true, showToast: true)
             }) {
                 Image(systemName: "arrow.triangle.2.circlepath")
                     .font(.system(size: 13, weight: .semibold))
@@ -69,7 +68,6 @@ struct LimitsView: View {
                     .animation(viewModel.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading)
             }
             .buttonStyle(.borderless)
-            .disabled(viewModel.isLoading)
             .help(viewModel.isLoading ? l10n.refreshingLimits : l10n.refreshLimits)
         }
     }

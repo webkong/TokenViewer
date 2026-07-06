@@ -23,7 +23,10 @@ impl SymlinkManager {
     ) -> Result<(), String> {
         let source = self.source_root.join(skill_id);
         if !source.exists() {
-            return Err(format!("Skill source does not exist: {}", source.display()));
+            return Err(format!(
+                "Skill source does not exist: {}. Organize this skill to the global library before linking it to an agent.",
+                source.display()
+            ));
         }
 
         let target_base = expand_path(&agent.skills_path)?;

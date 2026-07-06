@@ -8,10 +8,24 @@ final class LimitsViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var lastFetched: Date?
 
-    private let cacheKey = "limitsCache"
+    private let fetchAll: () async -> [ProviderLimit]
+    private let onRefreshCompleted: @MainActor () -> Void
+    private let cacheKey: String
     private var timer: Timer?
+    private var refreshAgainAfterCurrentFetch = false
 
-    init() { loadCache() }
+    init(
+        fetchAll: @escaping () async -> [ProviderLimit] = { await LimitsService.fetchAll() },
+        onRefreshCompleted: @escaping @MainActor () -> Void = {
+            ToastCenter.shared.success(L10n.shared.toastRefreshed)
+        },
+        cacheKey: String = "limitsCache"
+    ) {
+        self.fetchAll = fetchAll
+        self.onRefreshCompleted = onRefreshCompleted
+        self.cacheKey = cacheKey
+        loadCache()
+    }
 
     /// Called when the page appears: show cache, refresh if stale, then poll
     /// every 10 min while the page stays visible (network-frugal).
@@ -34,17 +48,29 @@ final class LimitsViewModel: ObservableObject {
         timer = nil
     }
 
-    func refresh() {
-        guard !isLoading else { return }   // ignore while a fetch is in flight
+    func refresh(force: Bool = false, showToast: Bool = false) {
+        guard !isLoading else {
+            if force {
+                refreshAgainAfterCurrentFetch = true
+            }
+            return
+        }
         isLoading = true
         Task { [weak self] in
-            let result = await LimitsService.fetchAll()
+            guard let self else { return }
+            let result = await self.fetchAll()
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 self.providers = result.sorted { $0.configured && !$1.configured }
                 self.lastFetched = Date()
                 self.isLoading = false
                 self.saveCache()
+                if self.refreshAgainAfterCurrentFetch {
+                    self.refreshAgainAfterCurrentFetch = false
+                    self.refresh(force: true, showToast: showToast)
+                } else if showToast {
+                    self.onRefreshCompleted()
+                }
             }
         }
     }

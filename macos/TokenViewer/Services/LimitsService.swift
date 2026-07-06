@@ -841,6 +841,9 @@ enum LimitsService {
     private static func getJSON(_ req: URLRequest) async -> [String: Any]? {
         var r = req
         r.timeoutInterval = 10
+        r.cachePolicy = .reloadIgnoringLocalCacheData
+        r.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        r.setValue("no-cache", forHTTPHeaderField: "Pragma")
         guard let (data, resp) = try? await URLSession.shared.data(for: r),
               let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
