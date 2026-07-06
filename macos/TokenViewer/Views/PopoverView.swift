@@ -73,8 +73,8 @@ struct PopoverView: View {
             Button(action: { AppSyncCoordinator.shared.syncAll() }) {
                 Image(systemName: "arrow.triangle.2.circlepath")
                     .font(.system(size: 11))
-                    .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
-                    .animation(viewModel.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading)
+                    .rotationEffect(.degrees(viewModel.isLoading || limitsVM.isLoading ? 360 : 0))
+                    .animation(viewModel.isLoading || limitsVM.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading || limitsVM.isLoading)
                     .foregroundColor(.secondary)
             }
             .buttonStyle(.plain).help(l10n.syncNow)

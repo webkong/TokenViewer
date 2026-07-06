@@ -8,6 +8,7 @@ struct SkillListView: View {
     private let horizontalPadding: CGFloat = 30
 
     var body: some View {
+        let skills = filteredSkills
         VStack(spacing: 0) {
             SkillListHeader(viewModel: viewModel)
                 .padding(.horizontal, horizontalPadding)
@@ -17,19 +18,22 @@ struct SkillListView: View {
 
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(spacing: 0) {
-                    ForEach(Array(filteredSkills.enumerated()), id: \.element.id) { index, skill in
+                    ForEach(Array(skills.enumerated()), id: \.element.id) { index, skill in
                         SkillRowView(skill: skill, viewModel: viewModel) {
                             preview = viewModel.skillMarkdownPreview(for: skill)
                         }
                             .padding(.vertical, 2)
                             .padding(.horizontal, horizontalPadding)
+                            .transition(.skillListRow)
 
-                        if index < filteredSkills.count - 1 {
+                        if index < skills.count - 1 {
                             Divider()
                                 .padding(.horizontal, horizontalPadding)
+                                .transition(.opacity)
                         }
                     }
                 }
+                .animation(.easeInOut(duration: 0.18), value: skills.map(\.id))
             }
         }
         .sheet(item: $preview) { preview in
@@ -92,6 +96,15 @@ private enum SkillListMetrics {
     static let actionColumnWidth: CGFloat = 104
     static let agentsColumnWidth: CGFloat = 300
     static let columnInset: CGFloat = 14
+}
+
+private extension AnyTransition {
+    static var skillListRow: AnyTransition {
+        .asymmetric(
+            insertion: .opacity.combined(with: .move(edge: .top)),
+            removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
+        )
+    }
 }
 
 private struct SkillListHeader: View {
@@ -388,6 +401,9 @@ private struct SkillMarkdownPreviewSheet: View {
     let preview: SkillMarkdownPreview
     @ObservedObject private var l10n = L10n.shared
     @Environment(\.dismiss) private var dismiss
+    @State private var fileTree: SkillFileNode?
+    @State private var selectedFilePath: String = ""
+    @State private var selectedFileContent: String = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -397,17 +413,72 @@ private struct SkillMarkdownPreviewSheet: View {
 
             Divider()
 
-            ScrollView {
-                Text(preview.content)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(.primary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(18)
+            HStack(spacing: 0) {
+                fileSidebar
+
+                Divider()
+
+                fileContent
             }
-            .background(Color(nsColor: .textBackgroundColor))
         }
-        .frame(minWidth: 680, idealWidth: 760, minHeight: 520, idealHeight: 620)
+        .frame(minWidth: 820, idealWidth: 900, minHeight: 520, idealHeight: 620)
+        .onAppear { loadInitialState() }
+    }
+
+    private var fileSidebar: some View {
+        ScrollView {
+            if let fileTree {
+                SkillFileTreeView(
+                    node: fileTree,
+                    isRoot: true,
+                    selectedPath: $selectedFilePath,
+                    onSelect: selectFile(path:)
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+            } else {
+                Text(l10n.skillFilesEmpty)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+            }
+        }
+        .frame(width: 240)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.55))
+    }
+
+    private var fileContent: some View {
+        ScrollView {
+            Text(selectedFileContent)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(18)
+        }
+        .background(Color(nsColor: .textBackgroundColor))
+    }
+
+    private func loadInitialState() {
+        fileTree = SkillFileNode.load(rootPath: standardizedPath(preview.skill.sourceDir))
+        selectFile(path: standardizedPath(preview.filePath))
+    }
+
+    private func selectFile(path: String) {
+        let normalizedPath = standardizedPath(path)
+        selectedFilePath = normalizedPath
+
+        if normalizedPath == standardizedPath(preview.filePath) {
+            selectedFileContent = preview.content
+            return
+        }
+
+        do {
+            selectedFileContent = try String(contentsOf: URL(fileURLWithPath: normalizedPath), encoding: .utf8)
+        } catch {
+            selectedFileContent = l10n.skillPreviewReadFailed(error.localizedDescription)
+        }
     }
 
     private var header: some View {
@@ -422,7 +493,7 @@ private struct SkillMarkdownPreviewSheet: View {
                 Text(preview.skill.manifest.name)
                     .font(.headline)
                     .lineLimit(1)
-                Text(preview.filePath)
+                Text(selectedFilePath.isEmpty ? preview.filePath : selectedFilePath)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -432,11 +503,191 @@ private struct SkillMarkdownPreviewSheet: View {
 
             Spacer()
 
+            Button(l10n.openInFinder) {
+                openInFinder()
+            }
+            .quickHelp(l10n.openInFinder)
+
             Button(l10n.gitDone) {
                 dismiss()
             }
             .keyboardShortcut(.cancelAction)
             .quickHelp(l10n.gitDoneTip)
         }
+    }
+
+    private func openInFinder() {
+        let filePath = standardizedPath(selectedFilePath.isEmpty ? preview.filePath : selectedFilePath)
+        let fileURL = URL(fileURLWithPath: filePath)
+        if FileManager.default.fileExists(atPath: filePath) {
+            NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+            return
+        }
+
+        let skillDir = standardizedPath(preview.skill.sourceDir)
+        NSWorkspace.shared.open(URL(fileURLWithPath: skillDir))
+    }
+
+    private func standardizedPath(_ path: String) -> String {
+        (NSString(string: path).expandingTildeInPath as NSString).standardizingPath
+    }
+}
+
+private struct SkillFileNode: Identifiable, Hashable {
+    let path: String
+    let name: String
+    let isDirectory: Bool
+    let sizeBytes: Int64?
+    let children: [SkillFileNode]
+
+    var id: String { path }
+
+    static func load(rootPath: String) -> SkillFileNode? {
+        let url = URL(fileURLWithPath: rootPath)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return build(url: url, depth: 0)
+    }
+
+    private static func build(url: URL, depth: Int) -> SkillFileNode? {
+        let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey]
+        guard let values = try? url.resourceValues(forKeys: keys) else { return nil }
+
+        let isDirectory = values.isDirectory == true && values.isSymbolicLink != true
+        let children: [SkillFileNode]
+        if isDirectory && depth < 8 {
+            let contents = (try? FileManager.default.contentsOfDirectory(
+                at: url,
+                includingPropertiesForKeys: Array(keys),
+                options: [.skipsPackageDescendants]
+            )) ?? []
+            children = contents
+                .filter { !ignoredNames.contains($0.lastPathComponent) }
+                .sorted { lhs, rhs in
+                    let lhsIsDir = (try? lhs.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                    let rhsIsDir = (try? rhs.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                    if lhsIsDir != rhsIsDir { return lhsIsDir && !rhsIsDir }
+                    return lhs.lastPathComponent.localizedStandardCompare(rhs.lastPathComponent) == .orderedAscending
+                }
+                .prefix(250)
+                .compactMap { build(url: $0, depth: depth + 1) }
+        } else {
+            children = []
+        }
+
+        return SkillFileNode(
+            path: url.path,
+            name: url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent,
+            isDirectory: isDirectory,
+            sizeBytes: values.fileSize.map(Int64.init),
+            children: children
+        )
+    }
+
+    private static let ignoredNames: Set<String> = [
+        ".DS_Store",
+        ".git",
+        ".idea",
+        ".vscode",
+        "__pycache__",
+        "node_modules",
+    ]
+}
+
+private struct SkillFileTreeView: View {
+    let node: SkillFileNode
+    let isRoot: Bool
+    let level: Int
+    @Binding var selectedPath: String
+    let onSelect: (String) -> Void
+    @State private var isExpanded: Bool
+
+    init(
+        node: SkillFileNode,
+        isRoot: Bool = false,
+        level: Int = 0,
+        selectedPath: Binding<String>,
+        onSelect: @escaping (String) -> Void
+    ) {
+        self.node = node
+        self.isRoot = isRoot
+        self.level = level
+        self._selectedPath = selectedPath
+        self.onSelect = onSelect
+        _isExpanded = State(initialValue: isRoot || level == 0)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if !isRoot {
+                if node.isDirectory {
+                    Button {
+                        isExpanded.toggle()
+                    } label: {
+                        row(icon: "folder", tint: .blue, showsChevron: true, isSelected: false)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button {
+                        onSelect(node.path)
+                    } label: {
+                        row(icon: "doc.text", tint: .secondary, showsChevron: false, isSelected: selectedPath == node.path)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if node.isDirectory && isExpanded {
+                ForEach(node.children) { child in
+                    SkillFileTreeView(
+                        node: child,
+                        level: isRoot ? 0 : level + 1,
+                        selectedPath: $selectedPath,
+                        onSelect: onSelect
+                    )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func row(icon: String, tint: Color, showsChevron: Bool, isSelected: Bool) -> some View {
+        HStack(spacing: 6) {
+            if showsChevron {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 12)
+            } else {
+                Color.clear.frame(width: 12)
+            }
+
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(tint)
+                .frame(width: 16)
+
+            Text(node.name)
+                .font(.system(size: 12))
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            if let size = node.sizeBytes, !node.isDirectory {
+                Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, CGFloat(level) * 16 + 4)
+        .padding(.trailing, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(isSelected ? TVColor.brand.opacity(0.12) : Color.clear)
+        )
+        .foregroundStyle(isSelected ? TVColor.brand : .primary)
+        .textSelection(.enabled)
     }
 }
