@@ -33,6 +33,9 @@ struct SkillInstallSheet: View {
         .onAppear {
             viewModel.loadInstallSourceRootDisplay()
         }
+        .onDisappear {
+            viewModel.resetInstallForm()
+        }
     }
 
     private var header: some View {

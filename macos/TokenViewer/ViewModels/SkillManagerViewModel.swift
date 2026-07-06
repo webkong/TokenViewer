@@ -129,6 +129,14 @@ final class SkillManagerViewModel: ObservableObject {
         installErrorMessage = nil
     }
 
+    func resetInstallForm() {
+        installSourceType = .folder
+        installSelectedPath = ""
+        installGitURL = ""
+        installReplaceExisting = false
+        resetInstallSelection()
+    }
+
     func runSkillInstall() {
         installErrorMessage = nil
         installSuccessMessage = nil

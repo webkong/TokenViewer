@@ -30,6 +30,7 @@ struct SkillManagerView: View {
         .padding(20)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear { viewModel.refresh() }
+        .onDisappear { viewModel.resetInstallForm() }
         .onChange(of: enabledProvidersJSON) { _, _ in
             viewModel.ensureValidFilter()
             viewModel.refresh()

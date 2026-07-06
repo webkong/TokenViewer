@@ -148,9 +148,10 @@ final class ToastCenter {
 
     private func frame(for size: NSSize) -> NSRect {
         let frame = targetFrame()
+        let verticalOffset: CGFloat = 200
         let origin = NSPoint(
             x: frame.midX - size.width / 2,
-            y: frame.maxY - size.height - 16
+            y: frame.maxY - size.height - 16 - verticalOffset
         )
         return NSRect(origin: origin, size: size)
     }
