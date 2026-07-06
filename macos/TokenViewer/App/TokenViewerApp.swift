@@ -6,6 +6,14 @@ struct TokenViewerApp: App {
 
     var body: some Scene {
         Settings { EmptyView() }
+            .commands {
+                CommandGroup(replacing: .appSettings) {
+                    Button(L10n.shared.settings) {
+                        StatusBarController.shared.openMainWindow(tab: "settings")
+                    }
+                    .keyboardShortcut(",", modifiers: .command)
+                }
+            }
     }
 }
 

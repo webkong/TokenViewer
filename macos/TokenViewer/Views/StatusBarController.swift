@@ -46,7 +46,6 @@ final class StatusBarController {
             close()
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            NSApp.activate(ignoringOtherApps: true)
             if let window = popover.contentViewController?.view.window {
                 // NOTE: do NOT set window.level = .floating here.
                 // Floating windows don't resign key status normally, which
@@ -54,6 +53,7 @@ final class StatusBarController {
                 // is the root cause of the popover sometimes refusing to close.
                 window.isOpaque = true
                 window.backgroundColor = .windowBackgroundColor
+                window.makeKey()
             }
             startEventMonitor()
             // Trigger sync here (AppKit) rather than in PopoverView.onAppear:
@@ -98,6 +98,16 @@ final class StatusBarController {
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if event.keyCode == 53 { // ESC
                 self?.close()
+                return nil
+            }
+            if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+               event.charactersIgnoringModifiers?.lowercased() == "q" {
+                NSApp.terminate(nil)
+                return nil
+            }
+            if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+               event.charactersIgnoringModifiers == "," {
+                self?.openMainWindow(tab: "settings")
                 return nil
             }
             return event
