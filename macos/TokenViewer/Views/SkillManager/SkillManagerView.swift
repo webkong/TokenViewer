@@ -3,6 +3,7 @@ import SwiftUI
 struct SkillManagerView: View {
     @StateObject private var viewModel = SkillManagerViewModel.shared
     @State private var showSyncSheet = false
+    @State private var showInstallSheet = false
     @State private var showOrganizeAllConfirm = false
     @State private var showRestoreAllConfirm = false
     @AppStorage("skillsEnabledProviders") private var enabledProvidersJSON: String = ProviderRegistry.defaultSkillSourcesJSON
@@ -36,6 +37,9 @@ struct SkillManagerView: View {
         .sheet(isPresented: $showSyncSheet) {
             SkillGitSyncSheet(viewModel: viewModel)
         }
+        .sheet(isPresented: $showInstallSheet) {
+            SkillInstallSheet(viewModel: viewModel)
+        }
         .alert(L10n.shared.skillOrganizeAllConfirmTitle, isPresented: $showOrganizeAllConfirm) {
             Button(L10n.shared.cancel, role: .cancel) {}
             Button(L10n.shared.skillOrganize) {
@@ -66,6 +70,16 @@ struct SkillManagerView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Button {
+                showInstallSheet = true
+            } label: {
+                Label(L10n.shared.skillInstall, systemImage: "plus")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .quickHelp(L10n.shared.skillInstallTip)
+
             Button { viewModel.refresh(showToast: true) } label: {
                 Image(systemName: "arrow.triangle.2.circlepath")
                     .font(.system(size: 13, weight: .semibold))

@@ -696,6 +696,42 @@ pub extern "C" fn tt_skills_delete(handle: *mut CoreHandle, json: *const c_char)
     }
 }
 
+/// Install skills into source_root. Takes JSON:
+/// {"source_type":"folder|zip|git","path":"...","git_url":"...","replace_existing":false,"selected_skill_ids":[]}
+/// Returns SkillInstallResponse: {"ok":true,"status":"selection_required|installed",...}
+///
+/// # Safety
+/// `handle` must be valid; `json` must be a valid NUL-terminated C string.
+#[no_mangle]
+pub extern "C" fn tt_skills_install(handle: *mut CoreHandle, json: *const c_char) -> *mut c_char {
+    let handle = match unsafe { handle.as_mut() } {
+        Some(h) => h,
+        None => {
+            return to_json_cstring(&crate::skills::models::SkillInstallResponse::error(
+                "Null handle",
+            ))
+        }
+    };
+
+    if json.is_null() {
+        return to_json_cstring(&crate::skills::models::SkillInstallResponse::error(
+            "Null json",
+        ));
+    }
+
+    let req: crate::skills::models::SkillInstallRequest = match unsafe { from_cstring_json(json) } {
+        Ok(r) => r,
+        Err(e) => {
+            return to_json_cstring(&crate::skills::models::SkillInstallResponse::error(e));
+        }
+    };
+
+    match handle.skills.install_skills(req) {
+        Ok(response) => to_json_cstring(&response),
+        Err(e) => to_json_cstring(&crate::skills::models::SkillInstallResponse::error(e)),
+    }
+}
+
 /// Restore a skill back to its original agent location. Takes JSON: {"skill_id": "...", "agent_id": "..." (optional)}.
 /// Returns JSON: {"ok": true/false, "error": "..."}
 ///

@@ -176,6 +176,7 @@ final class L10n: ObservableObject {
     var skillOrganize: String { isZh ? "整理" : "Organize" }
     var skillRestore: String { isZh ? "还原" : "Restore" }
     var skillDelete: String { isZh ? "删除" : "Delete" }
+    var skillInstall: String { isZh ? "安装" : "Install" }
     var skillAgents: String { isZh ? "代理" : "Agents" }
     var skillColumnSkill: String { isZh ? "技能" : "Skill" }
     var skillColumnActions: String { isZh ? "操作" : "Actions" }
@@ -192,6 +193,28 @@ final class L10n: ObservableObject {
     var skillFilesEmpty: String { isZh ? "无法读取此技能的目录结构。" : "Unable to read this skill's file tree." }
     var skillPreviewMissingFile: String { isZh ? "未找到 SKILL.md 文件。" : "SKILL.md was not found." }
     func skillPreviewReadFailed(_ reason: String) -> String { isZh ? "无法读取 SKILL.md：\(reason)" : "Unable to read SKILL.md: \(reason)" }
+    var skillInstallTitle: String { isZh ? "安装 Skill" : "Install Skill" }
+    var skillInstallDesc: String { isZh ? "从本地目录、ZIP 包、Git 仓库或 GitHub 目录链接安装单个包含 SKILL.md 的技能到全局技能目录。" : "Install one skill containing SKILL.md from a local folder, ZIP archive, Git repository, or GitHub directory URL into the global skills directory." }
+    var skillInstallTip: String { isZh ? "安装新的技能到全局技能目录" : "Install a new skill into the global skills directory" }
+    var skillInstallFolder: String { isZh ? "文件夹" : "Folder" }
+    var skillInstallZip: String { isZh ? "ZIP 包" : "ZIP" }
+    var skillInstallGit: String { isZh ? "Git 仓库" : "Git" }
+    var skillInstallFolderPlaceholder: String { isZh ? "选择包含 SKILL.md 的目录" : "Choose a directory containing SKILL.md" }
+    var skillInstallZipPlaceholder: String { isZh ? "选择包含单个 Skill 的 ZIP 包" : "Choose a ZIP containing one skill" }
+    var skillInstallGitPlaceholder: String { isZh ? "支持仓库地址或 GitHub 目录链接" : "Repo URL or GitHub folder URL" }
+    var skillInstallChooseFolder: String { isZh ? "选择文件夹" : "Choose Folder" }
+    var skillInstallChooseZip: String { isZh ? "选择 ZIP" : "Choose ZIP" }
+    var skillInstallReplaceExisting: String { isZh ? "如果同名 Skill 已存在，则覆盖" : "Replace existing skill with the same name" }
+    var skillInstallSelectSkills: String { isZh ? "选择要安装的 Skills" : "Select skills to install" }
+    var skillInstallSelectAll: String { isZh ? "全选" : "All" }
+    var skillInstallSelectNone: String { isZh ? "全不选" : "None" }
+    var skillInstallSelected: String { isZh ? "安装选中项" : "Install Selected" }
+    func skillInstallSuccess(_ skill: String) -> String { isZh ? "已安装 \(skill)" : "Installed \(skill)" }
+    func skillInstallSuccessList(_ skills: [String]) -> String {
+        let label = skills.isEmpty ? "" : skills.joined(separator: ", ")
+        return isZh ? "已安装 \(label)" : "Installed \(label)"
+    }
+    func skillInstallFailed(_ reason: String) -> String { isZh ? "安装失败：\(reason)" : "Install failed: \(reason)" }
     var skillBuiltIn: String { isZh ? "内置" : "Built-in" }
     var skillBuiltInTip: String { isZh ? "代理自带的内置技能，默认仅兼容来源代理" : "Bundled with the agent; marked compatible with the source agent by default" }
     var skillBuiltInOrganizeTitle: String { isZh ? "整理内置技能？" : "Organize Built-in Skill?" }

@@ -1,4 +1,5 @@
 pub mod git_engine;
+pub mod install;
 pub mod models;
 pub mod provider_config;
 pub mod scanner;
@@ -11,6 +12,8 @@ use std::path::PathBuf;
 use crate::storage::Database;
 
 use self::git_engine::GitEngine;
+use self::install::SkillInstaller;
+use self::models::{SkillInstallRequest, SkillInstallResponse};
 use self::provider_config::ProviderSkillsRegistry;
 use self::scanner::Scanner;
 use self::symlink::SymlinkManager;
@@ -172,6 +175,10 @@ impl SkillsCore {
         std::fs::remove_dir_all(&path)
             .map_err(|e| format!("Failed to delete skill {}: {}", path.display(), e))?;
         Ok(())
+    }
+
+    pub fn install_skills(&self, req: SkillInstallRequest) -> Result<SkillInstallResponse, String> {
+        SkillInstaller::new(self.source_root.clone(), self.config_dir.clone()).install(req)
     }
 
     pub fn organize_skill(&mut self, skill_id: &str, agent_id: &str) -> Result<(), String> {

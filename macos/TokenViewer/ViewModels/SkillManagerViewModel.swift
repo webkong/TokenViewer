@@ -63,6 +63,16 @@ final class SkillManagerViewModel: ObservableObject {
     @Published var gitStatusName: String? = nil
     @Published var gitStatusMessage: String? = nil
     @Published var gitConnectivity: SkillGitConnectivity? = nil
+    @Published var installSourceType: SkillInstallSourceType = .folder
+    @Published var installSelectedPath: String = ""
+    @Published var installGitURL: String = ""
+    @Published var installReplaceExisting: Bool = false
+    @Published var installIsInstalling: Bool = false
+    @Published var installErrorMessage: String?
+    @Published var installSuccessMessage: String?
+    @Published var installCandidates: [SkillInstallCandidate] = []
+    @Published var installSelectedSkillIDs: Set<String> = []
+    @Published var installSourceRootDisplay: String = "~/.agents/skills"
 
     private let decoder = JSONDecoder()
 
@@ -94,6 +104,69 @@ final class SkillManagerViewModel: ObservableObject {
                 self.providers = providers
                 if showToast {
                     ToastCenter.shared.success(L10n.shared.toastRefreshed)
+                }
+            }
+        }
+    }
+
+    func loadInstallSourceRootDisplay() {
+        Task {
+            let display = await Task.detached {
+                SkillInstallCore.sourceRootDisplay()
+            }.value
+            await MainActor.run {
+                if let display {
+                    self.installSourceRootDisplay = display
+                }
+            }
+        }
+    }
+
+    func resetInstallSelection() {
+        installCandidates = []
+        installSelectedSkillIDs = []
+        installSuccessMessage = nil
+        installErrorMessage = nil
+    }
+
+    func runSkillInstall() {
+        installErrorMessage = nil
+        installSuccessMessage = nil
+        installIsInstalling = true
+
+        let request = SkillInstallPayload(
+            sourceType: installSourceType,
+            path: installSelectedPath.trimmingCharacters(in: .whitespacesAndNewlines),
+            gitURL: installGitURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            replaceExisting: installReplaceExisting,
+            selectedSkillIDs: Array(installSelectedSkillIDs).sorted()
+        )
+
+        Task.detached {
+            do {
+                let response = try SkillInstallCore.install(request)
+                await MainActor.run {
+                    self.installIsInstalling = false
+                    if response.status == "selection_required" {
+                        self.installCandidates = response.candidates
+                        self.installSelectedSkillIDs = Set(response.candidates.map(\.id))
+                        self.installSuccessMessage = nil
+                        return
+                    }
+
+                    let installed = response.installedSkillIds
+                    self.installCandidates = []
+                    self.installSelectedSkillIDs = []
+                    self.installSuccessMessage = L10n.shared.skillInstallSuccessList(installed)
+                    self.refresh(showToast: true)
+                    ToastCenter.shared.success(L10n.shared.skillInstallSuccessList(installed))
+                }
+            } catch {
+                await MainActor.run {
+                    self.installIsInstalling = false
+                    let message = L10n.shared.skillInstallFailed(error.localizedDescription)
+                    self.installErrorMessage = message
+                    ToastCenter.shared.error(message)
                 }
             }
         }

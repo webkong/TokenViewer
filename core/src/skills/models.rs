@@ -6,6 +6,69 @@ pub struct SkillCommandResult {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct SkillInstallRequest {
+    pub source_type: String,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub git_url: Option<String>,
+    #[serde(default)]
+    pub replace_existing: bool,
+    #[serde(default, alias = "selected_skill_i_ds")]
+    pub selected_skill_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SkillInstallCandidate {
+    pub id: String,
+    pub source_dir: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SkillInstallResponse {
+    pub ok: bool,
+    pub status: String,
+    #[serde(default)]
+    pub installed_skill_ids: Vec<String>,
+    #[serde(default)]
+    pub candidates: Vec<SkillInstallCandidate>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+impl SkillInstallResponse {
+    pub fn installed(ids: Vec<String>) -> Self {
+        Self {
+            ok: true,
+            status: "installed".to_string(),
+            installed_skill_ids: ids,
+            candidates: Vec::new(),
+            error: None,
+        }
+    }
+
+    pub fn selection_required(candidates: Vec<SkillInstallCandidate>) -> Self {
+        Self {
+            ok: true,
+            status: "selection_required".to_string(),
+            installed_skill_ids: Vec::new(),
+            candidates,
+            error: None,
+        }
+    }
+
+    pub fn error(message: impl Into<String>) -> Self {
+        Self {
+            ok: false,
+            status: "error".to_string(),
+            installed_skill_ids: Vec::new(),
+            candidates: Vec::new(),
+            error: Some(message.into()),
+        }
+    }
+}
+
 impl SkillCommandResult {
     pub fn ok() -> Self {
         Self {

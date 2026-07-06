@@ -86,7 +86,7 @@ impl Scanner {
     /// Validate that a directory contains SKILL.md.
     /// manifest.json is optional — if missing, a default manifest is generated.
     pub fn validate_skill_dir(path: &Path) -> bool {
-        path.join("SKILL.md").is_file()
+        path.join("SKILL.md").is_file() || path.join("skill.md").is_file()
     }
 }
 

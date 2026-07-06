@@ -22,6 +22,7 @@ char* _Nullable tt_skills_list_for_agents(CoreHandle* _Nullable handle, const ch
 char* _Nullable tt_skills_list_agents(CoreHandle* _Nullable handle);
 char* _Nullable tt_skills_organize(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_delete(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_skills_install(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_restore(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_link(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_unlink(CoreHandle* _Nullable handle, const char* _Nonnull json);

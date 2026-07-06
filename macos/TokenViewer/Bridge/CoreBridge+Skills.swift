@@ -53,6 +53,10 @@ extension CoreBridge {
         callSkillsWithJSON(payload) { tt_skills_delete($0, $1) }
     }
 
+    func skillsInstall(_ payload: Data) -> Data? {
+        callSkillsWithJSON(payload) { tt_skills_install($0, $1) }
+    }
+
     func skillsRestore(_ payload: Data) -> Data? {
         callSkillsWithJSON(payload) { tt_skills_restore($0, $1) }
     }

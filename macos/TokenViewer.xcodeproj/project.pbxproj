@@ -86,6 +86,7 @@
 		E20F9C43E395A4E96EBB4A2F /* cohere.svg in Resources */ = {isa = PBXBuildFile; fileRef = DFDA06D1E745AB5198CC550D /* cohere.svg */; };
 		E2157A36CA184475536923C0 /* claude-code.svg in Resources */ = {isa = PBXBuildFile; fileRef = 2CDA4DFDC1A93996F495C246 /* claude-code.svg */; };
 		E24828ABBE0F085D952957AA /* openclaw.svg in Resources */ = {isa = PBXBuildFile; fileRef = 7558F3C2071E901CF0ECA4FD /* openclaw.svg */; };
+		E4D0603CFA32F013B5F36C9A /* SkillInstallSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D317307913528075C835081 /* SkillInstallSheet.swift */; };
 		ED3B7F19A37D4A28CEDA8622 /* AppLogo.svg in Resources */ = {isa = PBXBuildFile; fileRef = 84BE470DCBCD6A12C98E60D6 /* AppLogo.svg */; };
 		ED6A77C8F551950A111B7C3A /* KeychainManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0F91FA57420FB58729B647 /* KeychainManager.swift */; };
 		F6209AB5E7CA5F0A3C1A4AF3 /* roocode.svg in Resources */ = {isa = PBXBuildFile; fileRef = 2DCF181483E1101EDA79E26A /* roocode.svg */; };
@@ -143,6 +144,7 @@
 		78939B0AD0C6C5326F124418 /* cline.svg */ = {isa = PBXFileReference; path = cline.svg; sourceTree = "<group>"; };
 		78CE8EAD3B139DBEB8EB4B5A /* CoreBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBridge.swift; sourceTree = "<group>"; };
 		7C710A80148201C51072D6D0 /* TokenViewer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TokenViewer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7D317307913528075C835081 /* SkillInstallSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillInstallSheet.swift; sourceTree = "<group>"; };
 		7D6DEE1015E607E6E570C753 /* craft.svg */ = {isa = PBXFileReference; path = craft.svg; sourceTree = "<group>"; };
 		84BE470DCBCD6A12C98E60D6 /* AppLogo.svg */ = {isa = PBXFileReference; path = AppLogo.svg; sourceTree = "<group>"; };
 		88494BAD929D52E39664A618 /* codex.svg */ = {isa = PBXFileReference; path = codex.svg; sourceTree = "<group>"; };
@@ -235,6 +237,7 @@
 			isa = PBXGroup;
 			children = (
 				068F9C35A6FFB2F33320C210 /* SkillGitSyncSheet.swift */,
+				7D317307913528075C835081 /* SkillInstallSheet.swift */,
 				304CCD886055A0B97FD0ED18 /* SkillListView.swift */,
 				A8B41A7FC4AB00CC55B3B49B /* SkillManagerView.swift */,
 			);
@@ -587,6 +590,7 @@
 				1645D94A3E61F9D783358C2D /* QuickHelpModifier.swift in Sources */,
 				689B564C83CA31718ADFEA3B /* SettingsView.swift in Sources */,
 				54328D0C7AEBA1BF8C0238E0 /* SkillGitSyncSheet.swift in Sources */,
+				E4D0603CFA32F013B5F36C9A /* SkillInstallSheet.swift in Sources */,
 				9BD8C56533C053E2CF209B14 /* SkillListView.swift in Sources */,
 				D4C2E0CC343A54FEAD847CFD /* SkillManagerView.swift in Sources */,
 				2D1277885E113DCAF822CB21 /* SkillManagerViewModel.swift in Sources */,
@@ -696,7 +700,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 20300;
+				CURRENT_PROJECT_VERSION = 20500;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -715,7 +719,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.3;
+				MARKETING_VERSION = 0.2.5;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -795,7 +799,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 20300;
+				CURRENT_PROJECT_VERSION = 20500;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -808,7 +812,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.3;
+				MARKETING_VERSION = 0.2.5;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
