@@ -539,7 +539,8 @@ final class SkillManagerViewModel: ObservableObject {
         platform: String? = nil,
         token: String? = nil,
         userName: String? = nil,
-        userEmail: String? = nil
+        userEmail: String? = nil,
+        filterPayload: Data? = nil
     ) {
         Task.detached {
             if let remoteURL, let platform, let token {
@@ -558,7 +559,8 @@ final class SkillManagerViewModel: ObservableObject {
                 self.gitStatusName = "pushing"
                 self.gitStatusMessage = nil
             }
-            let data = CoreBridge.shared.skillsGitPush()
+            let data = filterPayload.flatMap(CoreBridge.shared.skillsGitPushFiltered)
+                ?? CoreBridge.shared.skillsGitPush()
             await MainActor.run {
                 self.handleGitSyncResult(data, successMessage: L10n.shared.toastPushed)
             }

@@ -50,6 +50,9 @@ struct SkillGitSyncSheet: View {
     @AppStorage("syncTokenSaved_other") private var tokenSavedOther = false
     @AppStorage("syncGitUserName") private var storedGitUserName = ""
     @AppStorage("syncGitUserEmail") private var storedGitUserEmail = ""
+    @AppStorage("syncSkillFilterEnabled") private var filterEnabled = false
+    @AppStorage("syncSkillFilterPrefixes") private var filterPrefixes = ""
+    @AppStorage("syncSkillFilterSelectedIDs") private var filterSelectedIDsJSON = "[]"
 
     @State private var showAuthSheet = false
     @State private var isCheckingConnectivity = false
@@ -89,6 +92,7 @@ struct SkillGitSyncSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     repositorySection
+                    filterSection
                     statusSection
                     changesSection
                     actionSection
@@ -96,11 +100,13 @@ struct SkillGitSyncSheet: View {
                 .padding()
             }
         }
-        .frame(width: 520, height: 580)
+        .frame(width: 560, height: 720)
         .clearInitialFocus(trigger: providerRaw)
         .clearFocusOnOutsideClick()
         .sheet(isPresented: $showAuthSheet) {
             SkillAuthSheet(provider: $providerRaw) { userName, userEmail in
+                storedGitUserName = userName.trimmingCharacters(in: .whitespacesAndNewlines)
+                storedGitUserEmail = userEmail.trimmingCharacters(in: .whitespacesAndNewlines)
                 applyConfig(showToast: true, userName: userName, userEmail: userEmail)
             }
         }
@@ -189,7 +195,7 @@ struct SkillGitSyncSheet: View {
                 }
 
                 if let message = viewModel.gitStatusMessage {
-                    Text(message)
+                    Text(displayedStatusMessage(message))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -208,10 +214,18 @@ struct SkillGitSyncSheet: View {
 
     @ViewBuilder
     private var changesSection: some View {
-        if !viewModel.gitChanges.isEmpty {
-            GroupBox(l10n.gitPendingChanges) {
+        let changes = displayedGitChanges
+        if !changes.isEmpty {
+            GroupBox(filterEnabled ? l10n.gitPendingFilteredChanges : l10n.gitPendingChanges) {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(viewModel.gitChanges, id: \.filePath) { change in
+                    if filterEnabled {
+                        Text(l10n.gitPendingFilteredChangesDesc)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 2)
+                    }
+
+                    ForEach(changes, id: \.filePath) { change in
                         HStack {
                             Image(systemName: change.changeType == "added" ? "plus.circle.fill" :
                                   change.changeType == "deleted" ? "minus.circle.fill" : "pencil.circle.fill")
@@ -231,6 +245,22 @@ struct SkillGitSyncSheet: View {
                 .padding(8)
             }
         }
+    }
+
+    private var displayedGitChanges: [SkillGitChange] {
+        guard filterEnabled else { return viewModel.gitChanges }
+        return viewModel.gitChanges.filter { change in
+            guard let skillID = skillID(forChangePath: change.filePath) else { return false }
+            return filterSelectedIDs.contains(skillID) || skillMatchesPrefixes(skillID)
+        }
+    }
+
+    private func skillID(forChangePath path: String) -> String? {
+        let trimmed = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !trimmed.isEmpty else { return nil }
+        let skillID = trimmed.split(separator: "/", maxSplits: 1).first.map(String.init) ?? trimmed
+        guard !skillID.isEmpty, !skillID.hasPrefix(".") else { return nil }
+        return skillID
     }
 
     private var actionSection: some View {
@@ -261,7 +291,8 @@ struct SkillGitSyncSheet: View {
                     platform: provider.key,
                     token: currentToken,
                     userName: storedGitUserName,
-                    userEmail: storedGitUserEmail
+                    userEmail: storedGitUserEmail,
+                    filterPayload: syncFilterPayload()
                 )
                 checkConnectivity()
             } label: {
@@ -326,6 +357,10 @@ struct SkillGitSyncSheet: View {
     }
 
     private var statusTitle: String {
+        if filterEnabled, viewModel.gitStatusName == "modified" {
+            return displayedGitChanges.isEmpty ? l10n.gitUpToDateFiltered : l10n.gitFilteredChangesPending
+        }
+
         switch viewModel.gitStatusName {
         case "synced": return l10n.gitUpToDate
         case "modified": return l10n.gitChangesPending
@@ -335,6 +370,15 @@ struct SkillGitSyncSheet: View {
         case "error": return l10n.gitError
         default: return l10n.gitNotConfigured
         }
+    }
+
+    private func displayedStatusMessage(_ message: String) -> String {
+        guard filterEnabled, viewModel.gitStatusName == "modified" else { return message }
+        let count = displayedGitChanges.count
+        if count == 0 {
+            return l10n.gitNoFilteredChanges
+        }
+        return l10n.gitFilteredChangesCount(count)
     }
 
     private func checkConnectivity() {
@@ -379,6 +423,157 @@ struct SkillGitSyncSheet: View {
         storedGitUserName = config.gitUserName ?? ""
         storedGitUserEmail = config.gitUserEmail ?? ""
     }
+
+    private var filterSection: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle(isOn: $filterEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(l10n.skillSyncFilter)
+                            .font(.subheadline.weight(.semibold))
+                        Text(l10n.skillSyncFilterDesc)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+
+                if filterEnabled {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(l10n.skillSyncFilterPrefixes)
+                            .font(.caption.weight(.semibold))
+                        TextField(l10n.skillSyncFilterPrefixesPlaceholder, text: $filterPrefixes, axis: .vertical)
+                            .textFieldStyle(.roundedBorder)
+                            .lineLimit(2...4)
+                        Text(l10n.skillSyncFilterPrefixesHelp)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Text(l10n.skillSyncFilterSelectedSkills)
+                            .font(.caption.weight(.semibold))
+                        Spacer()
+                        Text(l10n.skillSyncFilterSelectedCount(filterSelectedIDs.count))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack(spacing: 8) {
+                        Button(l10n.skillSyncFilterSelectPrefixMatches) {
+                            setFilterSelectedIDs(Set(filterableSkills.filter { skillMatchesPrefixes($0.id) }.map(\.id)))
+                        }
+                        .buttonStyle(.borderless)
+
+                        Button(l10n.skillInstallSelectAll) {
+                            setFilterSelectedIDs(Set(filterableSkills.map(\.id)))
+                        }
+                        .buttonStyle(.borderless)
+
+                        Button(l10n.skillInstallSelectNone) {
+                            setFilterSelectedIDs([])
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    .font(.caption)
+
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 6) {
+                            ForEach(filterableSkills) { skill in
+                                Toggle(isOn: bindingForFilterSkill(skill.id)) {
+                                    HStack(spacing: 8) {
+                                        Text(skill.manifest.name)
+                                            .font(.caption)
+                                            .lineLimit(1)
+                                        Text(skill.id)
+                                            .font(.caption2.monospaced())
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                        if skillMatchesPrefixes(skill.id) {
+                                            Text(l10n.skillSyncFilterPrefixMatched)
+                                                .font(.caption2)
+                                                .foregroundStyle(.green)
+                                        }
+                                    }
+                                }
+                                .toggleStyle(.checkbox)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .frame(maxHeight: 150)
+                }
+            }
+            .padding(10)
+        }
+    }
+
+    private var filterableSkills: [SkillEntry] {
+        viewModel.skills
+            .filter { !viewModel.isBuiltInSkill($0) }
+            .sorted {
+                $0.manifest.name.localizedCaseInsensitiveCompare($1.manifest.name) == .orderedAscending
+            }
+    }
+
+    private var filterSelectedIDs: Set<String> {
+        guard let data = filterSelectedIDsJSON.data(using: .utf8),
+              let ids = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return Set(ids)
+    }
+
+    private var parsedFilterPrefixes: [String] {
+        filterPrefixes
+            .components(separatedBy: CharacterSet(charactersIn: ",\n\r\t "))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "*")) }
+            .filter { !$0.isEmpty && !$0.contains("/") }
+    }
+
+    private func skillMatchesPrefixes(_ skillID: String) -> Bool {
+        parsedFilterPrefixes.contains { skillID.hasPrefix($0) }
+    }
+
+    private func bindingForFilterSkill(_ skillID: String) -> Binding<Bool> {
+        Binding(
+            get: { filterSelectedIDs.contains(skillID) },
+            set: { isSelected in
+                var ids = filterSelectedIDs
+                if isSelected {
+                    ids.insert(skillID)
+                } else {
+                    ids.remove(skillID)
+                }
+                setFilterSelectedIDs(ids)
+            }
+        )
+    }
+
+    private func setFilterSelectedIDs(_ ids: Set<String>) {
+        let sorted = ids.sorted()
+        guard let data = try? JSONEncoder().encode(sorted),
+              let raw = String(data: data, encoding: .utf8) else {
+            return
+        }
+        filterSelectedIDsJSON = raw
+    }
+
+    private func syncFilterPayload() -> Data? {
+        guard filterEnabled else { return nil }
+        let payload = SkillSyncFilterPayload(
+            includePrefixes: parsedFilterPrefixes,
+            includeSkillIds: Array(filterSelectedIDs).sorted()
+        )
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        return try? encoder.encode(payload)
+    }
+}
+
+private struct SkillSyncFilterPayload: Encodable {
+    let includePrefixes: [String]
+    let includeSkillIds: [String]
 }
 
 struct SkillAuthSheet: View {

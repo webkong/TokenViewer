@@ -29,6 +29,7 @@ char* _Nullable tt_skills_unlink(CoreHandle* _Nullable handle, const char* _Nonn
 char* _Nullable tt_skills_git_status(CoreHandle* _Nullable handle);
 char* _Nullable tt_skills_git_pull(CoreHandle* _Nullable handle);
 char* _Nullable tt_skills_git_push(CoreHandle* _Nullable handle);
+char* _Nullable tt_skills_git_push_filtered(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_git_connectivity(CoreHandle* _Nullable handle);
 char* _Nullable tt_skills_add_custom_agent(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_remove_custom_agent(CoreHandle* _Nullable handle, const char* _Nonnull json);

@@ -257,6 +257,8 @@ final class L10n: ObservableObject {
     var gitAuthentication: String { isZh ? "认证" : "Authentication" }
     var gitToken: String { isZh ? "令牌" : "Token" }
     var gitPendingChanges: String { isZh ? "待处理变更" : "Pending Changes" }
+    var gitPendingFilteredChanges: String { isZh ? "将推送的变更" : "Changes To Push" }
+    var gitPendingFilteredChangesDesc: String { isZh ? "当前仅显示匹配同步过滤规则的变更。" : "Showing only changes matching the sync filter." }
     var gitNoPendingChanges: String { isZh ? "没有待处理变更" : "No pending changes"}
     var gitNoBranch: String { isZh ? "(无分支)" : "(no branch)" }
     var gitRemoteFormat: String { isZh ? "远程: %@" : "Remote: %@" }
@@ -275,6 +277,10 @@ final class L10n: ObservableObject {
     var gitDisconnected: String { isZh ? "未连接" : "Disconnected" }
     var gitUpToDate: String { isZh ? "已是最新" : "Up to Date" }
     var gitChangesPending: String { isZh ? "有待提交变更" : "Changes Pending" }
+    var gitFilteredChangesPending: String { isZh ? "有匹配过滤规则的变更" : "Filtered Changes Pending" }
+    var gitUpToDateFiltered: String { isZh ? "过滤范围内已是最新" : "Filtered Scope Up to Date" }
+    var gitNoFilteredChanges: String { isZh ? "当前过滤规则下没有待推送变更。" : "No changes match the current sync filter." }
+    func gitFilteredChangesCount(_ count: Int) -> String { isZh ? "当前过滤规则下 \(count) 个文件将被推送。" : "\(count) file(s) match the current sync filter." }
     var gitConflicts: String { isZh ? "存在冲突" : "Merge Conflicts" }
     var gitPushing: String { isZh ? "推送中…" : "Pushing…" }
     var gitPulling: String { isZh ? "拉取中…" : "Pulling…" }
@@ -298,6 +304,15 @@ final class L10n: ObservableObject {
     func gitDefaultIdentity(_ identity: String) -> String { isZh ? "默认: \(identity)" : "Default: \(identity)" }
     var gitDefaultIdentityMissing: String { isZh ? "未检测到默认 Git 用户名和邮箱" : "No default git user name and email detected" }
     var gitCommitIdentityDesc: String { isZh ? "留空时使用当前 git 默认配置；填写后 sync 提交会使用这里的用户名和邮箱。" : "Leave blank to use the current git default. Sync commits use these values when provided." }
+    var skillSyncFilter: String { isZh ? "同步过滤" : "Sync Filter" }
+    var skillSyncFilterDesc: String { isZh ? "仅在 Push 时提交匹配的 Skill；Pull 仍会拉取整个仓库以保持 Git 历史一致。" : "Only matching skills are committed on Push. Pull still fetches the full repository to keep Git history consistent." }
+    var skillSyncFilterPrefixes: String { isZh ? "包含前缀" : "Included prefixes" }
+    var skillSyncFilterPrefixesPlaceholder: String { isZh ? "例如 webkong，每行或逗号分隔" : "For example: webkong. Separate with commas or new lines." }
+    var skillSyncFilterPrefixesHelp: String { isZh ? "前缀匹配 Skill 目录名；webkong 会匹配 webkong-article、webkong-search 等。" : "Prefixes match skill directory names. webkong matches webkong-article, webkong-search, and similar IDs." }
+    var skillSyncFilterSelectedSkills: String { isZh ? "额外选择的 Skill" : "Additional selected skills" }
+    func skillSyncFilterSelectedCount(_ count: Int) -> String { isZh ? "已选 \(count) 个" : "\(count) selected" }
+    var skillSyncFilterSelectPrefixMatches: String { isZh ? "选择前缀匹配" : "Select prefix matches" }
+    var skillSyncFilterPrefixMatched: String { isZh ? "前缀匹配" : "prefix" }
 
     // MARK: - Skill Manager additional
     var skillGlobalBadge: String { isZh ? "全局" : "Global" }
