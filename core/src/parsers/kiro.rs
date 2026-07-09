@@ -402,61 +402,119 @@ fn count_content_chars(data: &Value) -> usize {
 }
 
 /// Normalize Kiro internal model IDs to canonical names.
-/// e.g. CLAUDE_SONNET_4_20250514_V1_0 → claude-sonnet-4
+/// e.g. CLAUDE_SONNET_4_20250514_V1_0 -> claude-sonnet-4
 fn normalize_kiro_model(raw: &str) -> String {
     let lower = raw.to_lowercase();
     if lower == "agent" {
         return "kiro-agent".to_string();
     }
 
-    // Already a clean model name like "claude-opus-4.6", "claude-sonnet-4.5" — keep as-is
-    let version_re = [
-        "claude-opus-4",
-        "claude-sonnet-4",
-        "claude-haiku-4",
-        "claude-3-5-sonnet",
-        "claude-3-5-haiku",
-        "gpt-4",
-        "gpt-4o",
-        "gpt-5",
-        "gemini",
-    ];
-    for prefix in &version_re {
-        if lower.starts_with(prefix) {
-            return lower;
+    let slug = lower.replace('_', "-");
+    if let Some(model) = normalize_claude_model_slug(&slug) {
+        return model;
+    }
+    if let Some(model) = normalize_gpt_model_slug(&slug) {
+        return model;
+    }
+    if let Some(model) = normalize_gemini_model_slug(&slug) {
+        return model;
+    }
+
+    raw.to_string()
+}
+
+fn normalize_claude_model_slug(slug: &str) -> Option<String> {
+    let start = slug.find("claude-")?;
+    let parts: Vec<&str> = slug[start..].split('-').collect();
+    if parts.len() < 3 || parts[0] != "claude" {
+        return None;
+    }
+
+    match parts[1] {
+        "opus" | "sonnet" | "haiku" => {
+            let major = parts[2];
+            if !major.chars().all(|c| c.is_ascii_digit()) {
+                return None;
+            }
+
+            let mut model = format!("claude-{}-{}", parts[1], major);
+            if let Some(minor) = parts.get(3) {
+                if minor.len() == 1 && minor.chars().all(|c| c.is_ascii_digit()) {
+                    model.push('.');
+                    model.push_str(minor);
+                }
+            }
+            Some(model)
+        }
+        major if major.chars().all(|c| c.is_ascii_digit()) => {
+            let minor = parts.get(2)?;
+            let family = parts.get(3)?;
+            if minor.len() == 1
+                && minor.chars().all(|c| c.is_ascii_digit())
+                && matches!(*family, "opus" | "sonnet" | "haiku")
+            {
+                Some(format!("claude-{}.{}-{}", major, minor, family))
+            } else {
+                Some(slug[start..].to_string())
+            }
+        }
+        _ => Some(slug[start..].to_string()),
+    }
+}
+
+fn normalize_gpt_model_slug(slug: &str) -> Option<String> {
+    normalize_dash_versioned_model_slug(slug, "gpt")
+}
+
+fn normalize_gemini_model_slug(slug: &str) -> Option<String> {
+    normalize_dash_versioned_model_slug(slug, "gemini")
+}
+
+fn normalize_dash_versioned_model_slug(slug: &str, family: &str) -> Option<String> {
+    let needle = format!("{family}-");
+    let start = slug.find(&needle)?;
+    let parts: Vec<&str> = slug[start..].split('-').collect();
+    if parts.len() < 2 || parts[0] != family {
+        return None;
+    }
+
+    let mut model_parts = vec![family.to_string()];
+    let mut index = 1;
+    if index >= parts.len() || is_build_marker(parts[index]) {
+        return None;
+    }
+
+    let first = parts[index];
+    model_parts.push(first.to_string());
+    index += 1;
+
+    if first.chars().all(|c| c.is_ascii_digit()) {
+        if let Some(next) = parts.get(index) {
+            if next.len() <= 2 && next.chars().all(|c| c.is_ascii_digit()) {
+                let last = model_parts.last_mut().unwrap();
+                last.push('.');
+                last.push_str(next);
+                index += 1;
+            }
         }
     }
 
-    // Convert internal IDs like CLAUDE_SONNET_4_20250514_V1_0 → family name
-    let slug = lower.replace('_', "-");
-    // Try specific versioned matches first (longer prefix wins)
-    for prefix in &[
-        "claude-opus-4-5",
-        "claude-opus-4-6",
-        "claude-opus-4-7",
-        "claude-opus-4-8",
-        "claude-sonnet-4-5",
-        "claude-sonnet-4-6",
-        "claude-haiku-4",
-        "claude-opus-4",
-        "claude-sonnet-4",
-        "claude-3-5-sonnet",
-        "claude-3-5-haiku",
-        "gpt-4o",
-        "gpt-4",
-        "gpt-5",
-        "gemini",
-    ] {
-        if slug.contains(prefix) {
-            // Convert dashes back to dots for version: claude-opus-4-6 → claude-opus-4.6
-            let model = prefix.replace("-4-", "-4.").replace("-3-5-", "-3.5-");
-            return model;
+    while let Some(part) = parts.get(index) {
+        if is_build_marker(part) {
+            break;
         }
+        model_parts.push((*part).to_string());
+        index += 1;
     }
-    if slug.contains("claude") {
-        return "claude-sonnet-4".to_string();
-    }
-    raw.to_string()
+
+    Some(model_parts.join("-"))
+}
+
+fn is_build_marker(part: &str) -> bool {
+    (part.len() >= 4 && part.chars().all(|c| c.is_ascii_digit()))
+        || (part.len() > 1
+            && part.starts_with('v')
+            && part[1..].chars().all(|c| c.is_ascii_digit()))
 }
 
 /// Build a sorted timeline of (start_ms, model_name) from .chat metadata files.
@@ -657,4 +715,65 @@ fn parse_kiro_cli_db(db_path: &Path, cursor: &mut FileCursor) -> Option<Vec<Usag
 
     cursor.kiro_cli_updated_at = max_updated;
     Some(records)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_kiro_model;
+
+    #[test]
+    fn normalizes_future_claude_sonnet_clean_name() {
+        assert_eq!(normalize_kiro_model("claude-sonnet-5"), "claude-sonnet-5");
+    }
+
+    #[test]
+    fn normalizes_future_claude_sonnet_internal_id_without_downgrading() {
+        assert_eq!(
+            normalize_kiro_model("CLAUDE_SONNET_5_20260701_V1_0"),
+            "claude-sonnet-5"
+        );
+    }
+
+    #[test]
+    fn preserves_existing_claude_sonnet_four_internal_id() {
+        assert_eq!(
+            normalize_kiro_model("CLAUDE_SONNET_4_20250514_V1_0"),
+            "claude-sonnet-4"
+        );
+    }
+
+    #[test]
+    fn normalizes_claude_minor_versions_without_enumerating_each_release() {
+        assert_eq!(
+            normalize_kiro_model("CLAUDE_OPUS_4_8_20260101_V1_0"),
+            "claude-opus-4.8"
+        );
+        assert_eq!(
+            normalize_kiro_model("claude-sonnet-6-2-20270101"),
+            "claude-sonnet-6.2"
+        );
+    }
+
+    #[test]
+    fn normalizes_gpt_models_without_enumerating_each_release() {
+        assert_eq!(normalize_kiro_model("gpt-5"), "gpt-5");
+        assert_eq!(normalize_kiro_model("GPT_5_20260701_V1_0"), "gpt-5");
+        assert_eq!(normalize_kiro_model("GPT_4_1_MINI_20250101"), "gpt-4.1-mini");
+        assert_eq!(normalize_kiro_model("gpt-6-nano"), "gpt-6-nano");
+    }
+
+    #[test]
+    fn normalizes_gemini_models_without_enumerating_each_release() {
+        assert_eq!(normalize_kiro_model("gemini-2.5-pro"), "gemini-2.5-pro");
+        assert_eq!(
+            normalize_kiro_model("GEMINI_2_5_FLASH_20250601"),
+            "gemini-2.5-flash"
+        );
+        assert_eq!(normalize_kiro_model("gemini-3-pro"), "gemini-3-pro");
+    }
+
+    #[test]
+    fn leaves_unknown_non_family_models_unchanged() {
+        assert_eq!(normalize_kiro_model("CUSTOM_MODEL_X"), "CUSTOM_MODEL_X");
+    }
 }
