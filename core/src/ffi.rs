@@ -1085,6 +1085,87 @@ pub extern "C" fn tt_skills_git_push(handle: *mut CoreHandle) -> *mut c_char {
     }
 }
 
+/// Push selected skills to git remote. Takes JSON:
+/// {"include_prefixes":["webkong"],"include_skill_ids":["foo"]}.
+/// Returns JSON GitStatusInfo.
+///
+/// # Safety
+/// `handle` must be a valid pointer from `tt_init`, or null (returns null).
+/// `json` must be a valid NUL-terminated C string.
+#[no_mangle]
+pub extern "C" fn tt_skills_git_push_filtered(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let handle = match unsafe { handle.as_mut() } {
+        Some(h) => h,
+        None => return std::ptr::null_mut(),
+    };
+    if json.is_null() {
+        return to_json_cstring(&crate::skills::models::GitStatusInfo::error("Null json"));
+    }
+    if handle
+        .skills
+        .git_remote_url
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git remote URL configured",
+        ));
+    }
+    if handle
+        .skills
+        .git_token
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
+        return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git token configured",
+        ));
+    }
+
+    #[derive(serde::Deserialize)]
+    struct FilterReq {
+        #[serde(default)]
+        include_prefixes: Vec<String>,
+        #[serde(default)]
+        include_skill_ids: Vec<String>,
+    }
+
+    let req: FilterReq = match unsafe { from_cstring_json(json) } {
+        Ok(r) => r,
+        Err(e) => return to_json_cstring(&crate::skills::models::GitStatusInfo::error(&e)),
+    };
+    let filter = crate::skills::git_engine::SkillSyncFilter {
+        include_prefixes: req.include_prefixes,
+        include_skill_ids: req.include_skill_ids,
+    };
+
+    let token = handle.skills.git_token.clone();
+    let user_name = handle.skills.git_user_name.clone();
+    let user_email = handle.skills.git_user_email.clone();
+    match &mut handle.skills.git {
+        Some(git) => match git.stage_and_push_filtered(
+            "skill: sync",
+            &filter,
+            token.as_deref(),
+            user_name.as_deref(),
+            user_email.as_deref(),
+        ) {
+            Ok(status) => to_json_cstring(&status),
+            Err(e) => to_json_cstring(&crate::skills::models::GitStatusInfo::error(&e)),
+        },
+        None => to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git repository",
+        )),
+    }
+}
+
 /// Check git remote connectivity. Returns JSON GitConnectivity.
 ///
 /// # Safety
@@ -1182,15 +1263,6 @@ pub extern "C" fn tt_skills_set_git_config(
         }
     }
 
-    if let Some(url) = req.remote_url {
-        handle.skills.git_remote_url = Some(url.clone());
-        if let Some(ref git) = handle.skills.git {
-            if let Err(e) = git.set_remote_url(&url) {
-                return to_json_cstring(&crate::skills::models::SkillCommandResult::error(e));
-            }
-        }
-    }
-
     if let Some(tok) = req.token {
         handle.skills.git_token = Some(tok);
     }
@@ -1215,6 +1287,23 @@ pub extern "C" fn tt_skills_set_git_config(
         } else {
             Some(user_email.to_string())
         };
+    }
+
+    if let Some(url) = req.remote_url {
+        handle.skills.git_remote_url = Some(url.clone());
+        let user_name = handle.skills.git_user_name.clone();
+        let user_email = handle.skills.git_user_email.clone();
+        if let Err(e) = handle
+            .skills
+            .ensure_git_initialized_with_identity(user_name.as_deref(), user_email.as_deref())
+        {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(e));
+        }
+        if let Some(ref git) = handle.skills.git {
+            if let Err(e) = git.set_remote_url(&url) {
+                return to_json_cstring(&crate::skills::models::SkillCommandResult::error(e));
+            }
+        }
     }
 
     if let Err(e) = persist_skills_config(&handle.skills.config_dir, &handle.skills) {

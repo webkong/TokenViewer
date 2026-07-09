@@ -130,6 +130,24 @@ mod tests {
         assert_eq!(fs::read_link(&nested_skill).unwrap(), shared_skill);
         assert!(core.registry.is_skill_linked("cursor", "formatter"));
     }
+
+    #[test]
+    fn ensure_git_initialized_creates_repo_for_plain_source_root() {
+        let dir = TempDir::new().unwrap();
+        let source_root = dir.path().join("shared-skills");
+        let codex_skills = dir.path().join(".codex").join("skills");
+        let config_dir = dir.path().join(".agents");
+        fs::create_dir_all(&source_root).unwrap();
+        fs::create_dir_all(&config_dir).unwrap();
+
+        let mut core = test_core(source_root.clone(), codex_skills, config_dir);
+        assert!(core.git.is_none());
+
+        core.ensure_git_initialized().unwrap();
+
+        assert!(core.git.is_some());
+        assert!(source_root.join(".git").exists());
+    }
 }
 
 impl SkillsCore {
@@ -165,6 +183,25 @@ impl SkillsCore {
             git_user_name: None,
             git_user_email: None,
         })
+    }
+
+    pub fn ensure_git_initialized(&mut self) -> Result<(), String> {
+        self.ensure_git_initialized_with_identity(None, None)
+    }
+
+    pub fn ensure_git_initialized_with_identity(
+        &mut self,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<(), String> {
+        if self.git.is_none() {
+            self.git = Some(GitEngine::open_or_init_with_identity(
+                &self.source_root,
+                user_name,
+                user_email,
+            )?);
+        }
+        Ok(())
     }
 
     pub fn delete_skill(&self, skill_id: &str) -> Result<(), String> {

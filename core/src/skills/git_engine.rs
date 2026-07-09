@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use git2::{Cred, RemoteCallbacks, Repository, Signature, Status, StatusOptions};
+use git2::{Cred, Oid, RemoteCallbacks, Repository, Signature, Status, StatusOptions};
 
 use crate::skills::models::{GitConnectivity, GitStatusInfo, PendingChange};
 
@@ -30,6 +30,74 @@ pub struct GitEngine {
     repo: Repository,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct SkillSyncFilter {
+    pub include_prefixes: Vec<String>,
+    pub include_skill_ids: Vec<String>,
+}
+
+impl SkillSyncFilter {
+    fn normalized_prefixes(&self) -> Vec<String> {
+        self.include_prefixes
+            .iter()
+            .map(|value| value.trim().trim_end_matches('*').to_string())
+            .filter(|value| !value.is_empty() && !value.contains('/'))
+            .collect()
+    }
+
+    fn normalized_skill_ids(&self) -> Vec<String> {
+        self.include_skill_ids
+            .iter()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty() && !value.contains('/'))
+            .collect()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.normalized_prefixes().is_empty() && self.normalized_skill_ids().is_empty()
+    }
+
+    fn matches_skill_id(&self, skill_id: &str) -> bool {
+        self.normalized_skill_ids()
+            .iter()
+            .any(|allowed| allowed == skill_id)
+            || self
+                .normalized_prefixes()
+                .iter()
+                .any(|prefix| skill_id.starts_with(prefix))
+    }
+
+    fn allows_path(&self, path: &str) -> bool {
+        let top_level = path.split('/').next().unwrap_or(path);
+        !top_level.is_empty() && !top_level.starts_with('.') && self.matches_skill_id(top_level)
+    }
+
+    fn included_worktree_skill_ids(&self, repo_path: &Path) -> Result<Vec<String>, String> {
+        let mut ids = self.normalized_skill_ids();
+        for entry in std::fs::read_dir(repo_path)
+            .map_err(|e| format!("Failed to read skill root {}: {}", repo_path.display(), e))?
+        {
+            let entry = entry.map_err(|e| format!("Failed to read skill root entry: {}", e))?;
+            let file_type = entry
+                .file_type()
+                .map_err(|e| format!("Failed to read skill root entry type: {}", e))?;
+            if !file_type.is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') {
+                continue;
+            }
+            if self.matches_skill_id(&name) {
+                ids.push(name);
+            }
+        }
+        ids.sort();
+        ids.dedup();
+        Ok(ids)
+    }
+}
+
 impl GitEngine {
     /// Open an existing git repository.
     pub fn open(repo_path: &Path) -> Result<Self, String> {
@@ -46,6 +114,14 @@ impl GitEngine {
     /// Initialize a new git repository at the given path.
     /// Creates the repo, sets up .gitignore, and makes an initial commit.
     pub fn init(repo_path: &Path) -> Result<Self, String> {
+        Self::init_with_identity(repo_path, None, None)
+    }
+
+    pub fn init_with_identity(
+        repo_path: &Path,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<Self, String> {
         // Create directory if it doesn't exist
         std::fs::create_dir_all(repo_path)
             .map_err(|e| format!("Failed to create directory {}: {}", repo_path.display(), e))?;
@@ -54,14 +130,22 @@ impl GitEngine {
             .map_err(|e| format!("Failed to init git repo at {}: {}", repo_path.display(), e))?;
 
         // Configure local user for commits
+        let configured_name = user_name
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("SkillSync");
+        let configured_email = user_email
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("skillsync@local");
         let mut config = repo
             .config()
             .map_err(|e| format!("Failed to get repo config: {}", e))?;
         config
-            .set_str("user.name", "SkillSync")
+            .set_str("user.name", configured_name)
             .map_err(|e| format!("Failed to set user.name: {}", e))?;
         config
-            .set_str("user.email", "skillsync@local")
+            .set_str("user.email", configured_email)
             .map_err(|e| format!("Failed to set user.email: {}", e))?;
         drop(config);
 
@@ -72,13 +156,14 @@ impl GitEngine {
                 .map_err(|e| format!("Failed to write .gitignore: {}", e))?;
         }
 
-        // Stage and make initial commit
+        // Keep the bootstrap commit metadata-only. Full and filtered pushes
+        // decide which skill directories enter history.
         let mut index = repo
             .index()
             .map_err(|e| format!("Failed to get index: {}", e))?;
         index
-            .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-            .map_err(|e| format!("Failed to stage files: {}", e))?;
+            .add_path(Path::new(".gitignore"))
+            .map_err(|e| format!("Failed to stage .gitignore: {}", e))?;
         index
             .write()
             .map_err(|e| format!("Failed to write index: {}", e))?;
@@ -107,10 +192,18 @@ impl GitEngine {
 
     /// Open an existing repo, or initialize a new one if it doesn't exist.
     pub fn open_or_init(repo_path: &Path) -> Result<Self, String> {
+        Self::open_or_init_with_identity(repo_path, None, None)
+    }
+
+    pub fn open_or_init_with_identity(
+        repo_path: &Path,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<Self, String> {
         if repo_path.join(".git").exists() {
             Self::open(repo_path)
         } else {
-            Self::init(repo_path)
+            Self::init_with_identity(repo_path, user_name, user_email)
         }
     }
 
@@ -365,28 +458,80 @@ impl GitEngine {
         user_name: Option<&str>,
         user_email: Option<&str>,
     ) -> Result<(), String> {
+        self.auto_commit_matching(None, user_name, user_email)
+    }
+
+    fn auto_commit_filtered(
+        &mut self,
+        filter: &SkillSyncFilter,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<(), String> {
+        self.auto_commit_matching(Some(filter), user_name, user_email)
+    }
+
+    fn auto_commit_matching(
+        &mut self,
+        filter: Option<&SkillSyncFilter>,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<(), String> {
         debug_log!(" auto_commit: checking pending changes");
         let changes = self.get_pending_changes()?;
-        if changes.is_empty() {
-            debug_log!(" auto_commit: no pending changes, skipping");
-            return Ok(());
-        }
-
-        debug_log!(" auto_commit: {} pending changes", changes.len());
-        for c in &changes {
-            debug_log!(" auto_commit:   {} - {}", c.change_type, c.file_path);
-        }
-
-        let file_count = changes.len();
+        let changes: Vec<PendingChange> = match filter {
+            Some(filter) => changes
+                .into_iter()
+                .filter(|change| filter.allows_path(&change.file_path))
+                .collect(),
+            None => changes,
+        };
 
         let mut index = self
             .repo
             .index()
             .map_err(|e| format!("Failed to get index: {}", e))?;
 
-        index
-            .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-            .map_err(|e| format!("Failed to stage files: {}", e))?;
+        let removed_count = match filter {
+            Some(filter) => Self::remove_disallowed_tracked_entries(&mut index, filter)?,
+            None => 0,
+        };
+
+        if changes.is_empty() && removed_count == 0 {
+            debug_log!(" auto_commit: no pending changes, skipping");
+            return Ok(());
+        }
+
+        debug_log!(
+            " auto_commit: {} pending changes, {} filtered removals",
+            changes.len(),
+            removed_count
+        );
+        for c in &changes {
+            debug_log!(" auto_commit:   {} - {}", c.change_type, c.file_path);
+        }
+
+        let file_count = changes.len() + removed_count;
+
+        if let Some(filter) = filter {
+            let mut pathspecs: Vec<String> = changes
+                .iter()
+                .filter_map(|change| change.file_path.split('/').next())
+                .filter(|skill_id| filter.matches_skill_id(skill_id))
+                .map(|skill_id| format!("{skill_id}/**"))
+                .collect();
+            pathspecs.sort();
+            pathspecs.dedup();
+            if !pathspecs.is_empty() {
+                let pathspec_refs: Vec<&str> = pathspecs.iter().map(String::as_str).collect();
+                index
+                    .add_all(pathspec_refs, git2::IndexAddOption::DEFAULT, None)
+                    .map_err(|e| format!("Failed to stage filtered files: {}", e))?;
+            }
+        } else {
+            index
+                .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
+                .map_err(|e| format!("Failed to stage files: {}", e))?;
+        }
 
         index
             .write()
@@ -439,6 +584,142 @@ impl GitEngine {
             }
         }
 
+        Ok(())
+    }
+
+    fn remove_disallowed_tracked_entries(
+        index: &mut git2::Index,
+        filter: &SkillSyncFilter,
+    ) -> Result<usize, String> {
+        let paths: Vec<String> = index
+            .iter()
+            .filter_map(|entry| String::from_utf8(entry.path.to_vec()).ok())
+            .filter(|path| {
+                let Some((top_level, _rest)) = path.split_once('/') else {
+                    return false;
+                };
+                !top_level.starts_with('.') && !filter.matches_skill_id(top_level)
+            })
+            .collect();
+
+        for path in &paths {
+            index
+                .remove_path(Path::new(path))
+                .map_err(|e| format!("Failed to untrack filtered path {}: {}", path, e))?;
+        }
+
+        Ok(paths.len())
+    }
+
+    fn commit_filtered_snapshot(
+        &mut self,
+        filter: &SkillSyncFilter,
+        parent_oid: Option<Oid>,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<bool, String> {
+        let workdir = self
+            .repo
+            .workdir()
+            .ok_or("Git repository has no working directory")?;
+        let parent = match parent_oid {
+            Some(oid) => Some(
+                self.repo
+                    .find_commit(oid)
+                    .map_err(|e| format!("Failed to find remote parent commit: {}", e))?,
+            ),
+            None => self
+                .repo
+                .head()
+                .ok()
+                .and_then(|head| head.target())
+                .and_then(|oid| self.repo.find_commit(oid).ok()),
+        };
+
+        let mut index = self
+            .repo
+            .index()
+            .map_err(|e| format!("Failed to get index: {}", e))?;
+
+        if let Some(parent) = parent.as_ref() {
+            let tree = parent
+                .tree()
+                .map_err(|e| format!("Failed to read parent tree: {}", e))?;
+            index
+                .read_tree(&tree)
+                .map_err(|e| format!("Failed to load parent tree into index: {}", e))?;
+        } else {
+            index.clear().map_err(|e| format!("Failed to clear index: {}", e))?;
+        }
+
+        Self::remove_disallowed_tracked_entries(&mut index, filter)?;
+
+        let skill_ids = filter.included_worktree_skill_ids(workdir)?;
+        for skill_id in &skill_ids {
+            let pathspec = format!("{skill_id}/**");
+            index
+                .add_all([pathspec.as_str()].iter(), git2::IndexAddOption::DEFAULT, None)
+                .map_err(|e| format!("Failed to stage filtered skill {}: {}", skill_id, e))?;
+        }
+
+        index
+            .write()
+            .map_err(|e| format!("Failed to write filtered index: {}", e))?;
+        let tree_oid = index
+            .write_tree()
+            .map_err(|e| format!("Failed to write filtered tree: {}", e))?;
+        let tree = self
+            .repo
+            .find_tree(tree_oid)
+            .map_err(|e| format!("Failed to find filtered tree: {}", e))?;
+
+        if let Some(parent) = parent.as_ref() {
+            let parent_tree_id = parent
+                .tree()
+                .map_err(|e| format!("Failed to read parent tree: {}", e))?
+                .id();
+            if parent_tree_id == tree.id() {
+                debug_log!(" commit_filtered_snapshot: no filtered tree changes");
+                return Ok(false);
+            }
+        }
+
+        let sig = self.signature(user_name, user_email)?;
+        let parents: Vec<&git2::Commit> = parent.iter().collect();
+        let message = format!(
+            "Auto-commit filtered sync ({} skill{})",
+            skill_ids.len(),
+            if skill_ids.len() == 1 { "" } else { "s" }
+        );
+        let commit_oid = if parent_oid.is_some() {
+            let oid = self
+                .repo
+                .commit(None, &sig, &sig, &message, &tree, &parents)
+                .map_err(|e| format!("Failed to create filtered sync commit: {}", e))?;
+            self.update_current_branch(oid)?;
+            oid
+        } else {
+            self.repo
+                .commit(Some("HEAD"), &sig, &sig, &message, &tree, &parents)
+                .map_err(|e| format!("Failed to create filtered sync commit: {}", e))?
+        };
+        debug_log!(" commit_filtered_snapshot: committed \"{}\"", message);
+        debug_log!(" commit_filtered_snapshot: oid={}", commit_oid);
+        Ok(true)
+    }
+
+    fn update_current_branch(&self, oid: Oid) -> Result<(), String> {
+        let branch = self.current_branch()?;
+        let ref_name = format!("refs/heads/{branch}");
+        if let Ok(mut reference) = self.repo.find_reference(&ref_name) {
+            reference
+                .set_target(oid, "filtered sync")
+                .map_err(|e| format!("Failed to update branch {}: {}", branch, e))?;
+        } else {
+            self.repo
+                .reference(&ref_name, oid, true, "filtered sync")
+                .map_err(|e| format!("Failed to create branch {}: {}", branch, e))?;
+        }
         Ok(())
     }
 
@@ -535,6 +816,53 @@ impl GitEngine {
         }
 
         Ok(GitStatusInfo::synced())
+    }
+
+    /// Auto-commit allowed pending skill changes, pull-rebase, and push.
+    pub fn stage_and_push_filtered(
+        &mut self,
+        _message: &str,
+        filter: &SkillSyncFilter,
+        token: Option<&str>,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<GitStatusInfo, String> {
+        debug_log!(" stage_and_push_filtered: start");
+
+        if self.has_remote() {
+            debug_log!(" stage_and_push_filtered: has remote, fetching parent");
+            let remote_parent = self.fetch_remote_head(token)?;
+            self.commit_filtered_snapshot(filter, remote_parent, user_name, user_email)?;
+            debug_log!(" stage_and_push_filtered: filtered commit ok, starting push");
+            self.push(token)?;
+            debug_log!(" stage_and_push_filtered: push ok");
+        } else {
+            debug_log!(" stage_and_push_filtered: no remote configured");
+            self.auto_commit_filtered(filter, user_name, user_email)?;
+        }
+
+        self.get_status()
+    }
+
+    fn fetch_remote_head(&self, token: Option<&str>) -> Result<Option<Oid>, String> {
+        let branch = match self.current_branch() {
+            Ok(branch) => branch,
+            Err(_) => return Ok(None),
+        };
+        self.fetch_origin(&branch, token)?;
+        let fetch_head_path = self.repo.path().join("FETCH_HEAD");
+        let is_empty = !fetch_head_path.exists()
+            || std::fs::metadata(&fetch_head_path)
+                .map(|m| m.len() == 0)
+                .unwrap_or(true);
+        if is_empty {
+            return Ok(None);
+        }
+        let fetch_head = self
+            .repo
+            .find_reference("FETCH_HEAD")
+            .map_err(|e| format!("Failed to find FETCH_HEAD: {}", e))?;
+        Ok(fetch_head.target())
     }
 
     /// Check if the repository has a remote configured.
@@ -810,6 +1138,167 @@ mod tests {
         assert!(result.is_ok());
         let status = engine.get_status().unwrap();
         assert_eq!(status.status, "idle");
+    }
+
+    #[test]
+    fn test_stage_and_push_filtered_only_commits_allowed_skill_prefix() {
+        let dir = TempDir::new().unwrap();
+        init_git_repo(dir.path());
+        fs::create_dir_all(dir.path().join("webkong-one")).unwrap();
+        fs::create_dir_all(dir.path().join("other-one")).unwrap();
+        fs::write(dir.path().join("webkong-one").join("SKILL.md"), "webkong\n").unwrap();
+        fs::write(dir.path().join("other-one").join("SKILL.md"), "other\n").unwrap();
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "Add skills"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+
+        fs::write(
+            dir.path().join("webkong-one").join("SKILL.md"),
+            "webkong updated\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("other-one").join("SKILL.md"),
+            "other updated\n",
+        )
+        .unwrap();
+
+        let filter = SkillSyncFilter {
+            include_prefixes: vec!["webkong".to_string()],
+            include_skill_ids: Vec::new(),
+        };
+        let mut engine = GitEngine::open(dir.path()).unwrap();
+        let result = engine.stage_and_push_filtered("test: filtered", &filter, None, None, None);
+        assert!(result.is_ok());
+
+        let head_webkong = Command::new("git")
+            .args(["show", "HEAD:webkong-one/SKILL.md"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let head_other = Command::new("git")
+            .args(["show", "HEAD:other-one/SKILL.md"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+
+        assert_eq!(String::from_utf8_lossy(&head_webkong.stdout), "webkong updated\n");
+        assert!(!head_other.status.success());
+        assert!(dir.path().join("other-one").join("SKILL.md").exists());
+    }
+
+    #[test]
+    fn test_open_or_init_does_not_commit_existing_skills_before_filtering() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("webkong-one")).unwrap();
+        fs::create_dir_all(dir.path().join("other-one")).unwrap();
+        fs::write(dir.path().join("webkong-one").join("SKILL.md"), "webkong\n").unwrap();
+        fs::write(dir.path().join("other-one").join("SKILL.md"), "other\n").unwrap();
+
+        let _engine = GitEngine::open_or_init(dir.path()).unwrap();
+
+        let head_webkong = Command::new("git")
+            .args(["show", "HEAD:webkong-one/SKILL.md"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let head_other = Command::new("git")
+            .args(["show", "HEAD:other-one/SKILL.md"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let head_gitignore = Command::new("git")
+            .args(["show", "HEAD:.gitignore"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+
+        assert!(!head_webkong.status.success());
+        assert!(!head_other.status.success());
+        assert!(head_gitignore.status.success());
+    }
+
+    #[test]
+    fn test_open_or_init_uses_configured_commit_identity_for_bootstrap_commit() {
+        let dir = TempDir::new().unwrap();
+
+        let _engine = GitEngine::open_or_init_with_identity(
+            dir.path(),
+            Some("Configured User"),
+            Some("configured@example.com"),
+        )
+        .unwrap();
+
+        let author = Command::new("git")
+            .args(["log", "-1", "--format=%an <%ae>"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+
+        assert_eq!(
+            String::from_utf8_lossy(&author.stdout).trim(),
+            "Configured User <configured@example.com>"
+        );
+    }
+
+    #[test]
+    fn test_filtered_snapshot_can_use_remote_parent_when_local_head_diverged() {
+        let dir = TempDir::new().unwrap();
+        init_git_repo(dir.path());
+        fs::create_dir_all(dir.path().join("webkong-one")).unwrap();
+        fs::write(dir.path().join("webkong-one").join("SKILL.md"), "webkong\n").unwrap();
+
+        let mut engine = GitEngine::open(dir.path()).unwrap();
+        let sig = engine.signature(Some("Remote User"), Some("remote@example.com")).unwrap();
+        let head_oid = engine.repo.head().unwrap().target().unwrap();
+        let head_commit = engine.repo.find_commit(head_oid).unwrap();
+        let head_tree = head_commit.tree().unwrap();
+        let remote_parent_oid = engine
+            .repo
+            .commit(
+                None,
+                &sig,
+                &sig,
+                "Remote parent",
+                &head_tree,
+                &[&head_commit],
+            )
+            .unwrap();
+        drop(head_tree);
+        drop(head_commit);
+
+        fs::write(dir.path().join("local-only.txt"), "local\n").unwrap();
+        let local_result = engine.stage_and_push("local: diverge", None, None, None);
+        assert!(local_result.is_ok());
+
+        let filter = SkillSyncFilter {
+            include_prefixes: vec!["webkong".to_string()],
+            include_skill_ids: Vec::new(),
+        };
+        let result = engine.commit_filtered_snapshot(
+            &filter,
+            Some(remote_parent_oid),
+            Some("Configured User"),
+            Some("configured@example.com"),
+        );
+
+        assert!(result.is_ok());
+        let parent = Command::new("git")
+            .args(["log", "-1", "--format=%P"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&parent.stdout).trim(),
+            remote_parent_oid.to_string()
+        );
     }
 
     #[test]
