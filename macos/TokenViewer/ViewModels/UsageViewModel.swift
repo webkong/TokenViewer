@@ -98,7 +98,7 @@ class UsageViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var selectedRange: TimeRange = .week
     /// Custom range bounds (local calendar days), used when selectedRange == .custom.
-    @Published var customFrom: Date = Calendar.current.date(byAdding: .day, value: -29, to: Calendar.current.startOfDay(for: Date())) ?? Date()
+    @Published var customFrom: Date = AppTime.localCalendar.date(byAdding: .day, value: -29, to: AppTime.localStartOfDay(for: Date())) ?? Date()
     @Published var customTo: Date = Date()
 
     enum TimeRange: String, CaseIterable {
@@ -123,22 +123,10 @@ class UsageViewModel: ObservableObject {
     /// Use the hourly trend granularity for single-day windows.
     var isHourlyView: Bool {
         selectedRange == .today
-            || (selectedRange == .custom && Calendar.current.isDate(customFrom, inSameDayAs: customTo))
+            || (selectedRange == .custom && AppTime.isSameLocalDay(customFrom, customTo))
     }
 
     private let decoder = JSONDecoder()
-
-    private static let dayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
-        f.timeZone = TimeZone(identifier: "UTC")
-        return f
-    }()
-
-    /// Convert a local calendar date to its UTC ISO start string (e.g. local 06-03 00:00 CST → 2026-06-02T16:00:00Z)
-    private static func utcISO(for date: Date) -> String {
-        dayFormatter.string(from: date)
-    }
 
     init() {
         // Auto-sync on first load
@@ -202,25 +190,15 @@ class UsageViewModel: ObservableObject {
 
     /// Build the 4 period summary cards (Today / 7D / 30D / Total) for the menu-bar panel.
     nonisolated private static func fetchPanelCards() -> [PanelCard] {
-        let cal = Calendar.current
         let now = Date()
-        let todayStart = cal.startOfDay(for: now)
-        let tomorrowStart = cal.date(byAdding: .day, value: 1, to: todayStart)!
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
-        f.timeZone = TimeZone(identifier: "UTC")
-        let tomorrow = f.string(from: tomorrowStart)
-        func from(daysAgo: Int) -> String {
-            f.string(from: cal.date(byAdding: .day, value: -daysAgo, to: todayStart)!)
-        }
-        func summary(_ fromStr: String) -> UsageSummary? {
-            CoreBridge.shared.querySummary(from: fromStr, to: tomorrow)
+        func summary(_ range: UsageQueryRange) -> UsageSummary? {
+            CoreBridge.shared.querySummary(from: range.from, to: range.to)
                 .flatMap { try? JSONDecoder().decode(UsageSummary.self, from: $0) }
         }
-        let todayS = summary(from(daysAgo: 0))
-        let d7 = summary(from(daysAgo: 7))
-        let d30 = summary(from(daysAgo: 29))
-        let total = summary("2020-01-01T00:00:00Z")
+        let todayS = summary(AppTime.trailingLocalDays(1, now: now))
+        let d7 = summary(AppTime.trailingLocalDays(7, now: now))
+        let d30 = summary(AppTime.trailingLocalDays(30, now: now))
+        let total = summary(AppTime.allUsage(through: now))
         let isZh = Locale.current.language.languageCode?.identifier.hasPrefix("zh") ?? false
         let langCode = UserDefaults.standard.string(forKey: "appLanguage") ?? "system"
         let zh = langCode == "zh" || (langCode == "system" && isZh)
@@ -282,28 +260,19 @@ class UsageViewModel: ObservableObject {
     }
 
     private func dateRange(for range: TimeRange) -> (String, String) {
-        let cal = Calendar.current
-        let todayStart = cal.startOfDay(for: Date())
-        let tomorrowStart = cal.date(byAdding: .day, value: 1, to: todayStart)!
-        let to = Self.utcISO(for: tomorrowStart)
-
-        let from: String
+        let queryRange: UsageQueryRange
         switch range {
         case .today:
-            from = Self.utcISO(for: todayStart)
+            queryRange = AppTime.trailingLocalDays(1)
         case .week:
-            from = Self.utcISO(for: cal.date(byAdding: .day, value: -7, to: todayStart)!)
+            queryRange = AppTime.trailingLocalDays(7)
         case .month:
-            from = Self.utcISO(for: cal.date(byAdding: .month, value: -1, to: todayStart)!)
+            queryRange = AppTime.trailingLocalDays(30)
         case .all:
-            from = "2020-01-01T00:00:00Z"
+            queryRange = AppTime.allUsage()
         case .custom:
-            // Inclusive [min(day) 00:00, max(day)+1 00:00); order-safe against inverted picks.
-            let lo = cal.startOfDay(for: min(customFrom, customTo))
-            let hi = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: max(customFrom, customTo)))!
-            return (Self.utcISO(for: lo), Self.utcISO(for: hi))
+            queryRange = AppTime.inclusiveLocalDays(from: customFrom, through: customTo)
         }
-        return (from, to)
-        // Debug: print("dateRange(\(range)): from=\(from) to=\(to)")
+        return (queryRange.from, queryRange.to)
     }
 }

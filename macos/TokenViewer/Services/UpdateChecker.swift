@@ -157,12 +157,7 @@ final class UpdateChecker: ObservableObject {
     }
 
     private func todayStamp() -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: Date())
+        AppTime.localDayKey(for: Date())
     }
 
     private func presentConfirmation(for release: ReleaseInfo) -> Bool {

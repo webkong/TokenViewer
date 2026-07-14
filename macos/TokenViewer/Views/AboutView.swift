@@ -122,7 +122,7 @@ struct AboutView: View {
             }
             .padding(20)
 
-            Text(l10n.copyrightFooter(year: Calendar.current.component(.year, from: Date())))
+            Text(l10n.copyrightFooter(year: AppTime.localCalendar.component(.year, from: Date())))
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .center)

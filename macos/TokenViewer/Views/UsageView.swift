@@ -455,14 +455,6 @@ private struct HeatmapView: View {
     @State private var gridWidth: CGFloat = 600
     @ObservedObject private var l10n = L10n.shared
 
-    private static let parser: DateFormatter = {
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone.current
-        f.locale = Locale(identifier: "en_US_POSIX"); return f
-    }()
-    private static var cal: Calendar {
-        var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone.current; return c
-    }
-
     private func color(_ level: UInt8) -> Color {
         switch level {
         case 0: return Color.gray.opacity(0.12)
@@ -478,20 +470,21 @@ private struct HeatmapView: View {
     private struct Cell { let date: Date; let level: UInt8; let count: UInt64 }
     private func buildColumns() -> [[Cell?]] {
         let byDate = Dictionary(uniqueKeysWithValues: points.compactMap { p -> (Date, HeatmapPoint)? in
-            Self.parser.date(from: p.date).map { (Self.cal.startOfDay(for: $0), p) }
+            AppTime.localDate(fromDayKey: p.date).map { (AppTime.localStartOfDay(for: $0), p) }
         })
         let weeks = 53
-        let today = Self.cal.startOfDay(for: Date())
+        let calendar = AppTime.localCalendar
+        let today = calendar.startOfDay(for: Date())
         // Start on the Sunday (weeks-1) weeks before this week's Sunday.
-        let weekday = Self.cal.component(.weekday, from: today) // 1=Sun
-        let thisSunday = Self.cal.date(byAdding: .day, value: -(weekday - 1), to: today)!
-        let start = Self.cal.date(byAdding: .day, value: -(weeks - 1) * 7, to: thisSunday)!
+        let weekday = calendar.component(.weekday, from: today) // 1=Sun
+        let thisSunday = calendar.date(byAdding: .day, value: -(weekday - 1), to: today)!
+        let start = calendar.date(byAdding: .day, value: -(weeks - 1) * 7, to: thisSunday)!
 
         var columns: [[Cell?]] = []
         for w in 0..<weeks {
             var col: [Cell?] = []
             for r in 0..<7 {
-                let d = Self.cal.date(byAdding: .day, value: w * 7 + r, to: start)!
+                let d = calendar.date(byAdding: .day, value: w * 7 + r, to: start)!
                 if let p = byDate[d] {
                     col.append(Cell(date: d, level: p.level, count: p.count))
                 } else {
@@ -507,8 +500,8 @@ private struct HeatmapView: View {
     /// Month label per column (shown when month changes).
     private func monthLabel(_ columns: [[Cell?]], _ i: Int) -> String? {
         guard let first = columns[i].compactMap({ $0?.date }).first else { return nil }
-        let m = Self.cal.component(.month, from: first)
-        let prevM = i > 0 ? columns[i-1].compactMap({ $0?.date }).first.map { Self.cal.component(.month, from: $0) } : nil
+        let m = AppTime.localCalendar.component(.month, from: first)
+        let prevM = i > 0 ? columns[i-1].compactMap({ $0?.date }).first.map { AppTime.localCalendar.component(.month, from: $0) } : nil
         return (i == 0 || m != prevM) ? "\(m)月" : nil
     }
 
@@ -585,7 +578,7 @@ private struct HeatmapView: View {
     }
 
     private func helpText(_ cell: Cell) -> String {
-        let ds = Self.parser.string(from: cell.date)
+        let ds = AppTime.localDayKey(for: cell.date)
         if cell.count > 0 { return "\(ds): \(tvFormatTokens(cell.count))" }
         return "\(ds): 0"
     }
@@ -596,23 +589,18 @@ private struct HeatmapView: View {
 private struct DailyTableView: View {
     let data: [DailyPoint]
 
-    private static let parser: DateFormatter = {
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "UTC")
-        f.locale = Locale(identifier: "en_US_POSIX"); return f
-    }()
-
     /// Build a contiguous descending date list; days without a record are nil ("—").
     private func rows() -> [(date: String, point: DailyPoint?)] {
         let byDate = Dictionary(uniqueKeysWithValues: data.map { ($0.date, $0) })
         guard let maxStr = data.map({ $0.date }).max(),
-              let maxDate = Self.parser.date(from: maxStr) else { return [] }
-        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
+              let maxDate = AppTime.localDate(fromDayKey: maxStr) else { return [] }
+        let calendar = AppTime.localCalendar
         var out: [(String, DailyPoint?)] = []
         var d = maxDate
         for _ in 0..<14 {
-            let key = Self.parser.string(from: d)
+            let key = AppTime.localDayKey(for: d)
             out.append((key, byDate[key]))
-            d = cal.date(byAdding: .day, value: -1, to: d)!
+            d = calendar.date(byAdding: .day, value: -1, to: d)!
         }
         return out
     }

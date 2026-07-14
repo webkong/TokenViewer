@@ -1,4 +1,5 @@
 use serde_json::Value;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use super::utils::*;
@@ -12,23 +13,59 @@ pub fn parse(
     let mut all_records = Vec::new();
 
     let standard_base = home_dir.join(".codex/sessions");
-    scan_codex_base(&standard_base, &mut cursor, &mut all_records, "codex");
+    let mut session_bases = vec![standard_base.clone()];
+    let mut seen_bases = std::collections::HashSet::new();
+    seen_bases.insert(standard_base);
 
-    // Some launchers (e.g. sandboxed dev tooling) redirect Codex's own config
-    // root via $CODEX_HOME, so its rollout files land outside ~/.codex.
-    // Only consult it as an *additional* location when `home_dir` is the
-    // real OS home directory — never for synthetic/test home dirs — so
-    // behavior (and tests, which use temp dirs) is unaffected by whatever
-    // $CODEX_HOME happens to be set to in the calling process's shell.
+    // $CODEX_HOME overrides/extends where Codex looks for its config + session
+    // data. Some launchers (e.g. sandboxed dev tooling) redirect it to a
+    // sandboxed runtime home, so rollout files land outside ~/.codex. Codex
+    // itself (and reference tools like ccusage) treat $CODEX_HOME as one
+    // directory OR a comma-separated list of directories — mirror that so any
+    // tool following the same convention is picked up without special-casing
+    // it by name. Missing entries are silently skipped (scan_codex_base is a
+    // no-op if the path doesn't exist), so an unresolvable/irrelevant entry
+    // costs nothing.
+    //
+    // Only consult it when `home_dir` is the real OS home directory — never
+    // for synthetic/test home dirs — so behavior (and tests, which use temp
+    // dirs) is unaffected by whatever $CODEX_HOME happens to be set to in the
+    // calling process's shell.
     if dirs::home_dir().as_deref() == Some(home_dir) {
-        if let Ok(dir) = std::env::var("CODEX_HOME") {
-            if !dir.is_empty() {
-                let alt_base = PathBuf::from(dir).join("sessions");
-                if alt_base != standard_base {
-                    scan_codex_base(&alt_base, &mut cursor, &mut all_records, "codex");
+        if let Ok(raw) = std::env::var("CODEX_HOME") {
+            for entry in raw.split(',') {
+                let entry = entry.trim();
+                if entry.is_empty() {
+                    continue;
+                }
+                let alt_base = PathBuf::from(entry).join("sessions");
+                if seen_bases.insert(alt_base.clone()) {
+                    session_bases.push(alt_base);
                 }
             }
         }
+
+        // Orca runs Codex with a sandboxed runtime home. TokenViewer is often
+        // launched from Finder or a login item and therefore cannot rely on
+        // inheriting Orca's CODEX_HOME environment variable. Discover Orca's
+        // stable macOS runtime path directly so those sessions are always
+        // included in usage sync.
+        let orca_base =
+            home_dir.join("Library/Application Support/orca/codex-runtime-home/home/sessions");
+        if seen_bases.insert(orca_base.clone()) {
+            session_bases.push(orca_base);
+        }
+    }
+
+    let mut seen_rollouts = std::collections::HashSet::new();
+    for base in session_bases {
+        scan_codex_base(
+            &base,
+            &mut cursor,
+            &mut all_records,
+            &mut seen_rollouts,
+            "codex",
+        );
     }
 
     Ok((aggregate_records(all_records), cursor.to_json()))
@@ -43,7 +80,14 @@ pub fn parse_codex_format(
     let base = home_dir.join(rel_dir);
     let mut cursor = FileCursor::from_json(cursor_data);
     let mut all_records = Vec::new();
-    scan_codex_base(&base, &mut cursor, &mut all_records, source);
+    let mut seen_rollouts = std::collections::HashSet::new();
+    scan_codex_base(
+        &base,
+        &mut cursor,
+        &mut all_records,
+        &mut seen_rollouts,
+        source,
+    );
     Ok((aggregate_records(all_records), cursor.to_json()))
 }
 
@@ -53,6 +97,7 @@ fn scan_codex_base(
     base: &Path,
     cursor: &mut FileCursor,
     all_records: &mut Vec<UsageRecord>,
+    seen_rollouts: &mut std::collections::HashSet<OsString>,
     source: &str,
 ) {
     if !base.exists() {
@@ -62,6 +107,15 @@ fn scan_codex_base(
     let files = cursor.glob_cached(&pattern, base);
 
     for file in files {
+        // Orca mirrors standard Codex sessions as hard links under its runtime
+        // home. A rollout filename contains the globally unique session ID, so
+        // use it as the cross-root identity and import each session only once.
+        let Some(rollout_name) = file.file_name().map(OsString::from) else {
+            continue;
+        };
+        if !seen_rollouts.insert(rollout_name) {
+            continue;
+        }
         let key = file.to_string_lossy().to_string();
         if !cursor.file_changed(&key) {
             continue;

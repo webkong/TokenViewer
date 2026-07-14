@@ -95,7 +95,7 @@ enum LimitsService {
         for (key, label) in [("five_hour", "5 Hour"), ("seven_day", "7 Day"), ("seven_day_opus", "7 Day (Opus)")] {
             if let w = json[key] as? [String: Any] {
                 let util = (w["utilization"] as? Double) ?? Double(w["utilization"] as? Int ?? 0)
-                windows.append(LimitWindow(label: label, usedPercent: util, resetAt: parseDate(w["resets_at"])))
+                windows.append(LimitWindow(label: label, usedPercent: util, resetAt: ProviderDateParser.parse(w["resets_at"])))
             }
         }
         return ProviderLimit(name: name, planLabel: planLabel(claudeSubscription(), "Claude"), configured: true, error: nil, windows: windows)
@@ -251,7 +251,7 @@ enum LimitsService {
     }
 
     private static func codexResetDate(_ window: [String: Any]) -> Date? {
-        parseDate(window["reset_at"] ?? window["resets_at"] ?? window["resetsAt"] ?? window["resetAt"])
+        ProviderDateParser.parse(window["reset_at"] ?? window["resets_at"] ?? window["resetsAt"] ?? window["resetAt"])
     }
 
     private static func codexWindowLabel(for kind: CodexRateWindowKind?, fallback: String) -> String {
@@ -284,7 +284,7 @@ enum LimitsService {
             return ProviderLimit(name: name, planLabel: nil, configured: true, error: "Request failed", windows: [])
         }
         let plan = planLabel(json["copilot_plan"] as? String, "Copilot")
-        let reset = parseDate(json["quota_reset_date"])
+        let reset = ProviderDateParser.parse(json["quota_reset_date"])
         var windows: [LimitWindow] = []
         if let snaps = json["quota_snapshots"] as? [String: Any] {
             for (key, label) in [("premium_interactions", "Premium"), ("chat", "Chat")] {
@@ -375,8 +375,8 @@ enum LimitsService {
             pct = used / lim * 100
         }
         var windows: [LimitWindow] = []
-        if let p = pct { windows.append(LimitWindow(label: "Plan", usedPercent: p, resetAt: parseDate(billing))) }
-        let resetAt = parseDate(billing)
+        if let p = pct { windows.append(LimitWindow(label: "Plan", usedPercent: p, resetAt: ProviderDateParser.parse(billing))) }
+        let resetAt = ProviderDateParser.parse(billing)
         return ProviderLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, quotaResetAt: resetAt, windows: windows)
     }
 
@@ -401,7 +401,7 @@ enum LimitsService {
         var resetAt: Date? = nil
         for bucket in buckets {
             if let frac = bucket["remainingFraction"] as? Double { lowestFrac = min(lowestFrac, frac) }
-            if resetAt == nil { resetAt = parseDate(bucket["resetTime"]) }
+            if resetAt == nil { resetAt = ProviderDateParser.parse(bucket["resetTime"]) }
         }
         let used = (1.0 - lowestFrac) * 100
         let windows = buckets.isEmpty ? [] : [LimitWindow(label: "Quota", usedPercent: used, resetAt: resetAt)]
@@ -432,7 +432,7 @@ enum LimitsService {
             let limit = numeric(usage["limit"]) ?? 0
             let used = numeric(usage["used"]) ?? 0
             let pct = limit > 0 ? used / limit * 100 : 0
-            windows.append(LimitWindow(label: "Usage", usedPercent: pct, resetAt: parseDate(usage["resetTime"] ?? usage["reset_at"])))
+            windows.append(LimitWindow(label: "Usage", usedPercent: pct, resetAt: ProviderDateParser.parse(usage["resetTime"] ?? usage["reset_at"])))
         }
         return ProviderLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
     }
@@ -667,7 +667,7 @@ enum LimitsService {
             let used = numeric(b["used_units"]) ?? 0
             let total = numeric(b["total_units"]) ?? 0
             let pct = total > 0 ? (used / total * 100) : 0
-            let resetAt = parseDate(b["period_end"])
+            let resetAt = ProviderDateParser.parse(b["period_end"])
             windows.append(LimitWindow(label: label, usedPercent: pct, resetAt: resetAt))
         }
 
@@ -767,7 +767,7 @@ enum LimitsService {
 
     private static func fetchCodexAccountCheckSubscription(accessToken: String, accountId: String?) async -> (accountId: String?, expiresAt: Date?) {
         var comps = URLComponents(string: "https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27")!
-        comps.queryItems = [URLQueryItem(name: "timezone_offset_min", value: "\(-TimeZone.current.secondsFromGMT() / 60)")]
+        comps.queryItems = [URLQueryItem(name: "timezone_offset_min", value: "\(-AppTime.localTimeZone.secondsFromGMT() / 60)")]
         guard let url = comps.url else { return (nil, nil) }
         let req = codexSubscriptionRequest(url: url, accessToken: accessToken, accountId: nil, targetPath: "/backend-api/accounts/check/v4-2023-04-27")
         guard let json = await getJSON(req) else { return (nil, nil) }
@@ -780,7 +780,7 @@ enum LimitsService {
         guard let url = comps.url else { return nil }
         let req = codexSubscriptionRequest(url: url, accessToken: accessToken, accountId: nil, targetPath: "/backend-api/subscriptions")
         guard let json = await getJSON(req) else { return nil }
-        return parseDate(json["active_until"] ?? json["expires_at"])
+        return ProviderDateParser.parse(json["active_until"] ?? json["expires_at"])
     }
 
     private static func codexSubscriptionRequest(url: URL, accessToken: String, accountId: String?, targetPath: String) -> URLRequest {
@@ -806,7 +806,7 @@ enum LimitsService {
         let account = (selected["account"] as? [String: Any]) ?? selected
         let entitlement = selected["entitlement"] as? [String: Any]
         let accountId = firstString(account, keys: ["account_id", "id", "chatgpt_account_id", "workspace_id"])
-        let expiresAt = parseDate(entitlement?["expires_at"] ?? account["expires_at"])
+        let expiresAt = ProviderDateParser.parse(entitlement?["expires_at"] ?? account["expires_at"])
         return (accountId, expiresAt)
     }
 
@@ -865,20 +865,6 @@ enum LimitsService {
             if let d = Double(trimmed) { return d }
         }
         return nil
-    }
-
-    private static func parseDate(_ v: Any?) -> Date? {
-        // Epoch seconds (codex reset_at) or millis.
-        if let n = numeric(v), n > 0 {
-            let secs = n > 1_000_000_000_000 ? n / 1000 : n
-            return Date(timeIntervalSince1970: secs)
-        }
-        guard let s = v as? String, !s.isEmpty else { return nil }
-        let iso = ISO8601DateFormatter()
-        if let d = iso.date(from: s) { return d }
-        // YYYY-MM-DD
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "UTC")
-        return f.date(from: s)
     }
 
     private static func firstString(_ object: [String: Any], keys: [String]) -> String? {
@@ -1069,17 +1055,13 @@ enum LimitsService {
     private static func workbuddyUserResourceBody() -> [String: Any] {
         let now = Date()
         let end = Calendar(identifier: .gregorian).date(byAdding: .year, value: 101, to: now) ?? now
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone.current
         return [
             "PageNumber": 1,
             "PageSize": 100,
             "ProductCode": "p_tcaca",
             "Status": [0, 3],
-            "PackageEndTimeRangeBegin": formatter.string(from: now),
-            "PackageEndTimeRangeEnd": formatter.string(from: end),
+            "PackageEndTimeRangeBegin": ProviderDateParser.localString(from: now, format: "yyyy-MM-dd HH:mm:ss"),
+            "PackageEndTimeRangeEnd": ProviderDateParser.localString(from: end, format: "yyyy-MM-dd HH:mm:ss"),
         ]
     }
 
@@ -1160,7 +1142,7 @@ enum LimitsService {
                 guard itemTotal > 0 else { continue }
                 total += itemTotal
                 used += max(itemTotal - itemRemain, 0)
-                let candidate = parseDate(item["CycleEndTime"] ?? item["ExpiredTime"] ?? item["DeductionEndTime"])
+                let candidate = ProviderDateParser.parse(item["CycleEndTime"] ?? item["ExpiredTime"] ?? item["DeductionEndTime"])
                 if let candidate {
                     resetAt = nearestFutureDate(current: resetAt, candidate: candidate)
                 }
@@ -1198,7 +1180,7 @@ enum LimitsService {
 
     private static func nestedDate(_ object: Any?, paths: [[String]]) -> Date? {
         for path in paths {
-            if let date = parseDate(nestedValue(object, path)) {
+            if let date = ProviderDateParser.parse(nestedValue(object, path)) {
                 return date
             }
         }
@@ -1253,7 +1235,7 @@ enum LimitsService {
     }
 
     private static func jwtClaimDate(_ token: String, _ claim: String) -> Date? {
-        parseDate(jwtClaimValue(token, claim))
+        ProviderDateParser.parse(jwtClaimValue(token, claim))
     }
 
     private static func jwtClaimValue(_ token: String, _ claim: String) -> Any? {
@@ -1346,30 +1328,21 @@ enum LimitsService {
     private static func kiroResetDate(_ out: String) -> Date? {
         for key in ["resetAt", "resetTime", "resetOn", "nextDateReset"] {
             if let raw = firstMatch(out, #""\#(key)"\s*:\s*"([^"]+)""#),
-               let date = parseDate(raw) {
+               let date = ProviderDateParser.parse(raw) {
                 return date
             }
             if let raw = firstMatch(out, #""\#(key)"\s*:\s*(\d+(?:\.\d+)?)"#),
-               let date = parseDate(raw) {
+               let date = ProviderDateParser.parse(raw) {
                 return date
             }
         }
 
         // "resets on 2026-07-01" (ISO) or "resets on 07/01" (MM/DD)
         if let iso = firstMatch(out, #"resets on (\d{4}-\d{2}-\d{2})"#) {
-            let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "UTC")
-            return f.date(from: iso)
+            return ProviderDateParser.parse(iso)
         }
         guard let md = firstMatch(out, #"resets on (\d{2}/\d{2})"#) else { return nil }
-        let parts = md.split(separator: "/")
-        guard parts.count == 2, let mm = Int(parts[0]), let dd = Int(parts[1]) else { return nil }
-        var comps = DateComponents()
-        let now = Date(); let cal = Calendar(identifier: .gregorian)
-        comps.year = cal.component(.year, from: now); comps.month = mm; comps.day = dd
-        comps.timeZone = TimeZone(identifier: "UTC")
-        guard var date = cal.date(from: comps) else { return nil }
-        if date < now { comps.year! += 1; date = cal.date(from: comps) ?? date }
-        return date
+        return ProviderDateParser.nextUTCMonthDay(md)
     }
 }
 

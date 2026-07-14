@@ -60,6 +60,7 @@
 		94FD9E64724730AA7B7061D7 /* TokenViewerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4965F633CE47DB93FDA573C0 /* TokenViewerApp.swift */; };
 		985366007F540D744B1A62FC /* qwen.svg in Resources */ = {isa = PBXBuildFile; fileRef = CA15CD6F8BE5A54F1A3934E4 /* qwen.svg */; };
 		99D84DE4832DC61B1D86B931 /* craft.svg in Resources */ = {isa = PBXBuildFile; fileRef = 7D6DEE1015E607E6E570C753 /* craft.svg */; };
+		9A3A50E12AB74DDB66E402B3 /* AppTime.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF9BA1FA08ED1D640C099AEB /* AppTime.swift */; };
 		9BD8C56533C053E2CF209B14 /* SkillListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 304CCD886055A0B97FD0ED18 /* SkillListView.swift */; };
 		9BE43E01D45203498107669F /* perplexity.svg in Resources */ = {isa = PBXBuildFile; fileRef = A0D1853042F0DA1BB8979D53 /* perplexity.svg */; };
 		A6516BB4730DFD98588882AE /* ProviderRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE09FEBA97E285D0B2311698 /* ProviderRegistry.swift */; };
@@ -82,6 +83,7 @@
 		D7259DB34E937DF03535BE06 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F69660CE5393741209A39863 /* UpdateChecker.swift */; };
 		DB040F629C2D879AFA19F7B7 /* openclaude-logo.png in Resources */ = {isa = PBXBuildFile; fileRef = 41A388947A7C1446C4AFA0AD /* openclaude-logo.png */; };
 		DC768A9ABEBD114D9E0FA787 /* codebuddy.svg in Resources */ = {isa = PBXBuildFile; fileRef = 93435E21A3AF9517E145BB82 /* codebuddy.svg */; };
+		DEB3F02108050A47D6455E7D /* ProviderDateParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EAB46CA603C1B6F3FF93BE9 /* ProviderDateParser.swift */; };
 		E08D272B90BC745AF97BE8FC /* ante.svg in Resources */ = {isa = PBXBuildFile; fileRef = CF896CE6605A3A00727CFDD3 /* ante.svg */; };
 		E20F9C43E395A4E96EBB4A2F /* cohere.svg in Resources */ = {isa = PBXBuildFile; fileRef = DFDA06D1E745AB5198CC550D /* cohere.svg */; };
 		E2157A36CA184475536923C0 /* claude-code.svg in Resources */ = {isa = PBXBuildFile; fileRef = 2CDA4DFDC1A93996F495C246 /* claude-code.svg */; };
@@ -114,6 +116,7 @@
 		068F9C35A6FFB2F33320C210 /* SkillGitSyncSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillGitSyncSheet.swift; sourceTree = "<group>"; };
 		0F9CAADCE87E6ADB31C02E50 /* SkillManagerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillManagerViewModel.swift; sourceTree = "<group>"; };
 		1DCD82F79AAD3F077EAA8A17 /* ProviderIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderIcon.swift; sourceTree = "<group>"; };
+		1EAB46CA603C1B6F3FF93BE9 /* ProviderDateParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderDateParser.swift; sourceTree = "<group>"; };
 		21D91FBC31BF8A6F1CBFA202 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		2626E2AB89FE668F6F21014F /* aug.svg */ = {isa = PBXFileReference; path = aug.svg; sourceTree = "<group>"; };
 		2C90AD96A9C63E427F4ECEF9 /* crush.svg */ = {isa = PBXFileReference; path = crush.svg; sourceTree = "<group>"; };
@@ -163,6 +166,7 @@
 		A30035A7991BA5D4CBAAFA67 /* AppSyncCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSyncCoordinatorTests.swift; sourceTree = "<group>"; };
 		A8B41A7FC4AB00CC55B3B49B /* SkillManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillManagerView.swift; sourceTree = "<group>"; };
 		A9F3FB73CDED44D7115FB025 /* grok.svg */ = {isa = PBXFileReference; path = grok.svg; sourceTree = "<group>"; };
+		AF9BA1FA08ED1D640C099AEB /* AppTime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTime.swift; sourceTree = "<group>"; };
 		B11438BA1A5E03040D8077DE /* glm.svg */ = {isa = PBXFileReference; path = glm.svg; sourceTree = "<group>"; };
 		B1DC7B73A417629A415126E0 /* mistral.svg */ = {isa = PBXFileReference; path = mistral.svg; sourceTree = "<group>"; };
 		B2D51BE93B1EE1608134CC02 /* ohmypi.svg */ = {isa = PBXFileReference; path = ohmypi.svg; sourceTree = "<group>"; };
@@ -306,11 +310,13 @@
 			isa = PBXGroup;
 			children = (
 				C824BA0CFB5B1E3F7AF26937 /* AppSyncCoordinator.swift */,
+				AF9BA1FA08ED1D640C099AEB /* AppTime.swift */,
 				3A0F91FA57420FB58729B647 /* KeychainManager.swift */,
 				EBE72CF07CC99195B52D4715 /* LimitsService.swift */,
 				39EB5D762689CD00096F0785 /* LimitsVisibilityStore.swift */,
 				034652C5EE019A959887EFA2 /* Localization.swift */,
 				C54A6C43A31CA1B59412B121 /* Preferences.swift */,
+				1EAB46CA603C1B6F3FF93BE9 /* ProviderDateParser.swift */,
 				EE09FEBA97E285D0B2311698 /* ProviderRegistry.swift */,
 				F69660CE5393741209A39863 /* UpdateChecker.swift */,
 			);
@@ -574,6 +580,7 @@
 			files = (
 				F82C683EBDC37477E8A45228 /* AboutView.swift in Sources */,
 				85F86A1B6739B28431A0AEE7 /* AppSyncCoordinator.swift in Sources */,
+				9A3A50E12AB74DDB66E402B3 /* AppTime.swift in Sources */,
 				2BF82B63BC86BEA6EA2E7C05 /* CoreBridge+Skills.swift in Sources */,
 				591F15C6E853CC4623779432 /* CoreBridge.swift in Sources */,
 				ED6A77C8F551950A111B7C3A /* KeychainManager.swift in Sources */,
@@ -585,6 +592,7 @@
 				59C9CF298FD67A2731CDD576 /* MainWindowView.swift in Sources */,
 				553E165F7889BCE2D0568430 /* PopoverView.swift in Sources */,
 				74D160C3E7AAB7E3DE85B0C9 /* Preferences.swift in Sources */,
+				DEB3F02108050A47D6455E7D /* ProviderDateParser.swift in Sources */,
 				7F679758E5115B64D4ADC95D /* ProviderIcon.swift in Sources */,
 				A6516BB4730DFD98588882AE /* ProviderRegistry.swift in Sources */,
 				1645D94A3E61F9D783358C2D /* QuickHelpModifier.swift in Sources */,

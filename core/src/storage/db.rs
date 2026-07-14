@@ -7,6 +7,21 @@ use crate::models::{
 
 const SCHEMA_VERSION: i32 = 1;
 
+#[derive(Clone, Copy)]
+enum LocalUsageBucket {
+    Day,
+    Hour,
+}
+
+impl LocalUsageBucket {
+    fn sql_expression(self) -> &'static str {
+        match self {
+            Self::Day => "strftime('%Y-%m-%d', hour_start, 'localtime')",
+            Self::Hour => "strftime('%Y-%m-%dT%H', hour_start, 'localtime')",
+        }
+    }
+}
+
 pub struct Database {
     conn: Connection,
 }
@@ -119,7 +134,7 @@ impl Database {
     }
 
     pub fn query_summary(&self, from: &str, to: &str) -> SqlResult<UsageSummary> {
-        let mut stmt = self.conn.prepare(
+        let sql = format!(
             "SELECT
                 COALESCE(SUM(total_tokens), 0),
                 COALESCE(SUM(input_tokens), 0),
@@ -127,9 +142,11 @@ impl Database {
                 COALESCE(SUM(cached_input_tokens), 0),
                 COALESCE(SUM(reasoning_output_tokens), 0),
                 COALESCE(SUM(conversation_count), 0),
-                COUNT(DISTINCT substr(hour_start, 1, 10))
+                COUNT(DISTINCT {})
              FROM usage WHERE hour_start >= ?1 AND hour_start < ?2",
-        )?;
+            LocalUsageBucket::Day.sql_expression()
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
 
         stmt.query_row(params![from, to], |row| {
             Ok(UsageSummary {
@@ -146,46 +163,31 @@ impl Database {
     }
 
     pub fn query_daily(&self, from: &str, to: &str) -> SqlResult<Vec<DailyUsage>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT
-                substr(hour_start, 1, 10) as date,
-                SUM(total_tokens), SUM(input_tokens), SUM(output_tokens),
-                SUM(cached_input_tokens), SUM(cache_creation_input_tokens),
-                SUM(reasoning_output_tokens), SUM(conversation_count)
-             FROM usage
-             WHERE hour_start >= ?1 AND hour_start < ?2
-             GROUP BY date ORDER BY date",
-        )?;
-
-        let rows = stmt.query_map(params![from, to], |row| {
-            Ok(DailyUsage {
-                date: row.get(0)?,
-                total_tokens: row.get::<_, i64>(1)? as u64,
-                input_tokens: row.get::<_, i64>(2)? as u64,
-                output_tokens: row.get::<_, i64>(3)? as u64,
-                cached_input_tokens: row.get::<_, i64>(4)? as u64,
-                cache_creation_input_tokens: row.get::<_, i64>(5)? as u64,
-                reasoning_output_tokens: row.get::<_, i64>(6)? as u64,
-                conversation_count: row.get::<_, i32>(7)? as u32,
-                total_cost_usd: 0.0,
-            })
-        })?;
-
-        rows.collect()
+        self.query_bucketed_usage(from, to, LocalUsageBucket::Day)
     }
 
-    /// Hourly breakdown (for single-day view). Groups by hour (YYYY-MM-DDTHH).
+    /// Hourly breakdown (for single-day view). Groups by local hour (YYYY-MM-DDTHH).
     pub fn query_hourly(&self, from: &str, to: &str) -> SqlResult<Vec<DailyUsage>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT
-                substr(hour_start, 1, 13) as hour,
+        self.query_bucketed_usage(from, to, LocalUsageBucket::Hour)
+    }
+
+    fn query_bucketed_usage(
+        &self,
+        from: &str,
+        to: &str,
+        bucket: LocalUsageBucket,
+    ) -> SqlResult<Vec<DailyUsage>> {
+        let sql = format!(
+            "SELECT {} as bucket,
                 SUM(total_tokens), SUM(input_tokens), SUM(output_tokens),
                 SUM(cached_input_tokens), SUM(cache_creation_input_tokens),
                 SUM(reasoning_output_tokens), SUM(conversation_count)
              FROM usage
              WHERE hour_start >= ?1 AND hour_start < ?2
-             GROUP BY hour ORDER BY hour",
-        )?;
+             GROUP BY bucket ORDER BY bucket",
+            bucket.sql_expression()
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
 
         let rows = stmt.query_map(params![from, to], |row| {
             Ok(DailyUsage {
@@ -269,30 +271,30 @@ impl Database {
     /// Aggregate full token columns grouped by (date, source, model).
     /// hour_start holds the YYYY-MM-DD date. Used by the daily cost layer.
     pub fn aggregate_by_day_model(&self, from: &str, to: &str) -> SqlResult<Vec<UsageRecord>> {
-        self.aggregate_by_bucket_model(from, to, 10)
+        self.aggregate_by_bucket_model(from, to, LocalUsageBucket::Day)
     }
 
     /// Aggregate full token columns grouped by (hour, source, model).
     pub fn aggregate_by_hour_model(&self, from: &str, to: &str) -> SqlResult<Vec<UsageRecord>> {
-        self.aggregate_by_bucket_model(from, to, 13)
+        self.aggregate_by_bucket_model(from, to, LocalUsageBucket::Hour)
     }
 
     fn aggregate_by_bucket_model(
         &self,
         from: &str,
         to: &str,
-        len: usize,
+        bucket: LocalUsageBucket,
     ) -> SqlResult<Vec<UsageRecord>> {
-        // hour_start is stored in UTC; group by LOCAL-time bucket so day/hour
-        // dimensions match the user's wall clock. len 10 = day, 13 = hour.
-        let fmt = if len <= 10 { "%Y-%m-%d" } else { "%Y-%m-%dT%H" };
+        // hour_start is stored in UTC; group by local-time bucket so day/hour
+        // dimensions match the user's wall clock.
         let sql = format!(
-            "SELECT strftime('{fmt}', hour_start, 'localtime') as bucket, source, model,
+            "SELECT {} as bucket, source, model,
                 SUM(input_tokens), SUM(output_tokens), SUM(cached_input_tokens),
                 SUM(cache_creation_input_tokens), SUM(reasoning_output_tokens),
                 SUM(total_tokens), SUM(conversation_count)
              FROM usage WHERE hour_start >= ?1 AND hour_start < ?2
-             GROUP BY bucket, source, model ORDER BY bucket"
+             GROUP BY bucket, source, model ORDER BY bucket",
+            bucket.sql_expression()
         );
         let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map(params![from, to], |row| {
@@ -315,12 +317,14 @@ impl Database {
 
     pub fn query_heatmap(&self, weeks: i32) -> SqlResult<Vec<HeatmapPoint>> {
         let days = weeks * 7;
-        let mut stmt = self.conn.prepare(
-            "SELECT strftime('%Y-%m-%d', hour_start, 'localtime') as date, SUM(total_tokens)
+        let sql = format!(
+            "SELECT {} as date, SUM(total_tokens)
              FROM usage
-             WHERE hour_start >= date('now', ?1)
+             WHERE hour_start >= datetime('now', 'localtime', ?1, 'start of day', 'utc')
              GROUP BY date ORDER BY date",
-        )?;
+            LocalUsageBucket::Day.sql_expression()
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
 
         let offset = format!("-{days} days");
         let rows = stmt.query_map(params![offset], |row| {
