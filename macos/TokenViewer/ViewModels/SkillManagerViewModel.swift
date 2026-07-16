@@ -97,6 +97,7 @@ final class SkillManagerViewModel: ObservableObject {
             let skillsData = payload.flatMap(CoreBridge.shared.skillsListForAgents)
                 ?? CoreBridge.shared.skillsList()
             let skills = (try? decoder.decode([SkillEntry].self, from: skillsData ?? Data())) ?? []
+            await SkillPreviewCache.shared.prewarm(skills)
 
             await MainActor.run {
                 self.isLoading = false
@@ -295,30 +296,7 @@ final class SkillManagerViewModel: ObservableObject {
     }
 
     func skillMarkdownPreview(for skill: SkillEntry) -> SkillMarkdownPreview {
-        let skillDir = standardizedPath(skill.sourceDir)
-        let fileManager = FileManager.default
-        let candidates = ["SKILL.md", "skill.md"].map {
-            URL(fileURLWithPath: skillDir).appendingPathComponent($0)
-        }
-
-        guard let markdownURL = candidates.first(where: { fileManager.fileExists(atPath: $0.path) }) else {
-            return SkillMarkdownPreview(
-                skill: skill,
-                filePath: URL(fileURLWithPath: skillDir).appendingPathComponent("SKILL.md").path,
-                content: L10n.shared.skillPreviewMissingFile
-            )
-        }
-
-        do {
-            let content = try String(contentsOf: markdownURL, encoding: .utf8)
-            return SkillMarkdownPreview(skill: skill, filePath: markdownURL.path, content: content)
-        } catch {
-            return SkillMarkdownPreview(
-                skill: skill,
-                filePath: markdownURL.path,
-                content: L10n.shared.skillPreviewReadFailed(error.localizedDescription)
-            )
-        }
+        SkillPreviewCache.descriptor(for: skill)
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from data: Data?) throws -> T {
@@ -593,7 +571,7 @@ final class SkillManagerViewModel: ObservableObject {
             gitStatusName = status.status
             gitStatusMessage = status.message
 
-            if status.status == "error" {
+            if status.status == "error" || status.status == "conflicted" {
                 ToastCenter.shared.error(status.message ?? L10n.shared.skillOperationFailed)
             } else {
                 refresh()

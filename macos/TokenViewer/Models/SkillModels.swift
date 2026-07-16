@@ -1,6 +1,6 @@
 import Foundation
 
-struct SkillManifest: Codable, Hashable {
+struct SkillManifest: Codable, Hashable, Sendable {
     let name: String
     let description: String
     let tags: [String]
@@ -30,7 +30,7 @@ struct SkillManifest: Codable, Hashable {
     }
 }
 
-struct SkillEntry: Codable, Identifiable, Hashable {
+struct SkillEntry: Codable, Identifiable, Hashable, Sendable {
     let id: String
     let manifest: SkillManifest
     let sourceDir: String
@@ -74,11 +74,38 @@ struct SkillEntry: Codable, Identifiable, Hashable {
     }
 }
 
-struct SkillMarkdownPreview: Identifiable, Hashable {
+struct SkillMarkdownPreview: Identifiable, Hashable, Sendable {
     let id = UUID()
     let skill: SkillEntry
     let filePath: String
-    let content: String
+}
+
+struct SkillFileNode: Identifiable, Hashable, Sendable {
+    let path: String
+    let name: String
+    let isDirectory: Bool
+    let sizeBytes: Int64?
+    let children: [SkillFileNode]
+
+    var id: String { path }
+}
+
+struct SkillFileContent: Hashable, Sendable {
+    let text: String
+    let isTruncated: Bool
+}
+
+enum SkillFileLoadResult: Hashable, Sendable {
+    case loaded(SkillFileContent)
+    case missing
+    case notText
+    case unreadable(String)
+}
+
+struct PreparedSkillPreview: Sendable {
+    let fileTree: SkillFileNode?
+    let primaryFilePath: String
+    let primaryContent: SkillFileLoadResult
 }
 
 struct SkillProvider: Codable, Identifiable, Hashable {

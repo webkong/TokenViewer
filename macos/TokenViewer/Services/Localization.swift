@@ -192,7 +192,12 @@ final class L10n: ObservableObject {
     var skillPreviewTip: String { isZh ? "预览此技能的 SKILL.md" : "Preview this skill's SKILL.md" }
     var skillFilesEmpty: String { isZh ? "无法读取此技能的目录结构。" : "Unable to read this skill's file tree." }
     var skillPreviewMissingFile: String { isZh ? "未找到 SKILL.md 文件。" : "SKILL.md was not found." }
-    func skillPreviewReadFailed(_ reason: String) -> String { isZh ? "无法读取 SKILL.md：\(reason)" : "Unable to read SKILL.md: \(reason)" }
+    var skillPreviewNotText: String { isZh ? "该文件不是可预览的 UTF-8 文本。" : "This file is not previewable UTF-8 text." }
+    func skillPreviewReadFailed(_ reason: String) -> String { isZh ? "无法读取文件：\(reason)" : "Unable to read file: \(reason)" }
+    func skillPreviewTruncated(_ byteCount: Int) -> String {
+        let size = ByteCountFormatter.string(fromByteCount: Int64(byteCount), countStyle: .file)
+        return isZh ? "文件过大，仅显示前 \(size)。" : "Large file: showing the first \(size)."
+    }
     var skillInstallTitle: String { isZh ? "安装 Skill" : "Install Skill" }
     var skillInstallDesc: String { isZh ? "从本地目录、ZIP 包、Git 仓库或 GitHub 目录链接安装单个包含 SKILL.md 的技能到全局技能目录。" : "Install one skill containing SKILL.md from a local folder, ZIP archive, Git repository, or GitHub directory URL into the global skills directory." }
     var skillInstallTip: String { isZh ? "安装新的技能到全局技能目录" : "Install a new skill into the global skills directory" }

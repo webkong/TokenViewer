@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SkillListView: View {
@@ -404,6 +405,12 @@ private struct SkillMarkdownPreviewSheet: View {
     @State private var fileTree: SkillFileNode?
     @State private var selectedFilePath: String = ""
     @State private var selectedFileContent: String = ""
+    @State private var isLoadingTree = true
+    @State private var isLoadingContent = true
+    @State private var contentError: String?
+    @State private var isContentTruncated = false
+    @State private var initialLoadTask: Task<Void, Never>?
+    @State private var fileLoadTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -422,12 +429,21 @@ private struct SkillMarkdownPreviewSheet: View {
             }
         }
         .frame(minWidth: 820, idealWidth: 900, minHeight: 520, idealHeight: 620)
-        .onAppear { loadInitialState() }
+        .onAppear { startInitialLoad() }
+        .onDisappear {
+            initialLoadTask?.cancel()
+            fileLoadTask?.cancel()
+        }
     }
 
     private var fileSidebar: some View {
         ScrollView {
-            if let fileTree {
+            if isLoadingTree {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 20)
+            } else if let fileTree {
                 SkillFileTreeView(
                     node: fileTree,
                     isRoot: true,
@@ -449,35 +465,90 @@ private struct SkillMarkdownPreviewSheet: View {
     }
 
     private var fileContent: some View {
-        ScrollView {
-            Text(selectedFileContent)
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(.primary)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(18)
+        VStack(spacing: 0) {
+            if isContentTruncated {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(l10n.skillPreviewTruncated(SkillPreviewCache.maximumTextBytes))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Color.orange.opacity(0.08))
+                Divider()
+            }
+
+            if isLoadingContent {
+                VStack(spacing: 8) {
+                    ProgressView()
+                    Text(l10n.loading)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let contentError {
+                Text(contentError)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(18)
+            } else {
+                SkillPlainTextView(content: selectedFileContent)
+            }
         }
         .background(Color(nsColor: .textBackgroundColor))
     }
 
-    private func loadInitialState() {
-        fileTree = SkillFileNode.load(rootPath: standardizedPath(preview.skill.sourceDir))
-        selectFile(path: standardizedPath(preview.filePath))
+    private func startInitialLoad() {
+        initialLoadTask?.cancel()
+        isLoadingTree = true
+        isLoadingContent = true
+        initialLoadTask = Task {
+            let prepared = await SkillPreviewCache.shared.preparedPreview(for: preview)
+            guard !Task.isCancelled else { return }
+            fileTree = prepared.fileTree
+            isLoadingTree = false
+            selectedFilePath = prepared.primaryFilePath
+            apply(prepared.primaryContent)
+        }
     }
 
     private func selectFile(path: String) {
         let normalizedPath = standardizedPath(path)
         selectedFilePath = normalizedPath
-
-        if normalizedPath == standardizedPath(preview.filePath) {
-            selectedFileContent = preview.content
-            return
+        fileLoadTask?.cancel()
+        isLoadingContent = true
+        contentError = nil
+        isContentTruncated = false
+        fileLoadTask = Task {
+            let result = await SkillPreviewCache.shared.loadFile(at: normalizedPath)
+            guard !Task.isCancelled, selectedFilePath == normalizedPath else { return }
+            apply(result)
         }
+    }
 
-        do {
-            selectedFileContent = try String(contentsOf: URL(fileURLWithPath: normalizedPath), encoding: .utf8)
-        } catch {
-            selectedFileContent = l10n.skillPreviewReadFailed(error.localizedDescription)
+    private func apply(_ result: SkillFileLoadResult) {
+        isLoadingContent = false
+        switch result {
+        case .loaded(let content):
+            selectedFileContent = content.text
+            contentError = nil
+            isContentTruncated = content.isTruncated
+        case .missing:
+            selectedFileContent = ""
+            contentError = l10n.skillPreviewMissingFile
+            isContentTruncated = false
+        case .notText:
+            selectedFileContent = ""
+            contentError = l10n.skillPreviewNotText
+            isContentTruncated = false
+        case .unreadable(let message):
+            selectedFileContent = ""
+            contentError = l10n.skillPreviewReadFailed(message)
+            isContentTruncated = false
         }
     }
 
@@ -533,64 +604,61 @@ private struct SkillMarkdownPreviewSheet: View {
     }
 }
 
-private struct SkillFileNode: Identifiable, Hashable {
-    let path: String
-    let name: String
-    let isDirectory: Bool
-    let sizeBytes: Int64?
-    let children: [SkillFileNode]
+private struct SkillPlainTextView: NSViewRepresentable {
+    let content: String
 
-    var id: String { path }
-
-    static func load(rootPath: String) -> SkillFileNode? {
-        let url = URL(fileURLWithPath: rootPath)
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        return build(url: url, depth: 0)
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
     }
 
-    private static func build(url: URL, depth: Int) -> SkillFileNode? {
-        let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey]
-        guard let values = try? url.resourceValues(forKeys: keys) else { return nil }
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
 
-        let isDirectory = values.isDirectory == true && values.isSymbolicLink != true
-        let children: [SkillFileNode]
-        if isDirectory && depth < 8 {
-            let contents = (try? FileManager.default.contentsOfDirectory(
-                at: url,
-                includingPropertiesForKeys: Array(keys),
-                options: [.skipsPackageDescendants]
-            )) ?? []
-            children = contents
-                .filter { !ignoredNames.contains($0.lastPathComponent) }
-                .sorted { lhs, rhs in
-                    let lhsIsDir = (try? lhs.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-                    let rhsIsDir = (try? rhs.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-                    if lhsIsDir != rhsIsDir { return lhsIsDir && !rhsIsDir }
-                    return lhs.lastPathComponent.localizedStandardCompare(rhs.lastPathComponent) == .orderedAscending
-                }
-                .prefix(250)
-                .compactMap { build(url: $0, depth: depth + 1) }
-        } else {
-            children = []
-        }
-
-        return SkillFileNode(
-            path: url.path,
-            name: url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent,
-            isDirectory: isDirectory,
-            sizeBytes: values.fileSize.map(Int64.init),
-            children: children
+        let textView = NSTextView(frame: scrollView.contentView.bounds)
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.importsGraphics = false
+        textView.usesFindBar = true
+        textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.textColor = .textColor
+        textView.backgroundColor = .textBackgroundColor
+        textView.textContainerInset = NSSize(width: 18, height: 18)
+        textView.minSize = NSSize(width: 0, height: 0)
+        textView.maxSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
         )
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(
+            width: 0,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        scrollView.documentView = textView
+        context.coordinator.textView = textView
+        return scrollView
     }
 
-    private static let ignoredNames: Set<String> = [
-        ".DS_Store",
-        ".git",
-        ".idea",
-        ".vscode",
-        "__pycache__",
-        "node_modules",
-    ]
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard context.coordinator.content != content,
+              let textView = context.coordinator.textView else { return }
+        context.coordinator.content = content
+        textView.string = content
+        textView.scrollToBeginningOfDocument(nil)
+    }
+
+    final class Coordinator {
+        weak var textView: NSTextView?
+        var content = ""
+    }
 }
 
 private struct SkillFileTreeView: View {

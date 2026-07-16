@@ -80,6 +80,10 @@ struct SkillGitSyncSheet: View {
         viewModel.gitStatusName == "pushing" || viewModel.gitStatusName == "pulling"
     }
 
+    private var isSyncBlocked: Bool {
+        isBusy || viewModel.gitStatusName == "conflicted"
+    }
+
     private var currentToken: String {
         KeychainManager.shared.getToken(for: provider.key) ?? ""
     }
@@ -248,7 +252,9 @@ struct SkillGitSyncSheet: View {
     }
 
     private var displayedGitChanges: [SkillGitChange] {
-        guard filterEnabled else { return viewModel.gitChanges }
+        guard filterEnabled, viewModel.gitStatusName != "conflicted" else {
+            return viewModel.gitChanges
+        }
         return viewModel.gitChanges.filter { change in
             guard let skillID = skillID(forChangePath: change.filePath) else { return false }
             return filterSelectedIDs.contains(skillID) || skillMatchesPrefixes(skillID)
@@ -281,7 +287,7 @@ struct SkillGitSyncSheet: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.large)
-            .disabled(repoURL.isEmpty || !tokenSaved || isBusy)
+            .disabled(repoURL.isEmpty || !tokenSaved || isSyncBlocked)
             .quickHelp(l10n.gitPullTip)
 
             Button {
@@ -301,7 +307,7 @@ struct SkillGitSyncSheet: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .disabled(repoURL.isEmpty || !tokenSaved || isBusy)
+            .disabled(repoURL.isEmpty || !tokenSaved || isSyncBlocked)
             .quickHelp(l10n.gitPushTip)
         }
     }
@@ -339,7 +345,7 @@ struct SkillGitSyncSheet: View {
     private var statusIcon: some View {
         Group {
             switch viewModel.gitStatusName {
-            case "synced":
+            case "synced", "idle":
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
             case "modified":
                 Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
@@ -362,7 +368,7 @@ struct SkillGitSyncSheet: View {
         }
 
         switch viewModel.gitStatusName {
-        case "synced": return l10n.gitUpToDate
+        case "synced", "idle": return l10n.gitUpToDate
         case "modified": return l10n.gitChangesPending
         case "conflicted": return l10n.gitConflicts
         case "pushing": return l10n.gitPushing

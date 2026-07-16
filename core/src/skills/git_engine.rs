@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
 
@@ -28,6 +29,12 @@ macro_rules! debug_log {
 
 pub struct GitEngine {
     repo: Repository,
+}
+
+#[derive(Debug)]
+enum RebaseFailure {
+    Conflicted(Vec<String>),
+    Error(String),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -286,37 +293,64 @@ impl GitEngine {
         // Get ahead/behind counts
         let (ahead, behind) = self.ahead_behind().unwrap_or((0, 0));
 
-        // Collect pending changes
-        let changes = self.get_pending_changes().unwrap_or_default();
+        // Collect committed-but-unpushed changes first, then let worktree
+        // changes override them when the same path appears in both sets.
+        let committed_changes = self.get_unpushed_changes().unwrap_or_default();
+        let worktree_changes = self.get_pending_changes().unwrap_or_default();
+        let changes = Self::merge_changes(committed_changes, worktree_changes);
         let has_changes = !changes.is_empty();
+        let index_has_conflicts = self
+            .repo
+            .index()
+            .map(|index| index.has_conflicts())
+            .unwrap_or(false);
+        let repository_is_clean = self.repo.state() == git2::RepositoryState::Clean;
 
-        if statuses.is_empty() && !has_changes {
+        if statuses.is_empty()
+            && !has_changes
+            && ahead == 0
+            && repository_is_clean
+            && !index_has_conflicts
+        {
             let mut info = GitStatusInfo::idle();
             info.branch = branch;
+            info.ahead = ahead;
+            info.behind = behind;
             return Ok(info);
         }
 
-        let has_conflicts = statuses.iter().any(|s| {
-            let status = s.status();
-            status.contains(Status::CONFLICTED)
-        });
+        let has_conflicts = index_has_conflicts
+            || statuses.iter().any(|s| {
+                let status = s.status();
+                status.contains(Status::CONFLICTED)
+            });
 
-        if has_conflicts {
-            let count = statuses
-                .iter()
-                .filter(|s| s.status().contains(Status::CONFLICTED))
-                .count();
-            let mut info =
-                GitStatusInfo::conflicted(&format!("{} file(s) have merge conflicts", count));
+        if has_conflicts || !repository_is_clean {
+            let conflict_paths = self.conflict_paths().unwrap_or_default();
+            let mut info = GitStatusInfo::conflicted(if conflict_paths.is_empty() {
+                "A Git operation is incomplete"
+            } else {
+                "Files have merge conflicts"
+            });
             info.branch = branch;
             info.ahead = ahead;
             info.behind = behind;
             info.has_changes = true;
-            info.changes = changes;
+            info.changes = if conflict_paths.is_empty() {
+                changes
+            } else {
+                conflict_paths
+                    .into_iter()
+                    .map(|file_path| PendingChange {
+                        file_path,
+                        change_type: "conflicted".to_string(),
+                    })
+                    .collect()
+            };
             return Ok(info);
         }
 
-        let modified_count = statuses.len();
+        let modified_count = changes.len().max(statuses.len());
         let mut info = GitStatusInfo::modified(&format!("{} file(s) modified", modified_count));
         info.branch = branch;
         info.ahead = ahead;
@@ -337,22 +371,9 @@ impl GitEngine {
             None => return Ok((0, 0)),
         };
 
-        // Try to resolve upstream branch
-        let upstream = match self
-            .repo
-            .branch_upstream_name(head.shorthand().unwrap_or(""))
-        {
-            Ok(name) => name,
+        let upstream_oid = match self.upstream_oid_for_head(&head) {
+            Ok(oid) => oid,
             Err(_) => return Ok((0, 0)),
-        };
-
-        let upstream_ref = match self.repo.find_reference(&upstream.as_str().unwrap_or("")) {
-            Ok(r) => r,
-            Err(_) => return Ok((0, 0)),
-        };
-        let upstream_oid = match upstream_ref.target() {
-            Some(oid) => oid,
-            None => return Ok((0, 0)),
         };
 
         let (ahead, behind) = self
@@ -361,6 +382,29 @@ impl GitEngine {
             .map_err(|e| format!("Failed to compute ahead/behind: {}", e))?;
 
         Ok((ahead as i32, behind as i32))
+    }
+
+    /// Resolve the configured upstream, falling back to origin/<branch> for
+    /// repositories initialized by TokenViewer before tracking was configured.
+    fn upstream_oid_for_head(&self, head: &git2::Reference<'_>) -> Result<Oid, String> {
+        let head_ref = head.name().ok_or("HEAD is not on a branch")?;
+        if let Ok(upstream_name) = self.repo.branch_upstream_name(head_ref) {
+            let upstream_ref = self
+                .repo
+                .find_reference(upstream_name.as_str().unwrap_or(""))
+                .map_err(|e| format!("Failed to find upstream branch: {}", e))?;
+            return upstream_ref
+                .target()
+                .ok_or_else(|| "Upstream branch has no target".to_string());
+        }
+
+        let branch = head.shorthand().ok_or("HEAD is not on a branch")?;
+        let fallback_ref = format!("refs/remotes/origin/{branch}");
+        self.repo
+            .find_reference(&fallback_ref)
+            .map_err(|e| format!("Failed to find fallback upstream {}: {}", fallback_ref, e))?
+            .target()
+            .ok_or_else(|| format!("Fallback upstream {} has no target", fallback_ref))
     }
 
     /// Get a list of pending changes (modified, added, deleted files).
@@ -399,6 +443,71 @@ impl GitEngine {
             .collect();
 
         Ok(changes)
+    }
+
+    /// Get changes committed locally after the upstream tracking branch.
+    fn get_unpushed_changes(&self) -> Result<Vec<PendingChange>, String> {
+        let head = self
+            .repo
+            .head()
+            .map_err(|e| format!("Failed to get HEAD: {}", e))?;
+        let head_oid = head.target().ok_or("HEAD has no target")?;
+        let upstream_oid = self.upstream_oid_for_head(&head)?;
+
+        let merge_base_oid = self
+            .repo
+            .merge_base(upstream_oid, head_oid)
+            .map_err(|e| format!("Failed to find upstream merge base: {}", e))?;
+        let merge_base_tree = self
+            .repo
+            .find_commit(merge_base_oid)
+            .and_then(|commit| commit.tree())
+            .map_err(|e| format!("Failed to read merge-base tree: {}", e))?;
+        let head_tree = self
+            .repo
+            .find_commit(head_oid)
+            .and_then(|commit| commit.tree())
+            .map_err(|e| format!("Failed to read HEAD tree: {}", e))?;
+        let diff = self
+            .repo
+            .diff_tree_to_tree(Some(&merge_base_tree), Some(&head_tree), None)
+            .map_err(|e| format!("Failed to diff merge base and HEAD: {}", e))?;
+
+        let changes = diff
+            .deltas()
+            .filter_map(|delta| {
+                let (path, change_type) = match delta.status() {
+                    git2::Delta::Added | git2::Delta::Untracked => {
+                        (delta.new_file().path()?, "added")
+                    }
+                    git2::Delta::Deleted => (delta.old_file().path()?, "deleted"),
+                    _ => (
+                        delta
+                            .new_file()
+                            .path()
+                            .or_else(|| delta.old_file().path())?,
+                        "modified",
+                    ),
+                };
+                Some(PendingChange {
+                    file_path: path.to_string_lossy().to_string(),
+                    change_type: change_type.to_string(),
+                })
+            })
+            .collect();
+
+        Ok(changes)
+    }
+
+    fn merge_changes(
+        committed: Vec<PendingChange>,
+        worktree: Vec<PendingChange>,
+    ) -> Vec<PendingChange> {
+        let mut changes = BTreeMap::new();
+        for change in committed.into_iter().chain(worktree) {
+            changes.insert(change.file_path.clone(), change);
+        }
+        changes.into_values().collect()
     }
 
     /// Set (or create) the "origin" remote URL.
@@ -446,8 +555,39 @@ impl GitEngine {
         remote
             .fetch(&[branch], Some(&mut fetch_options), None)
             .map_err(|e| format!("Failed to fetch from origin: {}", e))?;
+        drop(remote);
+
+        if let Err(error) = self.ensure_upstream_tracking(branch) {
+            debug_log!(" fetch_origin: unable to configure upstream: {}", error);
+        }
 
         debug_log!(" fetch_origin: completed");
+        Ok(())
+    }
+
+    fn ensure_upstream_tracking(&self, branch: &str) -> Result<(), String> {
+        let local_ref = format!("refs/heads/{branch}");
+        if self.repo.branch_upstream_name(&local_ref).is_ok() {
+            return Ok(());
+        }
+
+        let remote_ref = format!("refs/remotes/origin/{branch}");
+        self.repo
+            .find_reference(&remote_ref)
+            .map_err(|e| format!("Remote branch {} is unavailable: {}", remote_ref, e))?;
+
+        let mut local_branch = self
+            .repo
+            .find_branch(branch, git2::BranchType::Local)
+            .map_err(|e| format!("Failed to find local branch {}: {}", branch, e))?;
+        local_branch
+            .set_upstream(Some(&format!("origin/{branch}")))
+            .map_err(|e| format!("Failed to track origin/{}: {}", branch, e))?;
+        debug_log!(
+            " fetch_origin: configured {} to track origin/{}",
+            branch,
+            branch
+        );
         Ok(())
     }
 
@@ -491,26 +631,17 @@ impl GitEngine {
             .index()
             .map_err(|e| format!("Failed to get index: {}", e))?;
 
-        let removed_count = match filter {
-            Some(filter) => Self::remove_disallowed_tracked_entries(&mut index, filter)?,
-            None => 0,
-        };
-
-        if changes.is_empty() && removed_count == 0 {
+        if changes.is_empty() {
             debug_log!(" auto_commit: no pending changes, skipping");
             return Ok(());
         }
 
-        debug_log!(
-            " auto_commit: {} pending changes, {} filtered removals",
-            changes.len(),
-            removed_count
-        );
+        debug_log!(" auto_commit: {} pending changes", changes.len());
         for c in &changes {
             debug_log!(" auto_commit:   {} - {}", c.change_type, c.file_path);
         }
 
-        let file_count = changes.len() + removed_count;
+        let file_count = changes.len();
 
         if let Some(filter) = filter {
             let mut pathspecs: Vec<String> = changes
@@ -587,7 +718,7 @@ impl GitEngine {
         Ok(())
     }
 
-    fn remove_disallowed_tracked_entries(
+    fn remove_matching_tracked_entries(
         index: &mut git2::Index,
         filter: &SkillSyncFilter,
     ) -> Result<usize, String> {
@@ -598,114 +729,129 @@ impl GitEngine {
                 let Some((top_level, _rest)) = path.split_once('/') else {
                     return false;
                 };
-                !top_level.starts_with('.') && !filter.matches_skill_id(top_level)
+                !top_level.starts_with('.') && filter.matches_skill_id(top_level)
             })
             .collect();
 
         for path in &paths {
             index
                 .remove_path(Path::new(path))
-                .map_err(|e| format!("Failed to untrack filtered path {}: {}", path, e))?;
+                .map_err(|e| format!("Failed to replace filtered path {}: {}", path, e))?;
         }
 
         Ok(paths.len())
     }
 
-    fn commit_filtered_snapshot(
-        &mut self,
+    fn build_filtered_candidate_tree(
+        &self,
         filter: &SkillSyncFilter,
-        parent_oid: Option<Oid>,
-        user_name: Option<&str>,
-        user_email: Option<&str>,
-    ) -> Result<bool, String> {
+        base_tree: &git2::Tree<'_>,
+    ) -> Result<(Oid, Vec<String>), String> {
         let workdir = self
             .repo
             .workdir()
             .ok_or("Git repository has no working directory")?;
-        let parent = match parent_oid {
-            Some(oid) => Some(
-                self.repo
-                    .find_commit(oid)
-                    .map_err(|e| format!("Failed to find remote parent commit: {}", e))?,
-            ),
-            None => self
-                .repo
-                .head()
-                .ok()
-                .and_then(|head| head.target())
-                .and_then(|oid| self.repo.find_commit(oid).ok()),
-        };
-
         let mut index = self
             .repo
             .index()
             .map_err(|e| format!("Failed to get index: {}", e))?;
-
-        if let Some(parent) = parent.as_ref() {
-            let tree = parent
-                .tree()
-                .map_err(|e| format!("Failed to read parent tree: {}", e))?;
-            index
-                .read_tree(&tree)
-                .map_err(|e| format!("Failed to load parent tree into index: {}", e))?;
-        } else {
-            index.clear().map_err(|e| format!("Failed to clear index: {}", e))?;
-        }
-
-        Self::remove_disallowed_tracked_entries(&mut index, filter)?;
+        index
+            .read_tree(base_tree)
+            .map_err(|e| format!("Failed to load sync base tree: {}", e))?;
+        Self::remove_matching_tracked_entries(&mut index, filter)?;
 
         let skill_ids = filter.included_worktree_skill_ids(workdir)?;
         for skill_id in &skill_ids {
             let pathspec = format!("{skill_id}/**");
             index
-                .add_all([pathspec.as_str()].iter(), git2::IndexAddOption::DEFAULT, None)
+                .add_all([pathspec.as_str()], git2::IndexAddOption::DEFAULT, None)
                 .map_err(|e| format!("Failed to stage filtered skill {}: {}", skill_id, e))?;
         }
 
-        index
-            .write()
-            .map_err(|e| format!("Failed to write filtered index: {}", e))?;
         let tree_oid = index
             .write_tree()
-            .map_err(|e| format!("Failed to write filtered tree: {}", e))?;
-        let tree = self
-            .repo
-            .find_tree(tree_oid)
-            .map_err(|e| format!("Failed to find filtered tree: {}", e))?;
+            .map_err(|e| format!("Failed to write filtered candidate tree: {}", e))?;
+        Ok((tree_oid, skill_ids))
+    }
 
-        if let Some(parent) = parent.as_ref() {
-            let parent_tree_id = parent
+    fn commit_filtered_snapshot(
+        &mut self,
+        filter: &SkillSyncFilter,
+        base_oid: Oid,
+        parent_oid: Option<Oid>,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<Option<Oid>, RebaseFailure> {
+        let base_commit = self
+            .repo
+            .find_commit(base_oid)
+            .map_err(|e| RebaseFailure::Error(format!("Failed to find sync base: {}", e)))?;
+        let base_tree = base_commit
+            .tree()
+            .map_err(|e| RebaseFailure::Error(format!("Failed to read sync base tree: {}", e)))?;
+        let (candidate_oid, skill_ids) = self
+            .build_filtered_candidate_tree(filter, &base_tree)
+            .map_err(RebaseFailure::Error)?;
+        let candidate_tree = self
+            .repo
+            .find_tree(candidate_oid)
+            .map_err(|e| RebaseFailure::Error(format!("Failed to read candidate tree: {}", e)))?;
+
+        let parent = parent_oid
+            .map(|oid| self.repo.find_commit(oid))
+            .transpose()
+            .map_err(|e| RebaseFailure::Error(format!("Failed to find remote parent: {}", e)))?;
+        let final_tree_oid = if let Some(parent) = parent.as_ref() {
+            let remote_tree = parent
                 .tree()
-                .map_err(|e| format!("Failed to read parent tree: {}", e))?
-                .id();
-            if parent_tree_id == tree.id() {
-                debug_log!(" commit_filtered_snapshot: no filtered tree changes");
-                return Ok(false);
+                .map_err(|e| RebaseFailure::Error(format!("Failed to read remote tree: {}", e)))?;
+            let mut merge_index = self
+                .repo
+                .merge_trees(&base_tree, &candidate_tree, &remote_tree, None)
+                .map_err(|e| {
+                    RebaseFailure::Error(format!("Failed to merge filtered tree: {}", e))
+                })?;
+            if merge_index.has_conflicts() {
+                let paths = Self::conflict_paths_from_index(&merge_index).unwrap_or_default();
+                return Err(RebaseFailure::Conflicted(paths));
             }
+            merge_index.write_tree_to(&self.repo).map_err(|e| {
+                RebaseFailure::Error(format!("Failed to write merged filtered tree: {}", e))
+            })?
+        } else {
+            candidate_oid
+        };
+
+        let final_tree = self
+            .repo
+            .find_tree(final_tree_oid)
+            .map_err(|e| RebaseFailure::Error(format!("Failed to read filtered tree: {}", e)))?;
+        if parent
+            .as_ref()
+            .and_then(|commit| commit.tree().ok())
+            .is_some_and(|tree| tree.id() == final_tree.id())
+        {
+            return Ok(None);
         }
 
-        let sig = self.signature(user_name, user_email)?;
+        let sig = self
+            .signature(user_name, user_email)
+            .map_err(RebaseFailure::Error)?;
         let parents: Vec<&git2::Commit> = parent.iter().collect();
         let message = format!(
             "Auto-commit filtered sync ({} skill{})",
             skill_ids.len(),
             if skill_ids.len() == 1 { "" } else { "s" }
         );
-        let commit_oid = if parent_oid.is_some() {
-            let oid = self
-                .repo
-                .commit(None, &sig, &sig, &message, &tree, &parents)
-                .map_err(|e| format!("Failed to create filtered sync commit: {}", e))?;
-            self.update_current_branch(oid)?;
-            oid
-        } else {
-            self.repo
-                .commit(Some("HEAD"), &sig, &sig, &message, &tree, &parents)
-                .map_err(|e| format!("Failed to create filtered sync commit: {}", e))?
-        };
+        let commit_oid = self
+            .repo
+            .commit(None, &sig, &sig, &message, &final_tree, &parents)
+            .map_err(|e| {
+                RebaseFailure::Error(format!("Failed to create filtered sync commit: {}", e))
+            })?;
         debug_log!(" commit_filtered_snapshot: committed \"{}\"", message);
         debug_log!(" commit_filtered_snapshot: oid={}", commit_oid);
-        Ok(true)
+        Ok(Some(commit_oid))
     }
 
     fn update_current_branch(&self, oid: Oid) -> Result<(), String> {
@@ -723,6 +869,142 @@ impl GitEngine {
         Ok(())
     }
 
+    fn adopt_filtered_sync_commit(&self, oid: Oid) -> Result<(), String> {
+        let commit = self
+            .repo
+            .find_commit(oid)
+            .map_err(|e| format!("Failed to find filtered sync commit: {}", e))?;
+        let tree = commit
+            .tree()
+            .map_err(|e| format!("Failed to read filtered sync tree: {}", e))?;
+        self.update_current_branch(oid)?;
+        let mut index = self
+            .repo
+            .index()
+            .map_err(|e| format!("Failed to get index after filtered sync: {}", e))?;
+        index
+            .read_tree(&tree)
+            .map_err(|e| format!("Failed to update index after filtered sync: {}", e))?;
+        index
+            .write()
+            .map_err(|e| format!("Failed to persist index after filtered sync: {}", e))?;
+        Ok(())
+    }
+
+    fn push_filtered_commit(&self, oid: Oid, token: Option<&str>) -> Result<(), String> {
+        let branch = self.current_branch()?;
+        let temporary_ref = "refs/tokenviewer/filtered-sync";
+        self.repo
+            .reference(temporary_ref, oid, true, "filtered sync candidate")
+            .map_err(|e| format!("Failed to create filtered sync reference: {}", e))?;
+
+        let result = (|| {
+            let mut remote = self
+                .repo
+                .find_remote("origin")
+                .map_err(|e| format!("Failed to find remote 'origin': {}", e))?;
+            let mut push_options = git2::PushOptions::new();
+            if let Some(token) = token {
+                push_options.remote_callbacks(Self::make_remote_callbacks(token));
+            }
+            let refspec = format!("{temporary_ref}:refs/heads/{branch}");
+            remote
+                .push(&[&refspec], Some(&mut push_options))
+                .map_err(|e| format!("Failed to push filtered sync: {}", e))?;
+            self.repo
+                .reference(
+                    &format!("refs/remotes/origin/{branch}"),
+                    oid,
+                    true,
+                    "filtered sync pushed",
+                )
+                .map_err(|e| format!("Failed to update remote tracking branch: {}", e))?;
+            Ok(())
+        })();
+
+        if let Ok(mut reference) = self.repo.find_reference(temporary_ref) {
+            let _ = reference.delete();
+        }
+        result
+    }
+
+    fn sync_blocked_status(&self) -> Result<Option<GitStatusInfo>, String> {
+        let index_has_conflicts = self
+            .repo
+            .index()
+            .map_err(|e| format!("Failed to inspect index: {}", e))?
+            .has_conflicts();
+        if self.repo.state() == git2::RepositoryState::Clean && !index_has_conflicts {
+            return Ok(None);
+        }
+        self.get_status().map(Some)
+    }
+
+    fn conflict_paths(&self) -> Result<Vec<String>, String> {
+        let index = self
+            .repo
+            .index()
+            .map_err(|e| format!("Failed to inspect conflicts: {}", e))?;
+        Self::conflict_paths_from_index(&index)
+    }
+
+    fn conflict_paths_from_index(index: &git2::Index) -> Result<Vec<String>, String> {
+        let conflicts = index
+            .conflicts()
+            .map_err(|e| format!("Failed to enumerate conflicts: {}", e))?;
+        let mut paths = Vec::new();
+        for conflict in conflicts {
+            let conflict = conflict.map_err(|e| format!("Failed to read conflict: {}", e))?;
+            if let Some(entry) = conflict.our.or(conflict.their).or(conflict.ancestor) {
+                paths.push(String::from_utf8_lossy(&entry.path).to_string());
+            }
+        }
+        paths.sort();
+        paths.dedup();
+        Ok(paths)
+    }
+
+    fn status_for_rebase_failure(&self, failure: RebaseFailure) -> GitStatusInfo {
+        match failure {
+            RebaseFailure::Conflicted(paths) => {
+                let mut status = GitStatusInfo::conflicted(if paths.is_empty() {
+                    "Git changes conflict with the remote repository"
+                } else {
+                    "Local and remote changes conflict"
+                });
+                status.changes = paths
+                    .into_iter()
+                    .map(|file_path| PendingChange {
+                        file_path,
+                        change_type: "conflicted".to_string(),
+                    })
+                    .collect();
+                status
+            }
+            RebaseFailure::Error(message) => GitStatusInfo::error(&message),
+        }
+    }
+
+    fn rebase_failure(repo: &Repository, context: &str, error: git2::Error) -> RebaseFailure {
+        let is_conflict = matches!(
+            error.code(),
+            git2::ErrorCode::Conflict | git2::ErrorCode::MergeConflict | git2::ErrorCode::Unmerged
+        ) || repo
+            .index()
+            .map(|index| index.has_conflicts())
+            .unwrap_or(false);
+        if is_conflict {
+            let paths = repo
+                .index()
+                .ok()
+                .and_then(|index| Self::conflict_paths_from_index(&index).ok())
+                .unwrap_or_default();
+            RebaseFailure::Conflicted(paths)
+        } else {
+            RebaseFailure::Error(format!("{}: {}", context, error))
+        }
+    }
+
     /// Pull (fetch + rebase) from origin. Auto-commits pending changes first.
     pub fn pull(
         &mut self,
@@ -731,64 +1013,16 @@ impl GitEngine {
         user_email: Option<&str>,
     ) -> Result<GitStatusInfo, String> {
         debug_log!(" pull: start");
-        self.auto_commit(user_name, user_email)?;
-        let branch = self.current_branch()?;
-
-        // Fetch
-        self.fetch_origin(&branch, token)?;
-
-        // Check FETCH_HEAD validity before rebase
-        let fetch_head_path = self.repo.path().join("FETCH_HEAD");
-        let fetch_ok = fetch_head_path.exists()
-            && std::fs::metadata(&fetch_head_path)
-                .map(|m| m.len() > 0)
-                .unwrap_or(false);
-
-        if !fetch_ok {
-            debug_log!(" pull: FETCH_HEAD missing or empty, nothing to rebase");
-            return Ok(GitStatusInfo::synced());
+        if let Some(status) = self.sync_blocked_status()? {
+            return Ok(status);
         }
-
-        debug_log!(" pull: FETCH_HEAD found, starting rebase");
-
-        // Rebase onto FETCH_HEAD
-        {
-            let fetch_head = self
-                .repo
-                .find_reference("FETCH_HEAD")
-                .map_err(|e| format!("Failed to find FETCH_HEAD: {}", e))?;
-            let upstream = self
-                .repo
-                .reference_to_annotated_commit(&fetch_head)
-                .map_err(|e| format!("Failed to resolve FETCH_HEAD: {}", e))?;
-            drop(fetch_head);
-
-            let mut rebase = self
-                .repo
-                .rebase(
-                    None,
-                    Some(&upstream),
-                    None,
-                    Some(&mut git2::RebaseOptions::new()),
-                )
-                .map_err(|e| format!("Failed to start rebase: {}", e))?;
-
-            let sig = self.signature(user_name, user_email)?;
-
-            while let Some(op) = rebase.next() {
-                op.map_err(|e| format!("Rebase step failed: {}", e))?;
-                if rebase.commit(None, &sig, None).is_err() {
-                    // Nothing to commit, skip
-                }
-            }
-
-            rebase
-                .finish(None)
-                .map_err(|e| format!("Failed to finish rebase: {}", e))?;
+        self.auto_commit(user_name, user_email)?;
+        if let Err(failure) = self.pull_rebase(token, user_name, user_email) {
+            return Ok(self.status_for_rebase_failure(failure));
         }
 
         debug_log!(" pull: done");
-        Ok(GitStatusInfo::synced())
+        self.get_status()
     }
 
     /// Auto-commit pending changes, pull-rebase, and push.
@@ -800,13 +1034,15 @@ impl GitEngine {
         user_email: Option<&str>,
     ) -> Result<GitStatusInfo, String> {
         debug_log!(" stage_and_push: start");
+        if let Some(status) = self.sync_blocked_status()? {
+            return Ok(status);
+        }
         self.auto_commit(user_name, user_email)?;
 
         if self.has_remote() {
             debug_log!(" stage_and_push: has remote, starting pull_rebase");
-            if let Err(e) = self.pull_rebase(token, user_name, user_email) {
-                debug_log!(" stage_and_push: pull_rebase failed: {}", e);
-                return Ok(GitStatusInfo::error(&format!("Pull rebase failed: {}", e)));
+            if let Err(failure) = self.pull_rebase(token, user_name, user_email) {
+                return Ok(self.status_for_rebase_failure(failure));
             }
             debug_log!(" stage_and_push: pull_rebase ok, starting push");
             self.push(token)?;
@@ -815,7 +1051,7 @@ impl GitEngine {
             debug_log!(" stage_and_push: no remote configured");
         }
 
-        Ok(GitStatusInfo::synced())
+        self.get_status()
     }
 
     /// Auto-commit allowed pending skill changes, pull-rebase, and push.
@@ -828,14 +1064,44 @@ impl GitEngine {
         user_email: Option<&str>,
     ) -> Result<GitStatusInfo, String> {
         debug_log!(" stage_and_push_filtered: start");
+        if let Some(status) = self.sync_blocked_status()? {
+            return Ok(status);
+        }
 
         if self.has_remote() {
-            debug_log!(" stage_and_push_filtered: has remote, fetching parent");
+            let head_oid = self.repo.head().ok().and_then(|head| head.target());
+            let previous_remote = self
+                .repo
+                .head()
+                .ok()
+                .and_then(|head| self.upstream_oid_for_head(&head).ok());
             let remote_parent = self.fetch_remote_head(token)?;
-            self.commit_filtered_snapshot(filter, remote_parent, user_name, user_email)?;
-            debug_log!(" stage_and_push_filtered: filtered commit ok, starting push");
-            self.push(token)?;
-            debug_log!(" stage_and_push_filtered: push ok");
+            let base_oid = match (previous_remote, head_oid, remote_parent) {
+                (Some(previous), _, Some(remote)) => {
+                    self.repo.merge_base(previous, remote).unwrap_or(previous)
+                }
+                (Some(previous), _, None) => previous,
+                (None, Some(head), _) => head,
+                (None, None, _) => return Err("Filtered sync requires an initial commit".into()),
+            };
+            match self.commit_filtered_snapshot(
+                filter,
+                base_oid,
+                remote_parent,
+                user_name,
+                user_email,
+            ) {
+                Ok(Some(commit_oid)) => {
+                    self.push_filtered_commit(commit_oid, token)?;
+                    self.adopt_filtered_sync_commit(commit_oid)?;
+                }
+                Ok(None) => {
+                    if let Some(remote_oid) = remote_parent {
+                        self.adopt_filtered_sync_commit(remote_oid)?;
+                    }
+                }
+                Err(failure) => return Ok(self.status_for_rebase_failure(failure)),
+            }
         } else {
             debug_log!(" stage_and_push_filtered: no remote configured");
             self.auto_commit_filtered(filter, user_name, user_email)?;
@@ -876,7 +1142,7 @@ impl GitEngine {
         token: Option<&str>,
         user_name: Option<&str>,
         user_email: Option<&str>,
-    ) -> Result<(), String> {
+    ) -> Result<(), RebaseFailure> {
         debug_log!(" pull_rebase: start");
 
         let branch = match self.current_branch() {
@@ -903,7 +1169,8 @@ impl GitEngine {
         }
 
         // Fetch from origin
-        self.fetch_origin(&branch, token)?;
+        self.fetch_origin(&branch, token)
+            .map_err(RebaseFailure::Error)?;
 
         // Check if FETCH_HEAD has content (remote may be empty)
         let is_empty = !fetch_head_path.exists()
@@ -927,11 +1194,11 @@ impl GitEngine {
         let fetch_head = self
             .repo
             .find_reference("FETCH_HEAD")
-            .map_err(|e| format!("Failed to find FETCH_HEAD: {}", e))?;
+            .map_err(|e| RebaseFailure::Error(format!("Failed to find FETCH_HEAD: {}", e)))?;
         let upstream = self
             .repo
             .reference_to_annotated_commit(&fetch_head)
-            .map_err(|e| format!("Failed to resolve FETCH_HEAD: {}", e))?;
+            .map_err(|e| RebaseFailure::Error(format!("Failed to resolve FETCH_HEAD: {}", e)))?;
 
         // Drop fetch_head before rebase
         drop(fetch_head);
@@ -945,21 +1212,45 @@ impl GitEngine {
                 None,
                 Some(&mut git2::RebaseOptions::new()),
             )
-            .map_err(|e| format!("Failed to start rebase: {}", e))?;
+            .map_err(|e| RebaseFailure::Error(format!("Failed to start rebase: {}", e)))?;
 
-        let sig = self.signature(user_name, user_email)?;
+        let sig = self
+            .signature(user_name, user_email)
+            .map_err(RebaseFailure::Error)?;
 
         // Iterate rebase steps
         while let Some(op) = rebase.next() {
-            op.map_err(|e| format!("Rebase step failed: {}", e))?;
-            if rebase.commit(None, &sig, None).is_err() {
-                // Nothing to commit, skip
+            if let Err(error) = op {
+                let failure = Self::rebase_failure(&self.repo, "Rebase step failed", error);
+                let _ = rebase.abort();
+                return Err(failure);
+            }
+            if self
+                .repo
+                .index()
+                .map(|index| index.has_conflicts())
+                .unwrap_or(false)
+            {
+                let paths = self.conflict_paths().unwrap_or_default();
+                let _ = rebase.abort();
+                return Err(RebaseFailure::Conflicted(paths));
+            }
+            if let Err(error) = rebase.commit(None, &sig, None) {
+                if error.code() != git2::ErrorCode::Applied {
+                    let failure = Self::rebase_failure(&self.repo, "Rebase commit failed", error);
+                    let _ = rebase.abort();
+                    return Err(failure);
+                }
             }
         }
 
-        rebase
-            .finish(None)
-            .map_err(|e| format!("Failed to finish rebase: {}", e))?;
+        if let Err(error) = rebase.finish(None) {
+            let _ = rebase.abort();
+            return Err(RebaseFailure::Error(format!(
+                "Failed to finish rebase: {}",
+                error
+            )));
+        }
 
         Ok(())
     }
@@ -1089,6 +1380,57 @@ mod tests {
             .unwrap();
     }
 
+    fn configure_tracking_branch(path: &Path) -> String {
+        let branch = Command::new("git")
+            .args(["branch", "--show-current"])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        let branch = String::from_utf8_lossy(&branch.stdout).trim().to_string();
+        Command::new("git")
+            .args(["remote", "add", "origin", "."])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args([
+                "update-ref",
+                &format!("refs/remotes/origin/{branch}"),
+                "HEAD",
+            ])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", &format!("branch.{branch}.remote"), "origin"])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args([
+                "config",
+                &format!("branch.{branch}.merge"),
+                &format!("refs/heads/{branch}"),
+            ])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        branch
+    }
+
+    fn remove_tracking_config(path: &Path, branch: &str) {
+        Command::new("git")
+            .args(["config", "--unset", &format!("branch.{branch}.remote")])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "--unset", &format!("branch.{branch}.merge")])
+            .current_dir(path)
+            .output()
+            .unwrap();
+    }
+
     #[test]
     fn test_open_existing_repo() {
         let dir = TempDir::new().unwrap();
@@ -1126,6 +1468,155 @@ mod tests {
         let changes = engine.get_pending_changes().unwrap();
         assert!(!changes.is_empty());
         assert!(changes.iter().any(|c| c.file_path == "README.md"));
+    }
+
+    #[test]
+    fn test_get_status_includes_committed_unpushed_skill() {
+        let dir = TempDir::new().unwrap();
+        init_git_repo(dir.path());
+        configure_tracking_branch(dir.path());
+
+        fs::create_dir_all(dir.path().join("baoyu-cover-image")).unwrap();
+        fs::write(
+            dir.path().join("baoyu-cover-image").join("SKILL.md"),
+            "# Cover Image\n",
+        )
+        .unwrap();
+        Command::new("git")
+            .args(["add", "baoyu-cover-image"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "Add cover image skill"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+
+        let engine = GitEngine::open(dir.path()).unwrap();
+        let status = engine.get_status().unwrap();
+
+        assert_eq!(status.status, "modified");
+        assert_eq!(status.ahead, 1);
+        assert_eq!(status.behind, 0);
+        assert!(status.changes.iter().any(|change| {
+            change.file_path == "baoyu-cover-image/SKILL.md" && change.change_type == "added"
+        }));
+    }
+
+    #[test]
+    fn test_get_status_falls_back_to_origin_branch_without_tracking_config() {
+        let dir = TempDir::new().unwrap();
+        init_git_repo(dir.path());
+        let branch = configure_tracking_branch(dir.path());
+        remove_tracking_config(dir.path(), &branch);
+
+        fs::create_dir_all(dir.path().join("local-skill")).unwrap();
+        fs::write(
+            dir.path().join("local-skill").join("SKILL.md"),
+            "# Local Skill\n",
+        )
+        .unwrap();
+        Command::new("git")
+            .args(["add", "local-skill"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "Add local skill"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+
+        let engine = GitEngine::open(dir.path()).unwrap();
+        let status = engine.get_status().unwrap();
+
+        assert_eq!(status.status, "modified");
+        assert_eq!(status.ahead, 1);
+        assert_eq!(status.behind, 0);
+        assert!(status.changes.iter().any(|change| {
+            change.file_path == "local-skill/SKILL.md" && change.change_type == "added"
+        }));
+    }
+
+    #[test]
+    fn test_ensure_upstream_tracking_repairs_missing_branch_config() {
+        let dir = TempDir::new().unwrap();
+        init_git_repo(dir.path());
+        let branch = configure_tracking_branch(dir.path());
+        remove_tracking_config(dir.path(), &branch);
+
+        let engine = GitEngine::open(dir.path()).unwrap();
+        engine.ensure_upstream_tracking(&branch).unwrap();
+
+        let local_ref = format!("refs/heads/{branch}");
+        let upstream = engine.repo.branch_upstream_name(&local_ref).unwrap();
+        assert_eq!(
+            upstream.as_str(),
+            Some(format!("refs/remotes/origin/{branch}").as_str())
+        );
+    }
+
+    #[test]
+    fn test_get_status_does_not_report_remote_only_changes_as_pending() {
+        let dir = TempDir::new().unwrap();
+        init_git_repo(dir.path());
+        let branch = configure_tracking_branch(dir.path());
+
+        let engine = GitEngine::open(dir.path()).unwrap();
+        let sig = engine
+            .signature(Some("Remote User"), Some("remote@example.com"))
+            .unwrap();
+        let head_oid = engine.repo.head().unwrap().target().unwrap();
+        let head_commit = engine.repo.find_commit(head_oid).unwrap();
+        let head_tree = head_commit.tree().unwrap();
+        let mut index = git2::Index::new().unwrap();
+        index.read_tree(&head_tree).unwrap();
+        let remote_blob = engine.repo.blob(b"remote only\n").unwrap();
+        let entry = git2::IndexEntry {
+            ctime: git2::IndexTime::new(0, 0),
+            mtime: git2::IndexTime::new(0, 0),
+            dev: 0,
+            ino: 0,
+            mode: 0o100644,
+            uid: 0,
+            gid: 0,
+            file_size: 12,
+            id: remote_blob,
+            flags: 0,
+            flags_extended: 0,
+            path: b"remote-only.txt".to_vec(),
+        };
+        index.add(&entry).unwrap();
+        let remote_tree_oid = index.write_tree_to(&engine.repo).unwrap();
+        let remote_tree = engine.repo.find_tree(remote_tree_oid).unwrap();
+        let remote_commit_oid = engine
+            .repo
+            .commit(
+                None,
+                &sig,
+                &sig,
+                "Remote change",
+                &remote_tree,
+                &[&head_commit],
+            )
+            .unwrap();
+        engine
+            .repo
+            .reference(
+                &format!("refs/remotes/origin/{branch}"),
+                remote_commit_oid,
+                true,
+                "test remote advance",
+            )
+            .unwrap();
+
+        let status = engine.get_status().unwrap();
+
+        assert_eq!(status.status, "idle");
+        assert_eq!(status.ahead, 0);
+        assert_eq!(status.behind, 1);
+        assert!(status.changes.is_empty());
     }
 
     #[test]
@@ -1189,8 +1680,12 @@ mod tests {
             .output()
             .unwrap();
 
-        assert_eq!(String::from_utf8_lossy(&head_webkong.stdout), "webkong updated\n");
-        assert!(!head_other.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&head_webkong.stdout),
+            "webkong updated\n"
+        );
+        assert!(head_other.status.success());
+        assert_eq!(String::from_utf8_lossy(&head_other.stdout), "other\n");
         assert!(dir.path().join("other-one").join("SKILL.md").exists());
     }
 
@@ -1256,7 +1751,9 @@ mod tests {
         fs::write(dir.path().join("webkong-one").join("SKILL.md"), "webkong\n").unwrap();
 
         let mut engine = GitEngine::open(dir.path()).unwrap();
-        let sig = engine.signature(Some("Remote User"), Some("remote@example.com")).unwrap();
+        let sig = engine
+            .signature(Some("Remote User"), Some("remote@example.com"))
+            .unwrap();
         let head_oid = engine.repo.head().unwrap().target().unwrap();
         let head_commit = engine.repo.find_commit(head_oid).unwrap();
         let head_tree = head_commit.tree().unwrap();
@@ -1284,20 +1781,160 @@ mod tests {
         };
         let result = engine.commit_filtered_snapshot(
             &filter,
+            head_oid,
             Some(remote_parent_oid),
             Some("Configured User"),
             Some("configured@example.com"),
         );
 
-        assert!(result.is_ok());
-        let parent = Command::new("git")
-            .args(["log", "-1", "--format=%P"])
+        let commit_oid = result.unwrap().unwrap();
+        let commit = engine.repo.find_commit(commit_oid).unwrap();
+        assert_eq!(commit.parent_id(0).unwrap(), remote_parent_oid);
+    }
+
+    #[test]
+    fn test_filtered_snapshot_reports_same_skill_conflict() {
+        let dir = TempDir::new().unwrap();
+        init_git_repo(dir.path());
+        fs::create_dir_all(dir.path().join("webkong-one")).unwrap();
+        fs::write(dir.path().join("webkong-one/SKILL.md"), "base\n").unwrap();
+        Command::new("git")
+            .args(["add", "."])
             .current_dir(dir.path())
             .output()
             .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "Add base skill"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+
+        let mut engine = GitEngine::open(dir.path()).unwrap();
+        let base_oid = engine.repo.head().unwrap().target().unwrap();
+        let base_commit = engine.repo.find_commit(base_oid).unwrap();
+        let base_tree = base_commit.tree().unwrap();
+        let mut remote_index = engine.repo.index().unwrap();
+        remote_index.read_tree(&base_tree).unwrap();
+        let remote_blob = engine.repo.blob(b"remote\n").unwrap();
+        let mut entry = remote_index
+            .get_path(Path::new("webkong-one/SKILL.md"), 0)
+            .unwrap();
+        entry.id = remote_blob;
+        entry.file_size = 7;
+        remote_index.add(&entry).unwrap();
+        let remote_tree_oid = remote_index.write_tree().unwrap();
+        let remote_tree = engine.repo.find_tree(remote_tree_oid).unwrap();
+        let sig = engine.signature(None, None).unwrap();
+        let remote_oid = engine
+            .repo
+            .commit(
+                None,
+                &sig,
+                &sig,
+                "Remote edit",
+                &remote_tree,
+                &[&base_commit],
+            )
+            .unwrap();
+        drop(remote_tree);
+        drop(base_tree);
+        drop(base_commit);
+
+        fs::write(dir.path().join("webkong-one/SKILL.md"), "local\n").unwrap();
+        let filter = SkillSyncFilter {
+            include_prefixes: vec!["webkong".to_string()],
+            include_skill_ids: Vec::new(),
+        };
+        let result =
+            engine.commit_filtered_snapshot(&filter, base_oid, Some(remote_oid), None, None);
+
+        match result {
+            Err(RebaseFailure::Conflicted(paths)) => {
+                assert_eq!(paths, vec!["webkong-one/SKILL.md"]);
+            }
+            _ => panic!("expected filtered merge conflict"),
+        }
+    }
+
+    #[test]
+    fn test_pull_conflict_aborts_rebase_and_restores_local_state() {
+        let root = TempDir::new().unwrap();
+        let remote = root.path().join("remote.git");
+        let local = root.path().join("local");
+        let peer = root.path().join("peer");
+        fs::create_dir_all(&local).unwrap();
+        Command::new("git")
+            .args(["init", "--bare", remote.to_str().unwrap()])
+            .output()
+            .unwrap();
+        init_git_repo(&local);
+        Command::new("git")
+            .args(["remote", "add", "origin", remote.to_str().unwrap()])
+            .current_dir(&local)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["push", "-u", "origin", "HEAD"])
+            .current_dir(&local)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["clone", remote.to_str().unwrap(), peer.to_str().unwrap()])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "user.email", "peer@test.com"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "user.name", "Peer User"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+
+        fs::write(peer.join("README.md"), "# Remote\n").unwrap();
+        Command::new("git")
+            .args(["commit", "-am", "Remote edit"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["push", "origin", "HEAD"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+
+        fs::write(local.join("README.md"), "# Local\n").unwrap();
+        Command::new("git")
+            .args(["commit", "-am", "Local edit"])
+            .current_dir(&local)
+            .output()
+            .unwrap();
+        let local_head = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&local)
+            .output()
+            .unwrap();
+        let local_head = String::from_utf8_lossy(&local_head.stdout)
+            .trim()
+            .to_string();
+
+        let mut engine = GitEngine::open(&local).unwrap();
+        let status = engine.pull(None, None, None).unwrap();
+
+        assert_eq!(status.status, "conflicted");
+        assert_eq!(status.changes.len(), 1);
+        assert_eq!(status.changes[0].file_path, "README.md");
+        assert_eq!(engine.repo.state(), git2::RepositoryState::Clean);
+        assert!(!engine.repo.index().unwrap().has_conflicts());
         assert_eq!(
-            String::from_utf8_lossy(&parent.stdout).trim(),
-            remote_parent_oid.to_string()
+            engine.repo.head().unwrap().target().unwrap().to_string(),
+            local_head
+        );
+        assert_eq!(
+            fs::read_to_string(local.join("README.md")).unwrap(),
+            "# Local\n"
         );
     }
 

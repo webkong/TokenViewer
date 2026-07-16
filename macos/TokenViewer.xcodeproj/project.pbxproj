@@ -15,6 +15,7 @@
 		12B566AD46B9BA091FB15546 /* autohand.svg in Resources */ = {isa = PBXBuildFile; fileRef = BC5D99C7B2DEA0AB39C5C4A8 /* autohand.svg */; };
 		12C8B7DA13305A7A1240532F /* aug.svg in Resources */ = {isa = PBXBuildFile; fileRef = 2626E2AB89FE668F6F21014F /* aug.svg */; };
 		13A280D2AB0B9FD6CBA5E8DA /* trae.png in Resources */ = {isa = PBXBuildFile; fileRef = 9FCDFF3B030DCF4A5536E67E /* trae.png */; };
+		140D7BAE7AC7738D1531797C /* SkillPreviewCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B98E866BA953AC0243EF6B6 /* SkillPreviewCache.swift */; };
 		149B8B58C06302D14076B43F /* gemini.svg in Resources */ = {isa = PBXBuildFile; fileRef = E9F2DD464AF49DBA8E6A6E86 /* gemini.svg */; };
 		1645D94A3E61F9D783358C2D /* QuickHelpModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D34312DA52FC1C4E17FA45B /* QuickHelpModifier.swift */; };
 		1B2E655D1EB989A9FA40B134 /* cursor.svg in Resources */ = {isa = PBXBuildFile; fileRef = 9D533D3DCF9CA4378E9A240D /* cursor.svg */; };
@@ -115,6 +116,7 @@
 		0495AEF0E7BB906AC8EACB8E /* llama.svg */ = {isa = PBXFileReference; path = llama.svg; sourceTree = "<group>"; };
 		068F9C35A6FFB2F33320C210 /* SkillGitSyncSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillGitSyncSheet.swift; sourceTree = "<group>"; };
 		0F9CAADCE87E6ADB31C02E50 /* SkillManagerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillManagerViewModel.swift; sourceTree = "<group>"; };
+		1B98E866BA953AC0243EF6B6 /* SkillPreviewCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillPreviewCache.swift; sourceTree = "<group>"; };
 		1DCD82F79AAD3F077EAA8A17 /* ProviderIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderIcon.swift; sourceTree = "<group>"; };
 		1EAB46CA603C1B6F3FF93BE9 /* ProviderDateParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderDateParser.swift; sourceTree = "<group>"; };
 		21D91FBC31BF8A6F1CBFA202 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
@@ -318,6 +320,7 @@
 				C54A6C43A31CA1B59412B121 /* Preferences.swift */,
 				1EAB46CA603C1B6F3FF93BE9 /* ProviderDateParser.swift */,
 				EE09FEBA97E285D0B2311698 /* ProviderRegistry.swift */,
+				1B98E866BA953AC0243EF6B6 /* SkillPreviewCache.swift */,
 				F69660CE5393741209A39863 /* UpdateChecker.swift */,
 			);
 			path = Services;
@@ -603,6 +606,7 @@
 				D4C2E0CC343A54FEAD847CFD /* SkillManagerView.swift in Sources */,
 				2D1277885E113DCAF822CB21 /* SkillManagerViewModel.swift in Sources */,
 				5A68115AF7A71BF858D9D464 /* SkillModels.swift in Sources */,
+				140D7BAE7AC7738D1531797C /* SkillPreviewCache.swift in Sources */,
 				1CBF7C85F3FB372DBE9FBCFC /* StatusBarController.swift in Sources */,
 				94FD9E64724730AA7B7061D7 /* TokenViewerApp.swift in Sources */,
 				7C48F3EEBCAADE26A81AC8D8 /* TrendChartView.swift in Sources */,
