@@ -86,7 +86,7 @@ struct SkillListView: View {
 
     private var filteredSkills: [SkillEntry] {
         let skills = viewModel.filteredSkills
-        if viewModel.selectedFilter == "all" { return skills }
+        if viewModel.selectedFilter == SkillManagerViewModel.allFilter { return skills }
         // Already filtered by viewModel.filteredSkills
         return skills
     }

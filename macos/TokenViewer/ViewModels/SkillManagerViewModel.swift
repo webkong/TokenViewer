@@ -21,10 +21,12 @@ struct BuiltInOrganizeAlert: Identifiable {
 @MainActor
 final class SkillManagerViewModel: ObservableObject {
     static let shared = SkillManagerViewModel()
+    static let allFilter = "all"
+    static let globalFilter = "global"
 
     @Published private(set) var skills: [SkillEntry] = []
     @Published private(set) var providers: [SkillProvider] = []
-    @Published var selectedFilter: String = "all"
+    @Published var selectedFilter: String = SkillManagerViewModel.allFilter
     /// Drives the cross-agent compatibility alert in the skill list.
     @Published var compatibilityAlert: CompatibilityAlert?
     /// Drives the confirmation shown before organizing an agent built-in skill.
@@ -192,15 +194,21 @@ final class SkillManagerViewModel: ObservableObject {
                 return false
             }
 
-            guard selectedFilter != "all" else { return matchesSearch }
+            if selectedFilter == Self.allFilter {
+                return matchesSearch
+            }
+            if selectedFilter == Self.globalFilter {
+                return matchesSearch && isInSourceRoot(skill)
+            }
             return matchesSearch && skillMatchesAgent(skill, agentID: selectedFilter)
         }
     }
 
     func ensureValidFilter() {
-        guard selectedFilter != "all" else { return }
+        guard selectedFilter != Self.allFilter,
+              selectedFilter != Self.globalFilter else { return }
         if !visibleProviders.contains(where: { $0.source == selectedFilter }) {
-            selectedFilter = "all"
+            selectedFilter = Self.allFilter
         }
     }
 

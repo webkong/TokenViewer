@@ -184,6 +184,7 @@ final class L10n: ObservableObject {
     var skillSync: String { isZh ? "同步" : "Sync" }
     var skillSettings: String { isZh ? "设置" : "Settings" }
     var skillAll: String { isZh ? "全部" : "All" }
+    var skillGlobal: String { isZh ? "全局" : "Global" }
     var skillOperationFailed: String { isZh ? "技能操作失败" : "Skill operation failed" }
     var skillNoBatchTargets: String { isZh ? "没有可处理的技能" : "No eligible skills" }
     var skillDeleteConfirm: String { isZh ? "确认删除此技能？此操作不可撤销。" : "Are you sure you want to delete this skill? This cannot be undone." }
@@ -331,6 +332,7 @@ final class L10n: ObservableObject {
     var skillRestoreAllConfirmTitle: String { isZh ? "确认批量还原？" : "Confirm Batch Restore?" }
     var skillRestoreAllConfirmMessage: String { isZh ? "将把当前筛选结果中可还原的技能放回原始 Agent 目录。" : "Eligible skills in the current filtered list will be restored to their original agent folders." }
     var skillAllFilterTip: String { isZh ? "显示所有已启用 Agent 可见的技能" : "Show skills visible to all enabled agents" }
+    var skillGlobalFilterTip: String { isZh ? "只显示全局技能目录中的技能" : "Show only skills in the global skills directory" }
     func skillAgentFilterTip(_ agent: String) -> String { isZh ? "只显示 \(agent) 相关的技能" : "Show skills related to \(agent)" }
     func skillOrganizeTip(_ agent: String) -> String { isZh ? "把此技能整理到共享技能根目录，并为 \(agent) 保持链接" : "Move this skill into the shared source root and keep \(agent) linked" }
     func skillRestoreTip(_ agent: String) -> String { isZh ? "把此技能从共享技能根目录还原到 \(agent) 的 skills 目录" : "Restore this skill from the shared source root into \(agent)'s skills folder" }

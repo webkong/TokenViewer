@@ -116,9 +116,17 @@ struct SkillManagerView: View {
             FilterChip(
                 icon: "square.grid.2x2",
                 label: L10n.shared.skillAll,
-                isSelected: viewModel.selectedFilter == "all",
+                isSelected: viewModel.selectedFilter == SkillManagerViewModel.allFilter,
                 tooltip: L10n.shared.skillAllFilterTip,
-                action: { viewModel.selectedFilter = "all" }
+                action: { viewModel.selectedFilter = SkillManagerViewModel.allFilter }
+            )
+
+            FilterChip(
+                icon: "globe",
+                label: L10n.shared.skillGlobal,
+                isSelected: viewModel.selectedFilter == SkillManagerViewModel.globalFilter,
+                tooltip: L10n.shared.skillGlobalFilterTip,
+                action: { viewModel.selectedFilter = SkillManagerViewModel.globalFilter }
             )
 
             ForEach(viewModel.visibleProviders) { p in
