@@ -433,10 +433,12 @@ final class SkillManagerViewModel: ObservableObject {
         let token = tokenSaved ? (KeychainManager.shared.getToken(for: platform) ?? "") : ""
         let userName = defaults.string(forKey: "syncGitUserName") ?? ""
         let userEmail = defaults.string(forKey: "syncGitUserEmail") ?? ""
+        let gitBranch = defaults.string(forKey: "syncGitBranch") ?? "main"
         return applyGitConfig(
             remoteURL: remoteURL,
             platform: platform,
             token: token,
+            gitBranch: gitBranch,
             userName: userName,
             userEmail: userEmail,
             showErrorToast: showErrorToast
@@ -447,12 +449,14 @@ final class SkillManagerViewModel: ObservableObject {
         remoteURL: String,
         platform: String,
         token: String,
+        gitBranch: String = "main",
         userName: String = "",
         userEmail: String = "",
         showErrorToast: Bool = true
     ) -> Bool {
         let trimmedURL = remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBranch = gitBranch.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedUserName = userName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedUserEmail = userEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedURL.isEmpty, !trimmedToken.isEmpty else {
@@ -465,6 +469,7 @@ final class SkillManagerViewModel: ObservableObject {
             "remote_url": trimmedURL,
             "platform": platform,
             "token": trimmedToken,
+            "git_branch": trimmedBranch.isEmpty ? "main" : trimmedBranch,
             "user_name": trimmedUserName,
             "user_email": trimmedUserEmail,
         ])
@@ -485,6 +490,7 @@ final class SkillManagerViewModel: ObservableObject {
         remoteURL: String? = nil,
         platform: String? = nil,
         token: String? = nil,
+        gitBranch: String = "main",
         userName: String? = nil,
         userEmail: String? = nil
     ) {
@@ -495,6 +501,7 @@ final class SkillManagerViewModel: ObservableObject {
                         remoteURL: remoteURL,
                         platform: platform,
                         token: token,
+                        gitBranch: gitBranch,
                         userName: userName ?? "",
                         userEmail: userEmail ?? ""
                     )
@@ -524,6 +531,7 @@ final class SkillManagerViewModel: ObservableObject {
         remoteURL: String? = nil,
         platform: String? = nil,
         token: String? = nil,
+        gitBranch: String = "main",
         userName: String? = nil,
         userEmail: String? = nil,
         filterPayload: Data? = nil
@@ -535,6 +543,7 @@ final class SkillManagerViewModel: ObservableObject {
                         remoteURL: remoteURL,
                         platform: platform,
                         token: token,
+                        gitBranch: gitBranch,
                         userName: userName ?? "",
                         userEmail: userEmail ?? ""
                     )

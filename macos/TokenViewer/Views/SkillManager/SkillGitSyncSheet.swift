@@ -50,6 +50,7 @@ struct SkillGitSyncSheet: View {
     @AppStorage("syncTokenSaved_other") private var tokenSavedOther = false
     @AppStorage("syncGitUserName") private var storedGitUserName = ""
     @AppStorage("syncGitUserEmail") private var storedGitUserEmail = ""
+    @AppStorage("syncGitBranch") private var syncGitBranch = "main"
     @AppStorage("syncSkillFilterEnabled") private var filterEnabled = false
     @AppStorage("syncSkillFilterPrefixes") private var filterPrefixes = ""
     @AppStorage("syncSkillFilterSelectedIDs") private var filterSelectedIDsJSON = "[]"
@@ -108,9 +109,10 @@ struct SkillGitSyncSheet: View {
         .clearInitialFocus(trigger: providerRaw)
         .clearFocusOnOutsideClick()
         .sheet(isPresented: $showAuthSheet) {
-            SkillAuthSheet(provider: $providerRaw) { userName, userEmail in
+            SkillAuthSheet(provider: $providerRaw) { userName, userEmail, gitBranch in
                 storedGitUserName = userName.trimmingCharacters(in: .whitespacesAndNewlines)
                 storedGitUserEmail = userEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+                syncGitBranch = gitBranch
                 applyConfig(showToast: true, userName: userName, userEmail: userEmail)
             }
         }
@@ -277,6 +279,7 @@ struct SkillGitSyncSheet: View {
                     remoteURL: repoURL,
                     platform: provider.key,
                     token: currentToken,
+                    gitBranch: syncGitBranch,
                     userName: storedGitUserName,
                     userEmail: storedGitUserEmail
                 )
@@ -296,6 +299,7 @@ struct SkillGitSyncSheet: View {
                     remoteURL: repoURL,
                     platform: provider.key,
                     token: currentToken,
+                    gitBranch: syncGitBranch,
                     userName: storedGitUserName,
                     userEmail: storedGitUserEmail,
                     filterPayload: syncFilterPayload()
@@ -400,6 +404,7 @@ struct SkillGitSyncSheet: View {
             remoteURL: repoURL,
             platform: provider.key,
             token: token,
+            gitBranch: syncGitBranch,
             userName: userName ?? storedGitUserName,
             userEmail: userEmail ?? storedGitUserEmail
         ) else { return }
@@ -414,6 +419,7 @@ struct SkillGitSyncSheet: View {
         struct Config: Codable {
             let gitRemoteUrl: String
             let gitPlatform: String
+            let gitBranch: String?
             let gitUserName: String?
             let gitUserEmail: String?
         }
@@ -428,6 +434,9 @@ struct SkillGitSyncSheet: View {
         }
         storedGitUserName = config.gitUserName ?? ""
         storedGitUserEmail = config.gitUserEmail ?? ""
+        syncGitBranch = config.gitBranch?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? config.gitBranch!
+            : "main"
     }
 
     private var filterSection: some View {
@@ -584,13 +593,14 @@ private struct SkillSyncFilterPayload: Encodable {
 
 struct SkillAuthSheet: View {
     @Binding var provider: String
-    var onSave: ((String, String) -> Void)?
+    var onSave: ((String, String, String) -> Void)?
 
     @AppStorage("syncTokenSaved_github") private var tokenSavedGithub = false
     @AppStorage("syncTokenSaved_gitlab") private var tokenSavedGitlab = false
     @AppStorage("syncTokenSaved_other") private var tokenSavedOther = false
     @AppStorage("syncGitUserName") private var storedGitUserName = ""
     @AppStorage("syncGitUserEmail") private var storedGitUserEmail = ""
+    @AppStorage("syncGitBranch") private var storedGitBranch = "main"
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var l10n = L10n.shared
 
@@ -600,6 +610,7 @@ struct SkillAuthSheet: View {
     @State private var tokenOther = ""
     @State private var gitUserName = ""
     @State private var gitUserEmail = ""
+    @State private var gitBranch = "main"
     @State private var defaultGitUserName = ""
     @State private var defaultGitUserEmail = ""
 
@@ -652,6 +663,16 @@ struct SkillAuthSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
+                Text(l10n.gitSyncBranch)
+                    .font(.subheadline.weight(.medium))
+                TextField("main", text: $gitBranch)
+                    .textFieldStyle(.roundedBorder)
+                Text(l10n.gitSyncBranchDesc)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
                     Text("\(currentProvider.rawValue) \(l10n.gitToken)")
                         .font(.subheadline.weight(.medium))
@@ -700,7 +721,9 @@ struct SkillAuthSheet: View {
                 Button(tokenSaved ? l10n.gitUpdateToken : l10n.save) {
                     AppFocus.clear()
                     guard saveCurrentToken() else { return }
-                    onSave?(gitUserName, gitUserEmail)
+                    let branch = normalizedGitBranch
+                    storedGitBranch = branch
+                    onSave?(gitUserName, gitUserEmail, branch)
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -709,7 +732,7 @@ struct SkillAuthSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 420, height: 455)
+        .frame(width: 420, height: 535)
         .clearInitialFocus(trigger: provider)
         .clearFocusOnOutsideClick()
         .onAppear {
@@ -772,6 +795,7 @@ struct SkillAuthSheet: View {
         struct Config: Codable {
             let gitUserName: String?
             let gitUserEmail: String?
+            let gitBranch: String?
             let defaultGitUserName: String?
             let defaultGitUserEmail: String?
         }
@@ -780,6 +804,7 @@ struct SkillAuthSheet: View {
         guard let config = try? decoder.decode(Config.self, from: data) else { return }
         gitUserName = config.gitUserName ?? storedGitUserName
         gitUserEmail = config.gitUserEmail ?? storedGitUserEmail
+        gitBranch = config.gitBranch ?? storedGitBranch
         defaultGitUserName = config.defaultGitUserName ?? ""
         defaultGitUserEmail = config.defaultGitUserEmail ?? ""
     }
@@ -792,11 +817,17 @@ struct SkillAuthSheet: View {
             setTokenSaved(true)
             storedGitUserName = gitUserName.trimmingCharacters(in: .whitespacesAndNewlines)
             storedGitUserEmail = gitUserEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+            storedGitBranch = normalizedGitBranch
             return true
         } catch {
             ToastCenter.shared.error(l10n.toastSaveFailed)
             return false
         }
+    }
+
+    private var normalizedGitBranch: String {
+        let branch = gitBranch.trimmingCharacters(in: .whitespacesAndNewlines)
+        return branch.isEmpty ? "main" : branch
     }
 
     private func removeCurrentToken() {

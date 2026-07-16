@@ -134,7 +134,9 @@ impl GitEngine {
         std::fs::create_dir_all(repo_path)
             .map_err(|e| format!("Failed to create directory {}: {}", repo_path.display(), e))?;
 
-        let repo = Repository::init(repo_path)
+        let mut init_options = git2::RepositoryInitOptions::new();
+        init_options.initial_head("main");
+        let repo = Repository::init_opts(repo_path, &init_options)
             .map_err(|e| format!("Failed to init git repo at {}: {}", repo_path.display(), e))?;
 
         // Configure local user for commits
@@ -284,12 +286,9 @@ impl GitEngine {
             ))
             .map_err(|e| format!("Failed to get status: {}", e))?;
 
-        // Get branch name
-        let branch = self
-            .repo
-            .head()
-            .ok()
-            .and_then(|h| h.shorthand().map(|s| s.to_string()));
+        // Show the configured remote sync branch, which may differ from the
+        // local branch name.
+        let branch = Some(self.sync_branch());
 
         // Get ahead/behind counts
         let (ahead, behind) = self.ahead_behind().unwrap_or((0, 0));
@@ -405,21 +404,9 @@ impl GitEngine {
         Ok((ahead as i32, behind as i32))
     }
 
-    /// Resolve the configured upstream, falling back to origin/<branch> for
-    /// repositories initialized by TokenViewer before tracking was configured.
-    fn upstream_oid_for_head(&self, head: &git2::Reference<'_>) -> Result<Oid, String> {
-        let head_ref = head.name().ok_or("HEAD is not on a branch")?;
-        if let Ok(upstream_name) = self.repo.branch_upstream_name(head_ref) {
-            let upstream_ref = self
-                .repo
-                .find_reference(upstream_name.as_str().unwrap_or(""))
-                .map_err(|e| format!("Failed to find upstream branch: {}", e))?;
-            return upstream_ref
-                .target()
-                .ok_or_else(|| "Upstream branch has no target".to_string());
-        }
-
-        let branch = head.shorthand().ok_or("HEAD is not on a branch")?;
+    /// Resolve the configured remote sync branch.
+    fn upstream_oid_for_head(&self, _head: &git2::Reference<'_>) -> Result<Oid, String> {
+        let branch = self.sync_branch();
         let fallback_ref = format!("refs/remotes/origin/{branch}");
         self.repo
             .find_reference(&fallback_ref)
@@ -545,6 +532,41 @@ impl GitEngine {
         Ok(())
     }
 
+    pub fn validate_sync_branch(branch: &str) -> Result<(), String> {
+        let branch = branch.trim();
+        if branch.is_empty() {
+            return Err("Git sync branch cannot be empty".to_string());
+        }
+        let ref_name = format!("refs/heads/{branch}");
+        if !git2::Reference::is_valid_name(&ref_name) {
+            return Err(format!("Invalid Git sync branch: {branch}"));
+        }
+        Ok(())
+    }
+
+    pub fn set_sync_branch(&self, branch: &str) -> Result<(), String> {
+        let branch = branch.trim();
+        Self::validate_sync_branch(branch)?;
+        self.repo
+            .config()
+            .and_then(|mut config| config.set_str("tokenviewer.syncBranch", branch))
+            .map_err(|e| format!("Failed to save Git sync branch: {}", e))?;
+        if self.has_remote() {
+            let _ = self.ensure_upstream_tracking(branch);
+        }
+        Ok(())
+    }
+
+    fn sync_branch(&self) -> String {
+        self.repo
+            .config()
+            .ok()
+            .and_then(|config| config.get_string("tokenviewer.syncBranch").ok())
+            .map(|branch| branch.trim().to_string())
+            .filter(|branch| Self::validate_sync_branch(branch).is_ok())
+            .unwrap_or_else(|| "main".to_string())
+    }
+
     /// Detect the current branch name.
     fn current_branch(&self) -> Result<String, String> {
         let head = self
@@ -587,26 +609,40 @@ impl GitEngine {
     }
 
     fn ensure_upstream_tracking(&self, branch: &str) -> Result<(), String> {
-        let local_ref = format!("refs/heads/{branch}");
-        if self.repo.branch_upstream_name(&local_ref).is_ok() {
-            return Ok(());
-        }
-
         let remote_ref = format!("refs/remotes/origin/{branch}");
         self.repo
             .find_reference(&remote_ref)
             .map_err(|e| format!("Remote branch {} is unavailable: {}", remote_ref, e))?;
 
+        let local_branch_name = self.current_branch()?;
+        let local_ref = format!("refs/heads/{local_branch_name}");
+        let expected_upstream = format!("refs/remotes/origin/{branch}");
+        if self
+            .repo
+            .branch_upstream_name(&local_ref)
+            .ok()
+            .and_then(|name| name.as_str().map(ToString::to_string))
+            .as_deref()
+            == Some(expected_upstream.as_str())
+        {
+            return Ok(());
+        }
+
         let mut local_branch = self
             .repo
-            .find_branch(branch, git2::BranchType::Local)
-            .map_err(|e| format!("Failed to find local branch {}: {}", branch, e))?;
+            .find_branch(&local_branch_name, git2::BranchType::Local)
+            .map_err(|e| format!("Failed to find local branch {}: {}", local_branch_name, e))?;
         local_branch
             .set_upstream(Some(&format!("origin/{branch}")))
-            .map_err(|e| format!("Failed to track origin/{}: {}", branch, e))?;
+            .map_err(|e| {
+                format!(
+                    "Failed to make local branch {} track origin/{}: {}",
+                    local_branch_name, branch, e
+                )
+            })?;
         debug_log!(
             " fetch_origin: configured {} to track origin/{}",
-            branch,
+            local_branch_name,
             branch
         );
         Ok(())
@@ -957,7 +993,7 @@ impl GitEngine {
     }
 
     fn push_filtered_commit(&self, oid: Oid, token: Option<&str>) -> Result<(), String> {
-        let branch = self.current_branch()?;
+        let branch = self.sync_branch();
         let temporary_ref = "refs/tokenviewer/filtered-sync";
         self.repo
             .reference(temporary_ref, oid, true, "filtered sync candidate")
@@ -1176,10 +1212,7 @@ impl GitEngine {
     }
 
     fn fetch_remote_head(&self, token: Option<&str>) -> Result<Option<Oid>, String> {
-        let branch = match self.current_branch() {
-            Ok(branch) => branch,
-            Err(_) => return Ok(None),
-        };
+        let branch = self.sync_branch();
         self.fetch_origin(&branch, token)?;
         let fetch_head_path = self.repo.path().join("FETCH_HEAD");
         let is_empty = !fetch_head_path.exists()
@@ -1210,13 +1243,17 @@ impl GitEngine {
     ) -> Result<(), RebaseFailure> {
         debug_log!(" pull_rebase: start");
 
-        let branch = match self.current_branch() {
-            Ok(b) => b,
-            Err(_) => {
-                debug_log!(" pull_rebase: HEAD is unborn, skipping");
-                return Ok(());
-            }
-        };
+        if self
+            .repo
+            .head()
+            .ok()
+            .and_then(|head| head.target())
+            .is_none()
+        {
+            debug_log!(" pull_rebase: HEAD is unborn, skipping");
+            return Ok(());
+        }
+        let branch = self.sync_branch();
 
         // Clean up stale empty FETCH_HEAD from previous failed attempts
         let fetch_head_path = self.repo.path().join("FETCH_HEAD");
@@ -1389,9 +1426,15 @@ impl GitEngine {
             .find_remote("origin")
             .map_err(|e| format!("Failed to find remote 'origin': {}", e))?;
 
-        let branch = self.current_branch().unwrap_or_else(|_| "main".to_string());
-        let refspec = format!("refs/heads/{branch}:refs/heads/{branch}");
-        debug_log!(" push: branch={}, refspec={}", branch, refspec);
+        let local_branch = self.current_branch()?;
+        let remote_branch = self.sync_branch();
+        let refspec = format!("refs/heads/{local_branch}:refs/heads/{remote_branch}");
+        debug_log!(
+            " push: local_branch={}, remote_branch={}, refspec={}",
+            local_branch,
+            remote_branch,
+            refspec
+        );
 
         let mut push_options = git2::PushOptions::new();
         if let Some(tok) = token {
@@ -1416,7 +1459,7 @@ mod tests {
 
     fn init_git_repo(path: &Path) {
         Command::new("git")
-            .args(["init"])
+            .args(["init", "-b", "main"])
             .current_dir(path)
             .output()
             .expect("Failed to git init");
@@ -2157,6 +2200,80 @@ mod tests {
             .unwrap();
         let remote = engine.repo.find_remote("origin").unwrap();
         assert_eq!(remote.url().unwrap(), "https://github.com/test/repo.git");
+    }
+
+    #[test]
+    fn test_sync_branch_defaults_to_main_and_rejects_invalid_names() {
+        let dir = TempDir::new().unwrap();
+        init_git_repo(dir.path());
+        let engine = GitEngine::open(dir.path()).unwrap();
+
+        assert_eq!(engine.sync_branch(), "main");
+        assert!(engine.set_sync_branch("release/skills").is_ok());
+        assert_eq!(engine.sync_branch(), "release/skills");
+        assert!(engine.set_sync_branch("bad branch").is_err());
+        assert_eq!(engine.sync_branch(), "release/skills");
+    }
+
+    #[test]
+    fn test_push_uses_configured_remote_branch_not_local_branch_name() {
+        let root = TempDir::new().unwrap();
+        let remote = root.path().join("remote.git");
+        let local = root.path().join("local");
+        fs::create_dir_all(&local).unwrap();
+        init_git_repo(&local);
+        Command::new("git")
+            .args(["init", "--bare", remote.to_str().unwrap()])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["remote", "add", "origin", remote.to_str().unwrap()])
+            .current_dir(&local)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["push", "origin", "HEAD:refs/heads/release/skills"])
+            .current_dir(&local)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["branch", "-m", "local-work"])
+            .current_dir(&local)
+            .output()
+            .unwrap();
+
+        fs::write(local.join("README.md"), "# Configured branch\n").unwrap();
+        let mut engine = GitEngine::open(&local).unwrap();
+        engine.set_sync_branch("release/skills").unwrap();
+        let status = engine
+            .stage_and_push("test: configured branch", None, None, None)
+            .unwrap();
+
+        assert_ne!(status.status, "error");
+        let remote_content = Command::new("git")
+            .args([
+                "--git-dir",
+                remote.to_str().unwrap(),
+                "show",
+                "release/skills:README.md",
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&remote_content.stdout),
+            "# Configured branch\n"
+        );
+        let local_work_ref = Command::new("git")
+            .args([
+                "--git-dir",
+                remote.to_str().unwrap(),
+                "show-ref",
+                "--verify",
+                "refs/heads/local-work",
+            ])
+            .output()
+            .unwrap();
+        assert!(!local_work_ref.status.success());
     }
 
     #[test]

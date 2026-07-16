@@ -83,8 +83,15 @@ pub extern "C" fn tt_init(db_path: *const c_char) -> *mut CoreHandle {
             if let Some(config) = persisted_config {
                 skills.git_remote_url = config.git_remote_url;
                 skills.git_platform = config.git_platform;
+                skills.git_branch = config
+                    .git_branch
+                    .filter(|branch| !branch.trim().is_empty())
+                    .unwrap_or_else(|| "main".to_string());
                 skills.git_user_name = config.git_user_name;
                 skills.git_user_email = config.git_user_email;
+            }
+            if let Some(git) = skills.git.as_ref() {
+                let _ = git.set_sync_branch(&skills.git_branch);
             }
 
             Box::into_raw(Box::new(CoreHandle {
@@ -1224,6 +1231,7 @@ pub extern "C" fn tt_skills_set_git_config(
         remote_url: Option<String>,
         token: Option<String>,
         platform: Option<String>,
+        git_branch: Option<String>,
         user_name: Option<String>,
         user_email: Option<String>,
     }
@@ -1255,6 +1263,11 @@ pub extern "C" fn tt_skills_set_git_config(
         handle.skills.source_root_display = root.to_string();
         // Re-init git engine for new path
         handle.skills.git = crate::skills::git_engine::GitEngine::open_or_init(&path).ok();
+        if let Some(git) = handle.skills.git.as_ref() {
+            if let Err(e) = git.set_sync_branch(&handle.skills.git_branch) {
+                return to_json_cstring(&crate::skills::models::SkillCommandResult::error(e));
+            }
+        }
         // Re-init scanner and symlink
         handle.skills.scanner = crate::skills::scanner::Scanner::new(path.clone());
         handle.skills.symlink = crate::skills::symlink::SymlinkManager::new(path);
@@ -1269,6 +1282,19 @@ pub extern "C" fn tt_skills_set_git_config(
 
     if let Some(platform) = req.platform {
         handle.skills.git_platform = Some(platform);
+    }
+
+    if let Some(branch) = req.git_branch {
+        let branch = branch.trim();
+        let branch = if branch.is_empty() { "main" } else { branch };
+        if let Some(git) = handle.skills.git.as_ref() {
+            if let Err(e) = git.set_sync_branch(branch) {
+                return to_json_cstring(&crate::skills::models::SkillCommandResult::error(e));
+            }
+        } else if let Err(e) = crate::skills::git_engine::GitEngine::validate_sync_branch(branch) {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(e));
+        }
+        handle.skills.git_branch = branch.to_string();
     }
 
     if let Some(user_name) = req.user_name {
@@ -1337,6 +1363,7 @@ pub extern "C" fn tt_skills_get_config(handle: *mut CoreHandle) -> *mut c_char {
         },
         "git_remote_url": handle.skills.git_remote_url.as_deref().unwrap_or(""),
         "git_platform": handle.skills.git_platform.as_deref().unwrap_or("custom"),
+        "git_branch": handle.skills.git_branch,
         "git_token_configured": handle.skills.git_token.is_some(),
         "git_user_name": handle.skills.git_user_name.as_deref().unwrap_or(""),
         "git_user_email": handle.skills.git_user_email.as_deref().unwrap_or(""),
@@ -1380,6 +1407,8 @@ struct PersistedSkillsConfig {
     #[serde(default)]
     git_platform: Option<String>,
     #[serde(default)]
+    git_branch: Option<String>,
+    #[serde(default)]
     git_user_name: Option<String>,
     #[serde(default)]
     git_user_email: Option<String>,
@@ -1410,6 +1439,7 @@ fn persist_skills_config(
         },
         git_remote_url: skills.git_remote_url.clone(),
         git_platform: skills.git_platform.clone(),
+        git_branch: Some(skills.git_branch.clone()),
         git_user_name: skills.git_user_name.clone(),
         git_user_email: skills.git_user_email.clone(),
     };
