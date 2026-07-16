@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
 
+use git2::build::CheckoutBuilder;
 use git2::{Cred, Oid, RemoteCallbacks, Repository, Signature, Status, StatusOptions};
 
 use crate::skills::models::{GitConnectivity, GitStatusInfo, PendingChange};
@@ -309,6 +310,7 @@ impl GitEngine {
         if statuses.is_empty()
             && !has_changes
             && ahead == 0
+            && behind == 0
             && repository_is_clean
             && !index_has_conflicts
         {
@@ -316,6 +318,25 @@ impl GitEngine {
             info.branch = branch;
             info.ahead = ahead;
             info.behind = behind;
+            return Ok(info);
+        }
+
+        if statuses.is_empty()
+            && !has_changes
+            && ahead == 0
+            && behind > 0
+            && repository_is_clean
+            && !index_has_conflicts
+        {
+            let mut info = GitStatusInfo::modified(&format!(
+                "{} remote commit{} pending",
+                behind,
+                if behind == 1 { "" } else { "s" }
+            ));
+            info.branch = branch;
+            info.ahead = ahead;
+            info.behind = behind;
+            info.has_changes = false;
             return Ok(info);
         }
 
@@ -877,7 +898,51 @@ impl GitEngine {
         let tree = commit
             .tree()
             .map_err(|e| format!("Failed to read filtered sync tree: {}", e))?;
+        let previous_oid = self.repo.head().ok().and_then(|head| head.target());
+        let workdir = self
+            .repo
+            .workdir()
+            .ok_or("Git repository has no working directory")?;
+        let previous_tree = previous_oid
+            .map(|previous_oid| self.repo.find_commit(previous_oid))
+            .transpose()
+            .map_err(|e| format!("Failed to find pre-sync commit: {}", e))?
+            .map(|commit| commit.tree())
+            .transpose()
+            .map_err(|e| format!("Failed to read pre-sync tree: {}", e))?;
+        let diff = self
+            .repo
+            .diff_tree_to_tree(previous_tree.as_ref(), Some(&tree), None)
+            .map_err(|e| format!("Failed to compare filtered sync trees: {}", e))?;
+        let missing_remote_paths: Vec<String> = diff
+            .deltas()
+            .filter(|delta| delta.status() == git2::Delta::Added)
+            .filter_map(|delta| delta.new_file().path())
+            .filter(|path| std::fs::symlink_metadata(workdir.join(path)).is_err())
+            .map(|path| path.to_string_lossy().to_string())
+            .collect();
+
+        // Materialize only files newly introduced by the adopted remote tree and
+        // missing from disk. Existing local files — including modifications,
+        // deletions, and untracked conflicts outside the filter — remain intact.
         self.update_current_branch(oid)?;
+        if !missing_remote_paths.is_empty() {
+            let mut checkout = CheckoutBuilder::new();
+            checkout.force();
+            for path in &missing_remote_paths {
+                checkout.path(path);
+            }
+            if let Err(error) = self.repo.checkout_head(Some(&mut checkout)) {
+                if let Some(previous_oid) = previous_oid {
+                    let _ = self.update_current_branch(previous_oid);
+                }
+                return Err(format!(
+                    "Failed to materialize remote Skills after filtered sync: {}",
+                    error
+                ));
+            }
+        }
+
         let mut index = self
             .repo
             .index()
@@ -1558,7 +1623,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_status_does_not_report_remote_only_changes_as_pending() {
+    fn test_get_status_reports_behind_without_local_changes() {
         let dir = TempDir::new().unwrap();
         init_git_repo(dir.path());
         let branch = configure_tracking_branch(dir.path());
@@ -1613,9 +1678,10 @@ mod tests {
 
         let status = engine.get_status().unwrap();
 
-        assert_eq!(status.status, "idle");
+        assert_eq!(status.status, "modified");
         assert_eq!(status.ahead, 0);
         assert_eq!(status.behind, 1);
+        assert!(!status.has_changes);
         assert!(status.changes.is_empty());
     }
 
@@ -1687,6 +1753,149 @@ mod tests {
         assert!(head_other.status.success());
         assert_eq!(String::from_utf8_lossy(&head_other.stdout), "other\n");
         assert!(dir.path().join("other-one").join("SKILL.md").exists());
+    }
+
+    #[test]
+    fn test_filtered_push_materializes_remote_only_skills_and_preserves_local_changes() {
+        let root = TempDir::new().unwrap();
+        let remote = root.path().join("remote.git");
+        let local = root.path().join("local");
+        let peer = root.path().join("peer");
+
+        let mut engine = GitEngine::init(&local).unwrap();
+        let branch = engine.current_branch().unwrap();
+        fs::create_dir_all(local.join("selected-skill")).unwrap();
+        fs::write(local.join("selected-skill/SKILL.md"), "selected local\n").unwrap();
+        fs::create_dir_all(local.join("locally-edited-skill")).unwrap();
+        fs::write(
+            local.join("locally-edited-skill/SKILL.md"),
+            "local content\n",
+        )
+        .unwrap();
+
+        Command::new("git")
+            .args([
+                "init",
+                "--bare",
+                "--initial-branch",
+                &branch,
+                remote.to_str().unwrap(),
+            ])
+            .output()
+            .unwrap();
+        engine.set_remote_url(remote.to_str().unwrap()).unwrap();
+        Command::new("git")
+            .args(["push", "-u", "origin", "HEAD"])
+            .current_dir(&local)
+            .output()
+            .unwrap();
+
+        Command::new("git")
+            .args(["clone", remote.to_str().unwrap(), peer.to_str().unwrap()])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "user.email", "peer@test.com"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "user.name", "Peer User"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+        fs::create_dir_all(peer.join("remote-only-skill")).unwrap();
+        fs::write(peer.join("remote-only-skill/SKILL.md"), "remote only\n").unwrap();
+        fs::create_dir_all(peer.join("locally-edited-skill")).unwrap();
+        fs::write(
+            peer.join("locally-edited-skill/SKILL.md"),
+            "remote content\n",
+        )
+        .unwrap();
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "Add remote skills"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+        let peer_push = Command::new("git")
+            .args(["push", "origin", "HEAD"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+        assert!(
+            peer_push.status.success(),
+            "peer push failed: {}",
+            String::from_utf8_lossy(&peer_push.stderr)
+        );
+
+        let remote_before_sync = Command::new("git")
+            .args([
+                "--git-dir",
+                remote.to_str().unwrap(),
+                "show",
+                &format!("{branch}:remote-only-skill/SKILL.md"),
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            remote_before_sync.status.success(),
+            "remote fixture is missing: {}",
+            String::from_utf8_lossy(&remote_before_sync.stderr)
+        );
+
+        let selected_filter = SkillSyncFilter {
+            include_prefixes: Vec::new(),
+            include_skill_ids: vec!["selected-skill".to_string()],
+        };
+        engine
+            .stage_and_push_filtered("test: selected", &selected_filter, None, None, None)
+            .unwrap();
+
+        let adopted_tree = engine.repo.head().unwrap().peel_to_tree().unwrap();
+        assert!(
+            adopted_tree
+                .get_path(Path::new("remote-only-skill/SKILL.md"))
+                .is_ok(),
+            "filtered sync commit dropped the remote-only Skill"
+        );
+        drop(adopted_tree);
+
+        assert_eq!(
+            fs::read_to_string(local.join("remote-only-skill/SKILL.md")).unwrap(),
+            "remote only\n"
+        );
+        assert_eq!(
+            fs::read_to_string(local.join("locally-edited-skill/SKILL.md")).unwrap(),
+            "local content\n"
+        );
+
+        let switched_filter = SkillSyncFilter {
+            include_prefixes: Vec::new(),
+            include_skill_ids: vec!["remote-only-skill".to_string()],
+        };
+        engine
+            .stage_and_push_filtered("test: switched", &switched_filter, None, None, None)
+            .unwrap();
+
+        let remote_skill = Command::new("git")
+            .args([
+                "--git-dir",
+                remote.to_str().unwrap(),
+                "show",
+                &format!("{branch}:remote-only-skill/SKILL.md"),
+            ])
+            .output()
+            .unwrap();
+        assert!(remote_skill.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&remote_skill.stdout),
+            "remote only\n"
+        );
     }
 
     #[test]

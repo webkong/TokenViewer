@@ -99,7 +99,7 @@ final class SkillManagerViewModel: ObservableObject {
             let skillsData = payload.flatMap(CoreBridge.shared.skillsListForAgents)
                 ?? CoreBridge.shared.skillsList()
             let skills = (try? decoder.decode([SkillEntry].self, from: skillsData ?? Data())) ?? []
-            await SkillPreviewCache.shared.prewarm(skills)
+            await SkillPreviewCache.shared.invalidate()
 
             await MainActor.run {
                 self.isLoading = false

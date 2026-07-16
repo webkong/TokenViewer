@@ -11,19 +11,6 @@ actor SkillPreviewCache {
     private var previewTasks: [String: Task<PreparedSkillPreview, Never>] = [:]
     private var fileTasks: [String: Task<SkillFileLoadResult, Never>] = [:]
 
-    func prewarm(_ skills: [SkillEntry]) {
-        previewTasks.values.forEach { $0.cancel() }
-        fileTasks.values.forEach { $0.cancel() }
-        previewTasks.removeAll(keepingCapacity: true)
-        fileTasks.removeAll(keepingCapacity: true)
-
-        for skill in skills {
-            let key = Self.cacheKey(for: skill)
-            guard previewTasks[key] == nil else { continue }
-            previewTasks[key] = Self.makePreviewTask(for: skill, priority: .utility)
-        }
-    }
-
     func preparedPreview(for preview: SkillMarkdownPreview) async -> PreparedSkillPreview {
         let key = Self.cacheKey(for: preview.skill)
         let task: Task<PreparedSkillPreview, Never>
