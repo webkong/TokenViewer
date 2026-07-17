@@ -238,6 +238,16 @@ final class L10n: ObservableObject {
     var pull: String { isZh ? "拉取" : "Pull" }
     var push: String { isZh ? "推送" : "Push" }
     var skillsSourceRoot: String { isZh ? "技能根目录" : "Skills Source Root" }
+    var skillsCopyPromptTitle: String { isZh ? "复制技能文件" : "Copy Skill Files" }
+    func skillsCopyPromptMessage(_ oldPath: String, _ newPath: String) -> String {
+        isZh ? "是否将「\(oldPath)」中的技能文件复制到新目录「\(newPath)」？已存在的同名文件将被跳过。"
+             : "Copy skill files from \"\(oldPath)\" to the new directory \"\(newPath)\"? Existing files with the same name will be skipped."
+    }
+    var skillsCopyPromptConfirm: String { isZh ? "复制" : "Copy" }
+    func skillsCopySuccess(_ count: Int) -> String {
+        isZh ? "已复制 \(count) 个技能文件" : "Copied \(count) skill item(s)"
+    }
+    var skillsCopyFailed: String { isZh ? "复制技能文件失败" : "Failed to copy skill files" }
     var save: String { isZh ? "保存" : "Save" }
     var toastSaved: String { isZh ? "保存成功" : "Saved" }
     var toastSaveFailed: String { isZh ? "保存失败" : "Save failed" }

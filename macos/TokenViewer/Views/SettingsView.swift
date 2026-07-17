@@ -414,7 +414,11 @@ struct SettingsView: View {
     // MARK: Skills
 
     @State private var skillsSourceRoot: String = ""
+    /// Last value loaded from/saved to the backend, used as "old path" for the copy-prompt on save.
+    @State private var lastSavedSkillsSourceRoot: String = ""
     @AppStorage("skillsEnabledProviders") private var enabledProvidersJSON: String = ProviderRegistry.defaultSkillSourcesJSON
+    @State private var pendingSkillsCopyOldPath: String? = nil
+    @State private var pendingSkillsCopyNewPath: String = ""
 
     private var enabledProviders: Set<String> {
         guard let data = enabledProvidersJSON.data(using: .utf8),
@@ -449,7 +453,9 @@ struct SettingsView: View {
                     .font(.system(size: 11))
                     Button(l10n.save) {
                         AppFocus.clear()
-                        let payload: [String: String] = ["source_root": skillsSourceRoot.trimmingCharacters(in: .whitespacesAndNewlines)]
+                        let trimmedPath = skillsSourceRoot.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let oldPath = lastSavedSkillsSourceRoot
+                        let payload: [String: String] = ["source_root": trimmedPath]
                         if let data = try? JSONSerialization.data(withJSONObject: payload) {
                             let resultData = CoreBridge.shared.skillsSetGitConfig(data)
                             if let resultData,
@@ -457,6 +463,11 @@ struct SettingsView: View {
                                result.ok {
                                 SkillManagerViewModel.shared.refresh()
                                 ToastCenter.shared.success(l10n.toastSaved)
+                                lastSavedSkillsSourceRoot = trimmedPath
+                                if !oldPath.isEmpty, oldPath != trimmedPath {
+                                    pendingSkillsCopyOldPath = oldPath
+                                    pendingSkillsCopyNewPath = trimmedPath
+                                }
                             } else {
                                 ToastCenter.shared.error(l10n.toastSaveFailed)
                             }
@@ -502,6 +513,27 @@ struct SettingsView: View {
             providerRegistry.loadIfNeeded()
             providerRegistry.refreshInstallStatus()
         }
+        .alert(
+            l10n.skillsCopyPromptTitle,
+            isPresented: Binding(
+                get: { pendingSkillsCopyOldPath != nil },
+                set: { if !$0 { pendingSkillsCopyOldPath = nil } }
+            )
+        ) {
+            Button(l10n.skillsCopyPromptConfirm) {
+                if let oldPath = pendingSkillsCopyOldPath {
+                    copySkills(from: oldPath, to: pendingSkillsCopyNewPath)
+                }
+                pendingSkillsCopyOldPath = nil
+            }
+            Button(l10n.cancel, role: .cancel) {
+                pendingSkillsCopyOldPath = nil
+            }
+        } message: {
+            if let oldPath = pendingSkillsCopyOldPath {
+                Text(l10n.skillsCopyPromptMessage(oldPath, pendingSkillsCopyNewPath))
+            }
+        }
     }
 
     private func loadSkillsConfig() {
@@ -515,6 +547,7 @@ struct SettingsView: View {
             guard let config = try? decoder.decode(Config.self, from: data) else { return }
             await MainActor.run {
                 skillsSourceRoot = config.sourceRoot
+                lastSavedSkillsSourceRoot = config.sourceRoot
             }
         }
     }
@@ -531,6 +564,39 @@ struct SettingsView: View {
             NSWorkspace.shared.open(url)
         } catch {
             ToastCenter.shared.error(l10n.toastSaveFailed)
+        }
+    }
+
+    /// Copies skill files from the previous source root into the newly saved one.
+    /// Existing items at the destination are left untouched (no overwrite) to avoid
+    /// clobbering skills already present there.
+    private func copySkills(from oldRawPath: String, to newRawPath: String) {
+        let fm = FileManager.default
+        let oldPath = (NSString(string: oldRawPath).expandingTildeInPath as NSString).standardizingPath
+        let newPath = (NSString(string: newRawPath.isEmpty ? "~/.agents/skills" : newRawPath).expandingTildeInPath as NSString).standardizingPath
+        let oldURL = URL(fileURLWithPath: oldPath, isDirectory: true)
+        let newURL = URL(fileURLWithPath: newPath, isDirectory: true)
+
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: oldURL.path, isDirectory: &isDir), isDir.boolValue else {
+            ToastCenter.shared.error(l10n.skillsCopyFailed)
+            return
+        }
+
+        do {
+            try fm.createDirectory(at: newURL, withIntermediateDirectories: true)
+            let items = try fm.contentsOfDirectory(at: oldURL, includingPropertiesForKeys: nil)
+            var copiedCount = 0
+            for item in items {
+                let destination = newURL.appendingPathComponent(item.lastPathComponent)
+                guard !fm.fileExists(atPath: destination.path) else { continue }
+                try fm.copyItem(at: item, to: destination)
+                copiedCount += 1
+            }
+            SkillManagerViewModel.shared.refresh()
+            ToastCenter.shared.success(l10n.skillsCopySuccess(copiedCount))
+        } catch {
+            ToastCenter.shared.error(l10n.skillsCopyFailed)
         }
     }
 
