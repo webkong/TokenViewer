@@ -39,6 +39,7 @@ final class L10n: ObservableObject {
     var syncNow: String { isZh ? "立即同步" : "Sync now" }
     // Time range filter
     var rangeToday: String { isZh ? "今天" : "Today" }
+    var rangeYesterday: String { isZh ? "昨天" : "Yesterday" }
     var rangeWeek: String { isZh ? "近 7 天" : "Week" }
     var rangeMonth: String { isZh ? "近 30 天" : "Month" }
     var rangeAll: String { isZh ? "全部" : "All" }

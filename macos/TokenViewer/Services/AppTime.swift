@@ -37,6 +37,14 @@ enum AppTime {
         return utcRange(from: start, to: end)
     }
 
+    /// The single local calendar day before today.
+    static func yesterdayLocalDay(now: Date = Date()) -> UsageQueryRange {
+        let calendar = localCalendar
+        let today = calendar.startOfDay(for: now)
+        let start = calendar.date(byAdding: .day, value: -1, to: today) ?? today
+        return utcRange(from: start, to: today)
+    }
+
     static func inclusiveLocalDays(from: Date, through: Date) -> UsageQueryRange {
         let calendar = localCalendar
         let start = calendar.startOfDay(for: min(from, through))

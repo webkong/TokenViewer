@@ -103,6 +103,7 @@ class UsageViewModel: ObservableObject {
 
     enum TimeRange: String, CaseIterable {
         case today = "Today"
+        case yesterday = "Yesterday"
         case week = "Week"
         case month = "Month"
         case all = "All"
@@ -112,6 +113,7 @@ class UsageViewModel: ObservableObject {
             let l = L10n.shared
             switch self {
             case .today: return l.rangeToday
+            case .yesterday: return l.rangeYesterday
             case .week: return l.rangeWeek
             case .month: return l.rangeMonth
             case .all: return l.rangeAll
@@ -123,6 +125,7 @@ class UsageViewModel: ObservableObject {
     /// Use the hourly trend granularity for single-day windows.
     var isHourlyView: Bool {
         selectedRange == .today
+            || selectedRange == .yesterday
             || (selectedRange == .custom && AppTime.isSameLocalDay(customFrom, customTo))
     }
 
@@ -264,6 +267,8 @@ class UsageViewModel: ObservableObject {
         switch range {
         case .today:
             queryRange = AppTime.trailingLocalDays(1)
+        case .yesterday:
+            queryRange = AppTime.yesterdayLocalDay()
         case .week:
             queryRange = AppTime.trailingLocalDays(7)
         case .month:

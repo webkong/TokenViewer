@@ -132,7 +132,7 @@ struct UsageView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 430)
+            .frame(width: 520)
             .onChange(of: viewModel.selectedRange) { viewModel.refresh() }
 
             if viewModel.selectedRange == .custom {
