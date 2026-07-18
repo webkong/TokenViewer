@@ -299,6 +299,25 @@ final class L10n: ObservableObject {
     var gitNoFilteredChanges: String { isZh ? "当前过滤规则下没有待推送变更。" : "No changes match the current sync filter." }
     func gitFilteredChangesCount(_ count: Int) -> String { isZh ? "当前过滤规则下 \(count) 个文件将被推送。" : "\(count) file(s) match the current sync filter." }
     var gitConflicts: String { isZh ? "存在冲突" : "Merge Conflicts" }
+    var gitForcePull: String { isZh ? "强制拉取" : "Force Pull" }
+    var gitForcePush: String { isZh ? "强制推送" : "Force Push" }
+    var gitForcePullConfirmTitle: String { isZh ? "确认强制拉取？" : "Force Pull?" }
+    func gitForcePullConfirmMessage(_ branch: String) -> String {
+        isZh
+            ? "远端分支 \(branch) 将完整覆盖本地 Skills。本地修改以及仅存在于本地的 Skill 将被删除，此操作无法撤销。"
+            : "Remote branch \(branch) will completely replace local Skills. Local changes and local-only Skills will be deleted. This cannot be undone."
+    }
+    var gitForcePushConfirmTitle: String { isZh ? "确认强制推送？" : "Force Push?" }
+    func gitForcePushConfirmMessage(_ branch: String) -> String {
+        isZh
+            ? "本地 Skills 将完整覆盖远端分支 \(branch)。远端修改以及仅存在于远端的 Skill 将被删除，此操作无法撤销。"
+            : "Local Skills will completely replace remote branch \(branch). Remote changes and remote-only Skills will be deleted. This cannot be undone."
+    }
+    func gitForcePushFilteredConfirmMessage(_ branch: String) -> String {
+        isZh
+            ? "本地选中的 Skill 将覆盖远端分支 \(branch) 中的对应目录。未选中的远端 Skill 会保留，此操作无法撤销。"
+            : "Selected local Skills will replace their matching directories on remote branch \(branch). Unselected remote Skills are retained. This cannot be undone."
+    }
     var gitPushing: String { isZh ? "推送中…" : "Pushing…" }
     var gitPulling: String { isZh ? "拉取中…" : "Pulling…" }
     var gitError: String { isZh ? "错误" : "Error" }
@@ -354,8 +373,8 @@ final class L10n: ObservableObject {
     func skillUnlinkTip(_ agent: String) -> String { isZh ? "移除 \(agent) 的此技能符号链接" : "Remove the symlink for \(agent)" }
     func skillSourceLinkTip(_ agent: String) -> String { isZh ? "此技能来源于 \(agent)，点击可为它创建共享目录链接" : "This skill originated in \(agent); click to create a shared-root link" }
     var gitDoneTip: String { isZh ? "关闭 Git 同步面板" : "Close the Git Sync panel" }
-    var gitPullTip: String { isZh ? "从远程仓库拉取最新技能变更" : "Pull the latest skill changes from the remote repository" }
-    var gitPushTip: String { isZh ? "把本地技能变更推送到远程仓库" : "Push local skill changes to the remote repository" }
+    var gitPullTip: String { isZh ? "用远端分支强制覆盖本地技能" : "Replace local Skills with the remote branch" }
+    var gitPushTip: String { isZh ? "用本地技能强制覆盖远端分支" : "Replace the remote branch with local Skills" }
     var gitRefreshStatusTip: String { isZh ? "刷新当前 Git 分支和待处理变更状态" : "Refresh the current branch and pending Git changes" }
     var gitSaveConfigTip: String { isZh ? "保存 Git 远程地址、平台和访问令牌" : "Save the Git remote URL, platform, and access token" }
     var skillAgentParticipation: String { isZh ? "参与 Skills 管理的 Agent" : "Agents participating in Skills" }

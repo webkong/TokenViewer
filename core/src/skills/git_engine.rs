@@ -1008,7 +1008,7 @@ impl GitEngine {
             if let Some(token) = token {
                 push_options.remote_callbacks(Self::make_remote_callbacks(token));
             }
-            let refspec = format!("{temporary_ref}:refs/heads/{branch}");
+            let refspec = format!("+{temporary_ref}:refs/heads/{branch}");
             remote
                 .push(&[&refspec], Some(&mut push_options))
                 .map_err(|e| format!("Failed to push filtered sync: {}", e))?;
@@ -1106,27 +1106,41 @@ impl GitEngine {
         }
     }
 
-    /// Pull (fetch + rebase) from origin. Auto-commits pending changes first.
+    /// Force pull from origin, replacing the local branch and worktree.
     pub fn pull(
         &mut self,
         token: Option<&str>,
-        user_name: Option<&str>,
-        user_email: Option<&str>,
+        _user_name: Option<&str>,
+        _user_email: Option<&str>,
     ) -> Result<GitStatusInfo, String> {
-        debug_log!(" pull: start");
-        if let Some(status) = self.sync_blocked_status()? {
-            return Ok(status);
-        }
-        self.auto_commit(user_name, user_email)?;
-        if let Err(failure) = self.pull_rebase(token, user_name, user_email) {
-            return Ok(self.status_for_rebase_failure(failure));
-        }
+        debug_log!(" force_pull: start");
+        let remote_oid = self
+            .fetch_remote_head(token)?
+            .ok_or_else(|| format!("Remote branch '{}' has no commits", self.sync_branch()))?;
 
-        debug_log!(" pull: done");
+        let branch = self.sync_branch();
+        let local_ref = format!("refs/heads/{branch}");
+        self.repo
+            .cleanup_state()
+            .map_err(|e| format!("Failed to clean up the previous Git operation: {e}"))?;
+        self.repo
+            .reference(&local_ref, remote_oid, true, "TokenViewer force pull")
+            .map_err(|e| format!("Failed to update local branch '{branch}': {e}"))?;
+        self.repo
+            .set_head(&local_ref)
+            .map_err(|e| format!("Failed to switch to local branch '{branch}': {e}"))?;
+
+        let mut checkout = CheckoutBuilder::new();
+        checkout.force().remove_untracked(true);
+        self.repo
+            .checkout_head(Some(&mut checkout))
+            .map_err(|e| format!("Failed to replace local Skills from remote: {e}"))?;
+
+        debug_log!(" force_pull: done");
         self.get_status()
     }
 
-    /// Auto-commit pending changes, pull-rebase, and push.
+    /// Auto-commit pending changes and force push the local snapshot.
     pub fn stage_and_push(
         &mut self,
         _message: &str,
@@ -1135,17 +1149,10 @@ impl GitEngine {
         user_email: Option<&str>,
     ) -> Result<GitStatusInfo, String> {
         debug_log!(" stage_and_push: start");
-        if let Some(status) = self.sync_blocked_status()? {
-            return Ok(status);
-        }
         self.auto_commit(user_name, user_email)?;
 
         if self.has_remote() {
-            debug_log!(" stage_and_push: has remote, starting pull_rebase");
-            if let Err(failure) = self.pull_rebase(token, user_name, user_email) {
-                return Ok(self.status_for_rebase_failure(failure));
-            }
-            debug_log!(" stage_and_push: pull_rebase ok, starting push");
+            debug_log!(" stage_and_push: has remote, starting force push");
             self.push(token)?;
             debug_log!(" stage_and_push: push ok");
         } else {
@@ -1155,7 +1162,7 @@ impl GitEngine {
         self.get_status()
     }
 
-    /// Auto-commit allowed pending skill changes, pull-rebase, and push.
+    /// Replace matching remote Skills with the selected local snapshot and force push.
     pub fn stage_and_push_filtered(
         &mut self,
         _message: &str,
@@ -1171,19 +1178,11 @@ impl GitEngine {
 
         if self.has_remote() {
             let head_oid = self.repo.head().ok().and_then(|head| head.target());
-            let previous_remote = self
-                .repo
-                .head()
-                .ok()
-                .and_then(|head| self.upstream_oid_for_head(&head).ok());
             let remote_parent = self.fetch_remote_head(token)?;
-            let base_oid = match (previous_remote, head_oid, remote_parent) {
-                (Some(previous), _, Some(remote)) => {
-                    self.repo.merge_base(previous, remote).unwrap_or(previous)
-                }
-                (Some(previous), _, None) => previous,
-                (None, Some(head), _) => head,
-                (None, None, _) => return Err("Filtered sync requires an initial commit".into()),
+            let base_oid = match (remote_parent, head_oid) {
+                (Some(remote), _) => remote,
+                (None, Some(head)) => head,
+                (None, None) => return Err("Filtered sync requires an initial commit".into()),
             };
             match self.commit_filtered_snapshot(
                 filter,
@@ -1418,7 +1417,7 @@ impl GitEngine {
         }
     }
 
-    /// Push to origin.
+    /// Force push the current local branch to the configured remote branch.
     fn push(&self, token: Option<&str>) -> Result<(), String> {
         debug_log!(" push: start, has_token={}", token.is_some());
         let mut remote = self
@@ -1428,7 +1427,7 @@ impl GitEngine {
 
         let local_branch = self.current_branch()?;
         let remote_branch = self.sync_branch();
-        let refspec = format!("refs/heads/{local_branch}:refs/heads/{remote_branch}");
+        let refspec = format!("+refs/heads/{local_branch}:refs/heads/{remote_branch}");
         debug_log!(
             " push: local_branch={}, remote_branch={}, refspec={}",
             local_branch,
@@ -1444,6 +1443,20 @@ impl GitEngine {
         remote
             .push(&[&refspec], Some(&mut push_options))
             .map_err(|e| format!("Failed to push: {}", e))?;
+        let pushed_oid = self
+            .repo
+            .head()
+            .ok()
+            .and_then(|head| head.target())
+            .ok_or("Failed to resolve the pushed local commit")?;
+        self.repo
+            .reference(
+                &format!("refs/remotes/origin/{remote_branch}"),
+                pushed_oid,
+                true,
+                "TokenViewer force pushed",
+            )
+            .map_err(|e| format!("Failed to update remote tracking branch: {e}"))?;
 
         debug_log!(" push: completed");
         Ok(())
@@ -2109,7 +2122,7 @@ mod tests {
     }
 
     #[test]
-    fn test_pull_conflict_aborts_rebase_and_restores_local_state() {
+    fn test_force_pull_replaces_local_state_with_remote() {
         let root = TempDir::new().unwrap();
         let remote = root.path().join("remote.git");
         let local = root.path().join("local");
@@ -2163,31 +2176,24 @@ mod tests {
             .current_dir(&local)
             .output()
             .unwrap();
-        let local_head = Command::new("git")
-            .args(["rev-parse", "HEAD"])
-            .current_dir(&local)
-            .output()
-            .unwrap();
-        let local_head = String::from_utf8_lossy(&local_head.stdout)
-            .trim()
-            .to_string();
+        fs::create_dir_all(local.join("local-only-skill")).unwrap();
+        fs::write(
+            local.join("local-only-skill/SKILL.md"),
+            "local only\n",
+        )
+        .unwrap();
 
         let mut engine = GitEngine::open(&local).unwrap();
         let status = engine.pull(None, None, None).unwrap();
 
-        assert_eq!(status.status, "conflicted");
-        assert_eq!(status.changes.len(), 1);
-        assert_eq!(status.changes[0].file_path, "README.md");
+        assert_eq!(status.status, "idle");
         assert_eq!(engine.repo.state(), git2::RepositoryState::Clean);
         assert!(!engine.repo.index().unwrap().has_conflicts());
         assert_eq!(
-            engine.repo.head().unwrap().target().unwrap().to_string(),
-            local_head
-        );
-        assert_eq!(
             fs::read_to_string(local.join("README.md")).unwrap(),
-            "# Local\n"
+            "# Remote\n"
         );
+        assert!(!local.join("local-only-skill").exists());
     }
 
     #[test]

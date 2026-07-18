@@ -57,6 +57,8 @@ struct SkillGitSyncSheet: View {
 
     @State private var showAuthSheet = false
     @State private var isCheckingConnectivity = false
+    @State private var showForcePullConfirmation = false
+    @State private var showForcePushConfirmation = false
 
     private var provider: SkillGitProvider {
         SkillGitProvider(rawValue: providerRaw) ?? .github
@@ -82,7 +84,7 @@ struct SkillGitSyncSheet: View {
     }
 
     private var isSyncBlocked: Bool {
-        isBusy || viewModel.gitStatusName == "conflicted"
+        isBusy
     }
 
     private var currentToken: String {
@@ -108,6 +110,24 @@ struct SkillGitSyncSheet: View {
         .frame(width: 560, height: 720)
         .clearInitialFocus(trigger: providerRaw)
         .clearFocusOnOutsideClick()
+        .alert(l10n.gitForcePullConfirmTitle, isPresented: $showForcePullConfirmation) {
+            Button(l10n.gitCancel, role: .cancel) {}
+            Button(l10n.gitForcePull, role: .destructive) {
+                performForcePull()
+            }
+        } message: {
+            Text(l10n.gitForcePullConfirmMessage(syncGitBranch))
+        }
+        .alert(l10n.gitForcePushConfirmTitle, isPresented: $showForcePushConfirmation) {
+            Button(l10n.gitCancel, role: .cancel) {}
+            Button(l10n.gitForcePush, role: .destructive) {
+                performForcePush()
+            }
+        } message: {
+            Text(filterEnabled
+                 ? l10n.gitForcePushFilteredConfirmMessage(syncGitBranch)
+                 : l10n.gitForcePushConfirmMessage(syncGitBranch))
+        }
         .sheet(isPresented: $showAuthSheet) {
             SkillAuthSheet(provider: $providerRaw) { userName, userEmail, gitBranch in
                 storedGitUserName = userName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -275,17 +295,9 @@ struct SkillGitSyncSheet: View {
         HStack(spacing: 12) {
             Button {
                 AppFocus.clear()
-                viewModel.pullSkills(
-                    remoteURL: repoURL,
-                    platform: provider.key,
-                    token: currentToken,
-                    gitBranch: syncGitBranch,
-                    userName: storedGitUserName,
-                    userEmail: storedGitUserEmail
-                )
-                checkConnectivity()
+                showForcePullConfirmation = true
             } label: {
-                Label(l10n.pull, systemImage: "arrow.down.circle.fill")
+                Label(l10n.gitForcePull, systemImage: "arrow.down.circle.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -295,18 +307,9 @@ struct SkillGitSyncSheet: View {
 
             Button {
                 AppFocus.clear()
-                viewModel.pushSkills(
-                    remoteURL: repoURL,
-                    platform: provider.key,
-                    token: currentToken,
-                    gitBranch: syncGitBranch,
-                    userName: storedGitUserName,
-                    userEmail: storedGitUserEmail,
-                    filterPayload: syncFilterPayload()
-                )
-                checkConnectivity()
+                showForcePushConfirmation = true
             } label: {
-                Label(l10n.push, systemImage: "arrow.up.circle.fill")
+                Label(l10n.gitForcePush, systemImage: "arrow.up.circle.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -314,6 +317,31 @@ struct SkillGitSyncSheet: View {
             .disabled(repoURL.isEmpty || !tokenSaved || isSyncBlocked)
             .quickHelp(l10n.gitPushTip)
         }
+    }
+
+    private func performForcePull() {
+        viewModel.pullSkills(
+            remoteURL: repoURL,
+            platform: provider.key,
+            token: currentToken,
+            gitBranch: syncGitBranch,
+            userName: storedGitUserName,
+            userEmail: storedGitUserEmail
+        )
+        checkConnectivity()
+    }
+
+    private func performForcePush() {
+        viewModel.pushSkills(
+            remoteURL: repoURL,
+            platform: provider.key,
+            token: currentToken,
+            gitBranch: syncGitBranch,
+            userName: storedGitUserName,
+            userEmail: storedGitUserEmail,
+            filterPayload: syncFilterPayload()
+        )
+        checkConnectivity()
     }
 
     @ViewBuilder
