@@ -121,6 +121,7 @@ final class L10n: ObservableObject {
     var updates: String { isZh ? "更新" : "Updates" }
     var softwareUpdate: String { isZh ? "软件更新" : "Software Update" }
     var upToDate: String { isZh ? "已是最新版本" : "Up to date" }
+    var updateCheckFailed: String { isZh ? "获取更新失败，稍后重试" : "Failed to check for updates, please try again later" }
     var newVersion: String { isZh ? "有新版本" : "New version available" }
     var download: String { isZh ? "下载" : "Download" }
     var checkNow: String { isZh ? "检查更新" : "Check Now" }

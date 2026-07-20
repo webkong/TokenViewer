@@ -82,7 +82,7 @@ final class UpdateChecker: ObservableObject {
         defer { isChecking = false }
 
         do {
-            let release = try await fetchLatest()
+            let release = try await fetchLatest(useAuthToken: !auto)
             lastCheckedAt = Date()
             latestRelease = release
             if isNewer(release.version, than: currentVersion) {
@@ -94,7 +94,7 @@ final class UpdateChecker: ObservableObject {
                 state = .upToDate(version: currentVersion)
             }
         } catch {
-            state = .upToDate(version: currentVersion)
+            state = .failed(L10n.shared.updateCheckFailed)
         }
     }
 
@@ -183,7 +183,7 @@ final class UpdateChecker: ObservableObject {
 
     // MARK: - Network
 
-    private func fetchLatest() async throws -> ReleaseInfo {
+    private func fetchLatest(useAuthToken: Bool) async throws -> ReleaseInfo {
         // Don't trust GitHub's `/releases/latest` pointer: it depends on the
         // `make_latest` flag, excludes prereleases, and can lag right after a
         // publish. Instead list releases and pick the highest semver ourselves
@@ -192,6 +192,17 @@ final class UpdateChecker: ObservableObject {
         var req = URLRequest(url: url)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         req.setValue("TokenViewer/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+        // Only attach the user's GitHub PAT (configured for skills git sync) on a
+        // user-initiated check (Settings → Check Now). Reading from Keychain can
+        // surface a system authorization prompt if the app's code signature isn't
+        // stable across builds — doing that unprompted on every app launch (the
+        // automatic hourly check) is a jarring, unexplained interruption. Manual
+        // checks are rare and user-triggered, so a prompt there is expected and
+        // still gets the higher authenticated rate limit (5000/hr vs 60/hr) when
+        // the user explicitly asks us to check.
+        if useAuthToken, let token = KeychainManager.shared.getToken(for: "github"), !token.isEmpty {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         req.timeoutInterval = 15
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
