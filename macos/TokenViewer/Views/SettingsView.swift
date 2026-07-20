@@ -445,7 +445,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(l10n.skillsSourceRoot).font(.system(size: 11, weight: .medium))
                 HStack(spacing: 6) {
-                    TextField("~/.agents/skills", text: $skillsSourceRoot)
+                    TextField("~/.tokenviewer/skills", text: $skillsSourceRoot)
                         .textFieldStyle(.roundedBorder)
                     Button(l10n.openInFinder) {
                         openSkillsSourceRootInFinder()
@@ -555,7 +555,7 @@ struct SettingsView: View {
     private func openSkillsSourceRootInFinder() {
         AppFocus.clear()
         let rawPath = skillsSourceRoot.trimmingCharacters(in: .whitespacesAndNewlines)
-        let path = rawPath.isEmpty ? "~/.agents/skills" : rawPath
+        let path = rawPath.isEmpty ? "~/.tokenviewer/skills" : rawPath
         let expandedPath = (NSString(string: path).expandingTildeInPath as NSString).standardizingPath
         let url = URL(fileURLWithPath: expandedPath, isDirectory: true)
 
@@ -573,7 +573,7 @@ struct SettingsView: View {
     private func copySkills(from oldRawPath: String, to newRawPath: String) {
         let fm = FileManager.default
         let oldPath = (NSString(string: oldRawPath).expandingTildeInPath as NSString).standardizingPath
-        let newPath = (NSString(string: newRawPath.isEmpty ? "~/.agents/skills" : newRawPath).expandingTildeInPath as NSString).standardizingPath
+        let newPath = (NSString(string: newRawPath.isEmpty ? "~/.tokenviewer/skills" : newRawPath).expandingTildeInPath as NSString).standardizingPath
         let oldURL = URL(fileURLWithPath: oldPath, isDirectory: true)
         let newURL = URL(fileURLWithPath: newPath, isDirectory: true)
 

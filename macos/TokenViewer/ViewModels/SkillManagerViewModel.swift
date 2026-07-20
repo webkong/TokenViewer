@@ -74,7 +74,7 @@ final class SkillManagerViewModel: ObservableObject {
     @Published var installSuccessMessage: String?
     @Published var installCandidates: [SkillInstallCandidate] = []
     @Published var installSelectedSkillIDs: Set<String> = []
-    @Published var installSourceRootDisplay: String = "~/.agents/skills"
+    @Published var installSourceRootDisplay: String = "~/.tokenviewer/skills"
 
     private let decoder = JSONDecoder()
 

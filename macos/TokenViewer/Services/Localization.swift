@@ -172,6 +172,16 @@ final class L10n: ObservableObject {
     // MARK: - Skill Manager
     var skills: String { isZh ? "技能" : "Skills" }
     var skillsSubtitle: String { isZh ? "统一管理已选 Agent 的技能，并同步共享目录与各 Agent 目录中的链接状态。" : "Manage skills for selected agents, including shared skills and per-agent links." }
+    // MARK: Skills Onboarding
+    var skillOnboardingTitle: String { isZh ? "欢迎使用技能管理" : "Welcome to Skills" }
+    var skillOnboardingShowHelpTip: String { isZh ? "查看技能管理说明" : "View Skills guide" }
+    var skillOnboardingStep1Title: String { isZh ? "全局技能库存放在独立目录" : "The global library lives in its own directory" }
+    var skillOnboardingStep1Desc: String { isZh ? "所有技能统一存放在 ~/.tokenviewer/skills（可在设置中修改）。这个目录不会被任何 Agent 自动扫描，技能只是被安静地存放在这里，不会自动生效。" : "All skills are stored under ~/.tokenviewer/skills (changeable in Settings). No agent scans this folder on its own — skills placed here stay dormant until you explicitly link them." }
+    var skillOnboardingStep2Title: String { isZh ? "软链接决定每个 Agent 能看到哪些技能" : "Symlinks control what each agent can see" }
+    var skillOnboardingStep2Desc: String { isZh ? "给某个技能选择要开放给哪些 Agent 后，会在该 Agent 的专属技能目录（如 ~/.claude/skills）创建软链接指向全局库。没有链接的 Agent 完全看不到这个技能——精细控制权始终在你手上。" : "When you link a skill to an agent, a symlink is created inside that agent's own skills directory (e.g. ~/.claude/skills) pointing back to the shared library. Agents without a link never see the skill — you stay in full control of visibility." }
+    var skillOnboardingStep3Title: String { isZh ? "把已有技能整理进全局库" : "Organize existing skills into the library" }
+    var skillOnboardingStep3Desc: String { isZh ? "如果某个 Agent 目录下已经有技能，点击「整理」会把它移入全局库并自动补上软链接，此后就能像其它技能一样按需分享给别的 Agent。" : "If an agent already has a skill in its own folder, use \"Organize\" to move it into the shared library and automatically re-link it back — from then on it can be shared with other agents just like any other skill." }
+    var skillOnboardingGotIt: String { isZh ? "知道了" : "Got it" }
     var skillSearchPlaceholder: String { isZh ? "搜索技能…" : "Search skills…" }
     var skillFilter: String { isZh ? "筛选" : "Filter" }
     var skillFetch: String { isZh ? "刷新" : "Fetch" }
@@ -381,7 +391,7 @@ final class L10n: ObservableObject {
     var skillAgentParticipation: String { isZh ? "参与 Skills 管理的 Agent" : "Agents participating in Skills" }
     var skillAgentParticipationDesc: String { isZh ? "启用的 Agent 将出现在 Skills 页面的筛选器中" : "Enabled agents appear as filters on the Skills page" }
     func skillNotInstalled(_ agent: String) -> String { isZh ? "\(agent) 未检测到安装" : "\(agent) not installed" }
-    var skillsSourceRootPlaceholder: String { isZh ? "~/.agents/skills" : "~/.agents/skills" }
+    var skillsSourceRootPlaceholder: String { isZh ? "~/.tokenviewer/skills" : "~/.tokenviewer/skills" }
     var loading: String { isZh ? "加载中…" : "Loading…" }
     var menuBarSectionTitle: String { isZh ? "菜单栏" : "Menu Bar" }
 

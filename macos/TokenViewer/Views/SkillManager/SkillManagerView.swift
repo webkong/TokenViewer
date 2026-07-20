@@ -6,7 +6,9 @@ struct SkillManagerView: View {
     @State private var showInstallSheet = false
     @State private var showOrganizeAllConfirm = false
     @State private var showRestoreAllConfirm = false
+    @State private var showOnboarding = false
     @AppStorage("skillsEnabledProviders") private var enabledProvidersJSON: String = ProviderRegistry.defaultSkillSourcesJSON
+    @AppStorage("skillsOnboardingSeen") private var onboardingSeen = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -29,11 +31,20 @@ struct SkillManagerView: View {
         }
         .padding(20)
         .background(Color(nsColor: .windowBackgroundColor))
-        .onAppear { viewModel.refresh() }
+        .onAppear {
+            viewModel.refresh()
+            if !onboardingSeen {
+                onboardingSeen = true
+                showOnboarding = true
+            }
+        }
         .onDisappear { viewModel.resetInstallForm() }
         .onChange(of: enabledProvidersJSON) { _, _ in
             viewModel.ensureValidFilter()
             viewModel.refresh()
+        }
+        .sheet(isPresented: $showOnboarding) {
+            SkillOnboardingSheet()
         }
         .sheet(isPresented: $showSyncSheet) {
             SkillGitSyncSheet(viewModel: viewModel)
@@ -71,6 +82,15 @@ struct SkillManagerView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Button {
+                showOnboarding = true
+            } label: {
+                Image(systemName: "questionmark.circle")
+                    .font(.system(size: 14))
+            }
+            .buttonStyle(.borderless)
+            .quickHelp(L10n.shared.skillOnboardingShowHelpTip)
+
             Button {
                 showInstallSheet = true
             } label: {

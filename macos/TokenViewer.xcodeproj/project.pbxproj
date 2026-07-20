@@ -22,6 +22,7 @@
 		1CBF7C85F3FB372DBE9FBCFC /* StatusBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4129E968EF3C5D9FD95437C6 /* StatusBarController.swift */; };
 		1E81A31272869FE5AAEB4926 /* amp.svg in Resources */ = {isa = PBXBuildFile; fileRef = C34EC70CAE6489B35F6065BB /* amp.svg */; };
 		1F4790099BD343A1DBE58298 /* codebuff.svg in Resources */ = {isa = PBXBuildFile; fileRef = DFDC02D3C58F27DB3D9ED6F0 /* codebuff.svg */; };
+		29367541EEAB3F454C9A81B9 /* SkillOnboardingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9597468D83BC59C6DC5B3B52 /* SkillOnboardingSheet.swift */; };
 		2BF34F42698E79499583C1AE /* AppSyncCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30035A7991BA5D4CBAAFA67 /* AppSyncCoordinatorTests.swift */; };
 		2BF82B63BC86BEA6EA2E7C05 /* CoreBridge+Skills.swift in Sources */ = {isa = PBXBuildFile; fileRef = D08471CAEA98F500892168FA /* CoreBridge+Skills.swift */; };
 		2C6AC7DAAA159E8732B59FB2 /* copilot.svg in Resources */ = {isa = PBXBuildFile; fileRef = CCA7AD173CD5F720CAAFC580 /* copilot.svg */; };
@@ -156,6 +157,7 @@
 		8BC3B1136F019135F53788F3 /* zcode.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = zcode.png; sourceTree = "<group>"; };
 		8D14FAF94B0269C9C56E5E5D /* TokenViewer-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TokenViewer-Bridging-Header.h"; sourceTree = "<group>"; };
 		93435E21A3AF9517E145BB82 /* codebuddy.svg */ = {isa = PBXFileReference; path = codebuddy.svg; sourceTree = "<group>"; };
+		9597468D83BC59C6DC5B3B52 /* SkillOnboardingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillOnboardingSheet.swift; sourceTree = "<group>"; };
 		95B0617E9C570C731BB0961A /* LimitsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitsViewModel.swift; sourceTree = "<group>"; };
 		96C2E0F36F0C00F476584F5E /* stepfun.svg */ = {isa = PBXFileReference; path = stepfun.svg; sourceTree = "<group>"; };
 		980F7D8B26254B8528C0B698 /* SkillModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillModels.swift; sourceTree = "<group>"; };
@@ -246,6 +248,7 @@
 				7D317307913528075C835081 /* SkillInstallSheet.swift */,
 				304CCD886055A0B97FD0ED18 /* SkillListView.swift */,
 				A8B41A7FC4AB00CC55B3B49B /* SkillManagerView.swift */,
+				9597468D83BC59C6DC5B3B52 /* SkillOnboardingSheet.swift */,
 			);
 			path = SkillManager;
 			sourceTree = "<group>";
@@ -606,6 +609,7 @@
 				D4C2E0CC343A54FEAD847CFD /* SkillManagerView.swift in Sources */,
 				2D1277885E113DCAF822CB21 /* SkillManagerViewModel.swift in Sources */,
 				5A68115AF7A71BF858D9D464 /* SkillModels.swift in Sources */,
+				29367541EEAB3F454C9A81B9 /* SkillOnboardingSheet.swift in Sources */,
 				140D7BAE7AC7738D1531797C /* SkillPreviewCache.swift in Sources */,
 				1CBF7C85F3FB372DBE9FBCFC /* StatusBarController.swift in Sources */,
 				94FD9E64724730AA7B7061D7 /* TokenViewerApp.swift in Sources */,

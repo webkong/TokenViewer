@@ -49,7 +49,14 @@ pub extern "C" fn tt_init(db_path: *const c_char) -> *mut CoreHandle {
             let persisted_source_root_raw = persisted_config
                 .as_ref()
                 .and_then(|c| c.source_root_raw.clone());
-            let default_source_root = "~/.agents/skills".to_string();
+            // Default global skills library root. Deliberately NOT `~/.agents/skills`:
+            // that path collides with a convention some agents (e.g. Codex) scan on
+            // their own, so a skill organized there can become visible to an agent
+            // without the user ever creating a symlink — defeating the whole point of
+            // per-agent symlink-based visibility control. `~/.tokenviewer/...` isn't
+            // scanned by any known agent, so only explicit symlinks grant visibility.
+            // Existing users with a persisted/custom path (below) are unaffected.
+            let default_source_root = "~/.tokenviewer/skills".to_string();
             let source_root_display = env_source_root
                 .clone()
                 .or(persisted_source_root_raw.clone())
@@ -73,7 +80,7 @@ pub extern "C" fn tt_init(db_path: *const c_char) -> *mut CoreHandle {
                         .as_ref()
                         .and_then(|c| c.source_root.clone())
                 })
-                .unwrap_or_else(|| home_dir.join(".agents").join("skills"));
+                .unwrap_or_else(|| home_dir.join(".tokenviewer").join("skills"));
 
             let mut skills = match crate::skills::SkillsCore::new(&db, source_root) {
                 Ok(skills) => skills,
