@@ -225,16 +225,17 @@ private struct UsageDateField: View {
 
 private struct SummaryCardsView: View {
     let summary: UsageSummary
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         HStack(spacing: 12) {
-            MetricCard(title: "Total Tokens", value: tvFormatTokens(summary.total_tokens),
+            MetricCard(title: l10n.usageTotalTokens, value: tvFormatTokens(summary.total_tokens),
                        icon: "number", tint: TVColor.brand)
-            MetricCard(title: "Cost", value: tvFormatCost(summary.total_cost_usd),
+            MetricCard(title: l10n.cost, value: tvFormatCost(summary.total_cost_usd),
                        icon: "dollarsign.circle.fill", tint: .orange)
-            MetricCard(title: "Conversations", value: "\(summary.conversation_count)",
+            MetricCard(title: l10n.usageConversations, value: "\(summary.conversation_count)",
                        icon: "bubble.left.and.bubble.right.fill", tint: .blue)
-            MetricCard(title: "Active Days", value: "\(summary.active_days)",
+            MetricCard(title: l10n.usageActiveDaysTitle, value: "\(summary.active_days)",
                        icon: "calendar", tint: .purple)
         }
     }
@@ -274,10 +275,11 @@ private struct MetricCard: View {
 
 private struct DailyChartView: View {
     let data: [DailyPoint]
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Daily Usage").font(.system(size: 15, weight: .semibold))
+            Text(l10n.usageDaily).font(.system(size: 15, weight: .semibold))
             let maxTokens = data.map(\.total_tokens).max() ?? 1
             HStack(alignment: .bottom, spacing: 3) {
                 ForEach(data) { point in
@@ -304,12 +306,13 @@ private struct DailyChartView: View {
 
 private struct ModelBreakdownView: View {
     let models: [ModelEntry]
+    @ObservedObject private var l10n = L10n.shared
 
     private var merged: [ModelEntry] { mergedByModel(models) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Models").font(.system(size: 15, weight: .semibold))
+            Text(l10n.usageModels).font(.system(size: 15, weight: .semibold))
             ForEach(merged.prefix(8)) { entry in
                 VStack(spacing: 5) {
                     HStack(spacing: 8) {
@@ -347,14 +350,17 @@ private struct ModelBreakdownView: View {
 
 private struct TokenTypeBar: View {
     let summary: UsageSummary
+    @ObservedObject private var l10n = L10n.shared
 
-    private var segments: [(String, UInt64, Color)] {
+    /// (stable key, localized label, tokens, color). The key is used as the
+    /// ForEach identity so it doesn't change when the display language does.
+    private var segments: [(String, String, UInt64, Color)] {
         [
-            ("Input", summary.input_tokens, Color.blue),
-            ("Output", summary.output_tokens, Color.green),
-            ("Cache Read", summary.cached_input_tokens, Color.orange),
-            ("Reasoning", summary.reasoning_output_tokens, Color.purple),
-        ].filter { $0.1 > 0 }
+            ("input", l10n.input, summary.input_tokens, Color.blue),
+            ("output", l10n.output, summary.output_tokens, Color.green),
+            ("cache_read", l10n.cacheRead, summary.cached_input_tokens, Color.orange),
+            ("reasoning", l10n.reasoning, summary.reasoning_output_tokens, Color.purple),
+        ].filter { $0.2 > 0 }
     }
 
     private var hitRate: Double? {
@@ -364,14 +370,14 @@ private struct TokenTypeBar: View {
     }
 
     var body: some View {
-        let total = max(segments.reduce(0) { $0 + $1.1 }, 1)
+        let total = max(segments.reduce(0) { $0 + $1.2 }, 1)
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Token Breakdown").font(.system(size: 15, weight: .semibold))
+                Text(l10n.usageTokenBreakdown).font(.system(size: 15, weight: .semibold))
                 Spacer()
                 if let hr = hitRate {
                     HStack(spacing: 4) {
-                        Text("Cache hit").font(.system(size: 11)).foregroundStyle(.secondary)
+                        Text(l10n.cacheHit).font(.system(size: 11)).foregroundStyle(.secondary)
                         Text(String(format: "%.1f%%", hr))
                             .font(.system(size: 13, weight: .bold, design: .monospaced))
                             .foregroundStyle(.orange)
@@ -381,8 +387,8 @@ private struct TokenTypeBar: View {
             GeometryReader { geo in
                 HStack(spacing: 2) {
                     ForEach(segments, id: \.0) { seg in
-                        Rectangle().fill(seg.2)
-                            .frame(width: max(2, geo.size.width * CGFloat(seg.1) / CGFloat(total)))
+                        Rectangle().fill(seg.3)
+                            .frame(width: max(2, geo.size.width * CGFloat(seg.2) / CGFloat(total)))
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 4))
@@ -391,9 +397,9 @@ private struct TokenTypeBar: View {
             HStack(spacing: 14) {
                 ForEach(segments, id: \.0) { seg in
                     HStack(spacing: 4) {
-                        Circle().fill(seg.2).frame(width: 7, height: 7)
-                        Text(seg.0).font(.system(size: 11)).foregroundStyle(.secondary)
-                        Text(tvFormatTokens(seg.1)).font(.system(size: 11, weight: .medium, design: .monospaced))
+                        Circle().fill(seg.3).frame(width: 7, height: 7)
+                        Text(seg.1).font(.system(size: 11)).foregroundStyle(.secondary)
+                        Text(tvFormatTokens(seg.2)).font(.system(size: 11, weight: .medium, design: .monospaced))
                     }
                 }
                 Spacer()
@@ -407,6 +413,7 @@ private struct TokenTypeBar: View {
 
 private struct ProviderBreakdownView: View {
     let models: [ModelEntry]
+    @ObservedObject private var l10n = L10n.shared
 
     private struct Row: Identifiable { let id: String; let tokens: UInt64; let cost: Double }
 
@@ -423,7 +430,7 @@ private struct ProviderBreakdownView: View {
     var body: some View {
         let total = max(rows.reduce(0) { $0 + $1.tokens }, 1)
         VStack(alignment: .leading, spacing: 12) {
-            Text("Providers").font(.system(size: 15, weight: .semibold))
+            Text(l10n.usageProviders).font(.system(size: 15, weight: .semibold))
             ForEach(rows) { row in
                 VStack(spacing: 5) {
                     HStack(spacing: 8) {
@@ -530,9 +537,9 @@ private struct HeatmapView: View {
 
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Activity").font(.system(size: 15, weight: .semibold))
+                Text(l10n.usageActivity).font(.system(size: 15, weight: .semibold))
                 Spacer()
-                Text("\(activeDays) active days").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(l10n.usageActiveDays(activeDays)).font(.system(size: 11)).foregroundStyle(.secondary)
             }
 
             VStack(alignment: .leading, spacing: sp) {
@@ -595,6 +602,7 @@ private struct HeatmapView: View {
 
 private struct DailyTableView: View {
     let data: [DailyPoint]
+    @ObservedObject private var l10n = L10n.shared
 
     /// Build a contiguous descending date list; days without a record are nil ("—").
     private func rows() -> [(date: String, point: DailyPoint?)] {
@@ -616,7 +624,7 @@ private struct DailyTableView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Daily Details").font(.system(size: 15, weight: .semibold))
+            Text(l10n.usageDailyDetails).font(.system(size: 15, weight: .semibold))
             headerRow
             Divider()
             ForEach(rows(), id: \.date) { row in
@@ -628,13 +636,13 @@ private struct DailyTableView: View {
 
     private var headerRow: some View {
         HStack(spacing: 0) {
-            cell("Date", width: nil, align: .leading, header: true)
-            cell("Total", width: col, align: .trailing, header: true)
-            cell("Input", width: col, align: .trailing, header: true)
-            cell("Output", width: col, align: .trailing, header: true)
-            cell("Cache", width: col, align: .trailing, header: true)
-            cell("Reason", width: col, align: .trailing, header: true)
-            cell("Convs", width: convCol, align: .trailing, header: true)
+            cell(l10n.usageColDate, width: nil, align: .leading, header: true)
+            cell(l10n.usageColTotal, width: col, align: .trailing, header: true)
+            cell(l10n.usageColInput, width: col, align: .trailing, header: true)
+            cell(l10n.usageColOutput, width: col, align: .trailing, header: true)
+            cell(l10n.usageColCache, width: col, align: .trailing, header: true)
+            cell(l10n.usageColReason, width: col, align: .trailing, header: true)
+            cell(l10n.usageColConvs, width: convCol, align: .trailing, header: true)
         }
     }
 

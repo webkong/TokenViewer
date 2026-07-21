@@ -67,6 +67,7 @@ final class L10n: ObservableObject {
     var input: String { isZh ? "输入" : "Input" }
     var output: String { isZh ? "输出" : "Output" }
     var cacheRead: String { isZh ? "缓存读取" : "Cache Read" }
+    var reasoning: String { isZh ? "推理" : "Reasoning" }
     var cost: String { isZh ? "费用" : "Cost" }
     var cacheHit: String { isZh ? "缓存命中" : "Cache hit" }
 
@@ -392,6 +393,11 @@ final class L10n: ObservableObject {
     var skillAgentParticipationDesc: String { isZh ? "启用的 Agent 将出现在 Skills 页面的筛选器中" : "Enabled agents appear as filters on the Skills page" }
     func skillNotInstalled(_ agent: String) -> String { isZh ? "\(agent) 未检测到安装" : "\(agent) not installed" }
     var skillsSourceRootPlaceholder: String { isZh ? "~/.tokenviewer/skills" : "~/.tokenviewer/skills" }
+    var skillPathLabel: String { isZh ? "路径" : "Path" }
+    var skillLinkLabel: String { isZh ? "链接" : "Link" }
+    var skillLinkDirectory: String { isZh ? "目录" : "Directory" }
+    var skillLinkSingleFile: String { isZh ? "单文件" : "Single File" }
+    var skillLinkOverlay: String { isZh ? "覆盖层" : "Overlay" }
     var loading: String { isZh ? "加载中…" : "Loading…" }
     var menuBarSectionTitle: String { isZh ? "菜单栏" : "Menu Bar" }
 
@@ -402,7 +408,18 @@ final class L10n: ObservableObject {
     var usageProviders: String { isZh ? "数据源" : "Providers" }
     var usageActivity: String { isZh ? "活跃度" : "Activity" }
     var usageDailyDetails: String { isZh ? "每日明细" : "Daily Details" }
+    var usageTotalTokens: String { isZh ? "总 Token 数" : "Total Tokens" }
+    var usageConversations: String { isZh ? "对话数" : "Conversations" }
+    var usageActiveDaysTitle: String { isZh ? "活跃天数" : "Active Days" }
     func usageActiveDays(_ n: Int) -> String { isZh ? "\(n) 天活跃" : "\(n) active days" }
+    // Daily details table column headers (kept short to fit narrow columns)
+    var usageColDate: String { isZh ? "日期" : "Date" }
+    var usageColTotal: String { isZh ? "总计" : "Total" }
+    var usageColInput: String { isZh ? "输入" : "Input" }
+    var usageColOutput: String { isZh ? "输出" : "Output" }
+    var usageColCache: String { isZh ? "缓存" : "Cache" }
+    var usageColReason: String { isZh ? "推理" : "Reason" }
+    var usageColConvs: String { isZh ? "对话" : "Convs" }
 
     // MARK: - Sync frequency
     var sync5min: String { "5 min" }

@@ -704,6 +704,7 @@ struct SettingsCard<Content: View>: View {
 
         @State private var skillsPath: String = ""
         @State private var linkType: String = "Directory"
+        @ObservedObject private var l10n = L10n.shared
 
         var body: some View {
             VStack(alignment: .leading, spacing: 6) {
@@ -716,7 +717,7 @@ struct SettingsCard<Content: View>: View {
                 }
 
                 HStack(spacing: 8) {
-                    Text("Path").font(.caption2).foregroundStyle(.secondary).frame(width: 30, alignment: .leading)
+                    Text(l10n.skillPathLabel).font(.caption2).foregroundStyle(.secondary).frame(width: 30, alignment: .leading)
                     TextField(provider.skillsPath, text: $skillsPath)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 11))
@@ -724,11 +725,11 @@ struct SettingsCard<Content: View>: View {
                 }
 
                 HStack(spacing: 8) {
-                    Text("Link").font(.caption2).foregroundStyle(.secondary).frame(width: 30, alignment: .leading)
+                    Text(l10n.skillLinkLabel).font(.caption2).foregroundStyle(.secondary).frame(width: 30, alignment: .leading)
                     Picker("", selection: $linkType) {
-                        Text("Directory").tag("Directory")
-                        Text("Single File").tag("SingleFile")
-                        Text("Overlay").tag("Overlay")
+                        Text(l10n.skillLinkDirectory).tag("Directory")
+                        Text(l10n.skillLinkSingleFile).tag("SingleFile")
+                        Text(l10n.skillLinkOverlay).tag("Overlay")
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
@@ -736,7 +737,7 @@ struct SettingsCard<Content: View>: View {
 
                     Spacer()
 
-                    Button("Reset") {
+                    Button(l10n.reset) {
                         AppFocus.clear()
                         skillsPath = provider.skillsPath
                         linkType = "Directory"
@@ -746,7 +747,7 @@ struct SettingsCard<Content: View>: View {
                     .font(.system(size: 10))
                     .disabled(skillsPath == provider.skillsPath && linkType == "Directory")
 
-                    Button("Save") {
+                    Button(l10n.save) {
                         AppFocus.clear()
                         let path = skillsPath.trimmingCharacters(in: .whitespaces)
                         let pathVal: String? = path.isEmpty || path == provider.skillsPath ? nil : path
