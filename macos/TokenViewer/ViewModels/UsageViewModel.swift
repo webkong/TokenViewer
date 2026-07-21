@@ -97,6 +97,10 @@ class UsageViewModel: ObservableObject {
     @Published var panelCards: [PanelCard] = []
     @Published var isLoading = false
     @Published var selectedRange: TimeRange = .week
+    /// True until the initial range auto-selection (today vs yesterday, based on
+    /// whether today has any data yet) has run once. Prevents that one-time
+    /// auto-selection from overriding a range the user has since chosen manually.
+    private var hasAppliedDefaultRange = false
     /// Custom range bounds (local calendar days), used when selectedRange == .custom.
     @Published var customFrom: Date = AppTime.localCalendar.date(byAdding: .day, value: -29, to: AppTime.localStartOfDay(for: Date())) ?? Date()
     @Published var customTo: Date = Date()
@@ -167,9 +171,33 @@ class UsageViewModel: ObservableObject {
         isLoading = true
         refreshToken &+= 1
         let token = refreshToken
-        let (from, to) = dateRange(for: selectedRange)
-        let useHourly = isHourlyView
+        let needsDefaultRangeCheck = !hasAppliedDefaultRange
         Task.detached { [weak self] in
+            // One-time default range selection: prefer "Today" once today has any
+            // data, otherwise fall back to "Yesterday" so the dashboard doesn't
+            // open on an empty day right after midnight. Runs once per app launch,
+            // resolved before the main query so we never fetch a range we're about
+            // to discard, and never overrides a range the user has since picked.
+            var resolvedDefaultRange: UsageViewModel.TimeRange?
+            if needsDefaultRangeCheck {
+                let todayRange = AppTime.trailingLocalDays(1)
+                let todayData = CoreBridge.shared.querySummary(from: todayRange.from, to: todayRange.to)
+                let todaySummary = todayData.flatMap { try? JSONDecoder().decode(UsageSummary.self, from: $0) }
+                let hasData = (todaySummary?.total_tokens ?? 0) > 0
+                resolvedDefaultRange = hasData ? .today : .yesterday
+            }
+
+            let (_, from, to, useHourly) = await MainActor.run { [weak self] () -> (UsageViewModel.TimeRange, String, String, Bool) in
+                guard let self else { return (.week, "", "", false) }
+                if let defaultRange = resolvedDefaultRange, !self.hasAppliedDefaultRange {
+                    self.hasAppliedDefaultRange = true
+                    self.selectedRange = defaultRange
+                }
+                let range = self.selectedRange
+                let (from, to) = self.dateRange(for: range)
+                return (range, from, to, self.isHourlyView)
+            }
+
             let summaryData = CoreBridge.shared.querySummary(from: from, to: to)
             let dailyData = useHourly
                 ? CoreBridge.shared.queryHourly(from: from, to: to)
