@@ -280,7 +280,7 @@ struct PopoverView: View {
         Text(t).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
     }
     private func heatColor(_ l: UInt8) -> Color {
-        switch l { case 0: return .gray.opacity(0.12); case 1: return TVColor.brand.opacity(0.35)
+        switch l { case 0: return Color.gray.opacity(0.22); case 1: return TVColor.brand.opacity(0.35)
         case 2: return TVColor.brand.opacity(0.55); case 3: return TVColor.brand.opacity(0.78); default: return TVColor.brand }
     }
 }

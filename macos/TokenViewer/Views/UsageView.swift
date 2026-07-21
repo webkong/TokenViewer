@@ -60,7 +60,10 @@ struct UsageView: View {
                             TrendChartView(data: viewModel.dailyUsage, hourly: viewModel.isHourlyView)
                         }
                         if !viewModel.heatmap.isEmpty {
-                            HeatmapView(points: viewModel.heatmap)
+                            // geo.size.width is the ScrollView content width; subtract the
+                            // VStack's outer padding(20) and tvCard()'s inner padding(16),
+                            // both applied on each side, to get the card's real inner width.
+                            HeatmapView(points: viewModel.heatmap, availableWidth: geo.size.width - 72)
                         }
 
                         // Composition: providers + models side-by-side when wide
@@ -452,12 +455,18 @@ private struct ProviderBreakdownView: View {
 
 private struct HeatmapView: View {
     let points: [HeatmapPoint]
-    @State private var gridWidth: CGFloat = 600
+    /// Real inner width of the card, measured by the parent (see UsageView.body)
+    /// and passed down — never self-measured. Self-measuring this view's own
+    /// rendered width to size its own cells is a feedback loop (width → cell
+    /// size → content size → next measured width) that doesn't reliably
+    /// converge, which is why the grid used to either leave a gap on the right
+    /// or shrink the visible week range to fit.
+    let availableWidth: CGFloat
     @ObservedObject private var l10n = L10n.shared
 
     private func color(_ level: UInt8) -> Color {
         switch level {
-        case 0: return Color.gray.opacity(0.12)
+        case 0: return Color.gray.opacity(0.22)
         case 1: return TVColor.brand.opacity(0.35)
         case 2: return TVColor.brand.opacity(0.55)
         case 3: return TVColor.brand.opacity(0.78)
@@ -465,14 +474,14 @@ private struct HeatmapView: View {
         }
     }
 
-    /// Calendar columns (weeks) spanning a fixed 6-month window ending today.
-    /// nil = future day (blank); present days carry a level (0 = no activity, gray).
+    /// Calendar columns (weeks) spanning `weeks` weeks ending in the current week.
+    /// Every day in range gets a Cell (level 0 = no activity, gray) — never nil —
+    /// so the grid is always fully populated, with no unfilled cells.
     private struct Cell { let date: Date; let level: UInt8; let count: UInt64 }
-    private func buildColumns() -> [[Cell?]] {
+    private func buildColumns(weeks: Int) -> [[Cell]] {
         let byDate = Dictionary(uniqueKeysWithValues: points.compactMap { p -> (Date, HeatmapPoint)? in
             AppTime.localDate(fromDayKey: p.date).map { (AppTime.localStartOfDay(for: $0), p) }
         })
-        let weeks = 53
         let calendar = AppTime.localCalendar
         let today = calendar.startOfDay(for: Date())
         // Start on the Sunday (weeks-1) weeks before this week's Sunday.
@@ -480,9 +489,9 @@ private struct HeatmapView: View {
         let thisSunday = calendar.date(byAdding: .day, value: -(weekday - 1), to: today)!
         let start = calendar.date(byAdding: .day, value: -(weeks - 1) * 7, to: thisSunday)!
 
-        var columns: [[Cell?]] = []
+        var columns: [[Cell]] = []
         for w in 0..<weeks {
-            var col: [Cell?] = []
+            var col: [Cell] = []
             for r in 0..<7 {
                 let d = calendar.date(byAdding: .day, value: w * 7 + r, to: start)!
                 if let p = byDate[d] {
@@ -498,22 +507,26 @@ private struct HeatmapView: View {
     }
 
     /// Month label per column (shown when month changes).
-    private func monthLabel(_ columns: [[Cell?]], _ i: Int) -> String? {
-        guard let first = columns[i].compactMap({ $0?.date }).first else { return nil }
+    private func monthLabel(_ columns: [[Cell]], _ i: Int) -> String? {
+        guard let first = columns[i].first?.date else { return nil }
         let m = AppTime.localCalendar.component(.month, from: first)
-        let prevM = i > 0 ? columns[i-1].compactMap({ $0?.date }).first.map { AppTime.localCalendar.component(.month, from: $0) } : nil
+        let prevM = i > 0 ? columns[i-1].first.map { AppTime.localCalendar.component(.month, from: $0.date) } : nil
         return (i == 0 || m != prevM) ? "\(m)月" : nil
     }
 
     var body: some View {
-        let columns = buildColumns()
-        let activeDays = points.filter { $0.count > 0 }.count
         let weekdays = ["日", "一", "二", "三", "四", "五", "六"]
-        let n = max(columns.count, 1)
         let labelW: CGFloat = 16
         let sp: CGFloat = 3
-        // Cell size stretches so n columns + labels fill the measured width.
-        let cell = max(6, (gridWidth - labelW - CGFloat(n + 1) * sp) / CGFloat(n))
+        // Always show the full 53-week history; stretch cell size to exactly
+        // fill availableWidth (a value the parent measured and passed in, not
+        // something this view measures about its own rendered output — see
+        // the doc comment on `availableWidth`).
+        let weeks = 53
+        let n = CGFloat(weeks)
+        let cell = max(6, (availableWidth - labelW - (n + 1) * sp) / n)
+        let columns = buildColumns(weeks: weeks)
+        let activeDays = points.filter { $0.count > 0 }.count
 
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -544,23 +557,16 @@ private struct HeatmapView: View {
                     ForEach(Array(columns.enumerated()), id: \.offset) { _, week in
                         VStack(spacing: sp) {
                             ForEach(0..<7, id: \.self) { r in
-                                if let c = week[r] {
-                                    RoundedRectangle(cornerRadius: 2)
-                                        .fill(color(c.level))
-                                        .frame(width: cell, height: cell)
-                                        .help(helpText(c))
-                                } else {
-                                    Color.clear.frame(width: cell, height: cell)
-                                }
+                                let c = week[r]
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(color(c.level))
+                                    .frame(width: cell, height: cell)
+                                    .help(helpText(c))
                             }
                         }
                     }
                 }
             }
-            .background(GeometryReader { g in
-                Color.clear.preference(key: HeatmapWidthKey.self, value: g.size.width)
-            })
-            .onPreferenceChange(HeatmapWidthKey.self) { gridWidth = $0 }
 
             // Legend (centered at bottom)
             HStack(spacing: 4) {
@@ -574,6 +580,7 @@ private struct HeatmapView: View {
             }
             .frame(maxWidth: .infinity)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .tvCard()
     }
 
@@ -662,7 +669,3 @@ private struct DailyTableView: View {
 }
 
 
-private struct HeatmapWidthKey: PreferenceKey {
-    static var defaultValue: CGFloat = 600
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-}
