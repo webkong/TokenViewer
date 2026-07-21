@@ -161,7 +161,159 @@ pub fn parse(
         }
     }
 
+    // Kiro CLI v3 sessions — new per-workspace session store:
+    // ~/.kiro/sessions/<workspace-hash>/sess_<uuid>/session.json + messages.jsonl
+    // Introduced after the flat ~/.kiro/sessions/cli/*.json format above; the two
+    // never overlap (different directory shapes), so no dedup is needed between them.
+    parse_kiro_v3_sessions(home_dir, &mut cursor, &mut all_records);
+
     Ok((aggregate_records(all_records), cursor.to_json()))
+}
+
+/// Parse Kiro CLI v3 session directories: `~/.kiro/sessions/*/sess_*/session.json`
+/// (metadata) + sibling `messages.jsonl` (append-only event log). Unlike the legacy
+/// per-turn `.json` format, the metadata file's mtime lags far behind live activity
+/// (observed: `.json` frozen for 20+ hours while `messages.jsonl` kept growing), so
+/// incremental sync is driven entirely by the `messages.jsonl` byte offset — never
+/// by the `.json` mtime, which was the mistake that caused today's session to go
+/// completely uncounted.
+///
+/// Kiro CLI doesn't expose real per-turn token counts here either: `usage_summary`
+/// events only carry an opaque `credit` unit with no token breakdown or per-model
+/// exchange rate, so it can't be converted to tokens. We fall back to the same
+/// char-based estimate (÷4) used for the legacy CLI format, keeping one consistent
+/// estimation convention across both Kiro CLI session formats.
+fn parse_kiro_v3_sessions(
+    home_dir: &Path,
+    cursor: &mut FileCursor,
+    all_records: &mut Vec<UsageRecord>,
+) {
+    let sessions_root = home_dir.join(".kiro/sessions");
+    if !sessions_root.exists() {
+        return;
+    }
+    let pattern = format!("{}/*/sess_*/session.json", sessions_root.display());
+    let session_files = cursor.glob_cached(&pattern, &sessions_root);
+
+    for session_json_path in session_files {
+        let Some(session_dir) = session_json_path.parent() else {
+            continue;
+        };
+        let messages_path = session_dir.join("messages.jsonl");
+        if !messages_path.exists() {
+            continue;
+        }
+
+        // modelId is read fresh each sync (cheap: one small JSON file) so a
+        // mid-session model switch is picked up for subsequent turns without
+        // needing extra cursor state.
+        let model = read_kiro_v3_session_model(&session_json_path);
+
+        let key = messages_path.to_string_lossy().to_string();
+        let offset = cursor.get_offset(&key);
+        let (lines, new_offset) = match read_lines_from_offset(&messages_path, offset) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        if lines.is_empty() {
+            continue;
+        }
+
+        let mut input_chars: usize = 0;
+        let mut output_chars: usize = 0;
+        let mut turn_active = false;
+
+        for line in &lines {
+            let v: Value = match serde_json::from_str(line) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let Some(payload) = v.get("payload") else {
+                continue;
+            };
+            let event_type = payload.get("type").and_then(|t| t.as_str()).unwrap_or("");
+
+            match event_type {
+                "turn_start" => {
+                    input_chars = 0;
+                    output_chars = 0;
+                    turn_active = true;
+                }
+                "user" | "tool_result" => {
+                    input_chars += kiro_v3_content_chars(payload);
+                }
+                "assistant" | "tool_call" => {
+                    output_chars += kiro_v3_content_chars(payload);
+                }
+                "turn_end" | "usage_summary" => {
+                    if !turn_active {
+                        continue;
+                    }
+                    if input_chars + output_chars > 0 {
+                        let hour_start = v
+                            .get("timestamp")
+                            .and_then(|t| t.as_str())
+                            .map(iso_to_bucket)
+                            .unwrap_or_default();
+                        if !hour_start.is_empty() {
+                            let input_tokens = (input_chars / 4) as u64;
+                            let output_tokens = (output_chars / 4) as u64;
+                            all_records.push(UsageRecord {
+                                id: None,
+                                hour_start,
+                                source: "kiro".to_string(),
+                                model: model.clone(),
+                                input_tokens,
+                                output_tokens,
+                                cached_input_tokens: 0,
+                                cache_creation_input_tokens: 0,
+                                reasoning_output_tokens: 0,
+                                // Sum the already-truncated per-field token counts rather
+                                // than truncating (input_chars + output_chars) / 4 again —
+                                // otherwise integer division can make total != input + output.
+                                total_tokens: input_tokens + output_tokens,
+                                conversation_count: 1,
+                            });
+                        }
+                    }
+                    // A turn_end and its matching usage_summary share the same
+                    // executionId and arrive back-to-back; only emit once per
+                    // turn by resetting here regardless of which one fired first.
+                    input_chars = 0;
+                    output_chars = 0;
+                    turn_active = false;
+                }
+                _ => {}
+            }
+        }
+
+        cursor.set_offset(&key, new_offset);
+    }
+}
+
+/// Read `modelId` from a Kiro CLI v3 `session.json`, normalized to a canonical
+/// model name. Falls back to the generic agent bucket if missing/unreadable.
+fn read_kiro_v3_session_model(session_json_path: &Path) -> String {
+    read_to_string_capped(session_json_path)
+        .and_then(|content| serde_json::from_str::<Value>(&content).ok())
+        .and_then(|data| {
+            data.get("modelId")
+                .and_then(|m| m.as_str())
+                .map(normalize_kiro_model)
+        })
+        .unwrap_or_else(|| "kiro-agent".to_string())
+}
+
+/// Char count for a v3 message event's payload. `content` is the primary text
+/// field (user/assistant/tool_result); `args` is the tool-call input object.
+fn kiro_v3_content_chars(payload: &Value) -> usize {
+    if let Some(s) = payload.get("content").and_then(|c| c.as_str()) {
+        return s.len();
+    }
+    if let Some(args) = payload.get("args") {
+        return args.to_string().len();
+    }
+    0
 }
 
 /// Parse tokens_generated.jsonl format:

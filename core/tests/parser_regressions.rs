@@ -5,7 +5,7 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rusqlite::Connection;
-use tokenviewer_core::parsers::{codex, parse_all, workbuddy};
+use tokenviewer_core::parsers::{codex, kiro, parse_all, workbuddy};
 use tokenviewer_core::storage::Database;
 use tokenviewer_core::sync::sync_all;
 
@@ -401,6 +401,172 @@ fn codex_incremental_sync_keeps_model_context() {
     assert_eq!(second_records.len(), 1);
     assert_eq!(second_records[0].model, "gpt-4.1");
     assert_ne!(second_records[0].model, "unknown");
+}
+
+/// Kiro CLI v3 session directory: ~/.kiro/sessions/<workspace-hash>/sess_<uuid>/
+/// with session.json (metadata incl. modelId) + messages.jsonl (event log).
+fn write_kiro_v3_session_json(home: &Path, workspace_hash: &str, session_id: &str, model_id: &str) {
+    let path = home
+        .join(".kiro/sessions")
+        .join(workspace_hash)
+        .join(format!("sess_{}", session_id))
+        .join("session.json");
+    write_text(
+        &path,
+        &format!(
+            r#"{{"schemaVersion":"1.0.0","id":"sess_{session_id}","title":"test","agentMode":"vibe","workspacePaths":["/tmp"],"createdAt":"2026-07-21T00:00:00.000Z","lastModifiedAt":"2026-07-21T00:00:00.000Z","modelId":"{model_id}","autopilot":true,"status":"idle"}}"#,
+            session_id = session_id,
+            model_id = model_id
+        ),
+    );
+}
+
+fn kiro_v3_messages_path(home: &Path, workspace_hash: &str, session_id: &str) -> PathBuf {
+    home.join(".kiro/sessions")
+        .join(workspace_hash)
+        .join(format!("sess_{}", session_id))
+        .join("messages.jsonl")
+}
+
+#[test]
+fn kiro_v3_session_parses_turn_into_char_estimated_usage() {
+    let home = temp_home();
+    write_kiro_v3_session_json(&home, "hash1", "aaaa", "gpt-5.6-sol");
+    let messages_path = kiro_v3_messages_path(&home, "hash1", "aaaa");
+
+    // One turn: turn_start -> user (16 chars) -> assistant Say (8 chars) ->
+    // tool_call (args ~10 chars) -> tool_result (~6 chars) -> turn_end.
+    write_text(
+        &messages_path,
+        concat!(
+            "{\"id\":\"1\",\"timestamp\":\"2026-07-21T02:47:47.050Z\",\"payload\":{\"type\":\"turn_start\",\"executionId\":\"exec-1\"}}\n",
+            "{\"id\":\"2\",\"timestamp\":\"2026-07-21T02:47:48.000Z\",\"payload\":{\"type\":\"user\",\"content\":\"1234567890123456\"}}\n",
+            "{\"id\":\"3\",\"timestamp\":\"2026-07-21T02:47:49.000Z\",\"payload\":{\"type\":\"assistant\",\"operationType\":\"Say\",\"content\":\"12345678\",\"executionId\":\"exec-1\"}}\n",
+            "{\"id\":\"4\",\"timestamp\":\"2026-07-21T02:47:50.000Z\",\"payload\":{\"type\":\"tool_call\",\"toolName\":\"shell\",\"args\":{\"command\":\"1234\"},\"executionId\":\"exec-1\"}}\n",
+            "{\"id\":\"5\",\"timestamp\":\"2026-07-21T02:47:51.000Z\",\"payload\":{\"type\":\"tool_result\",\"content\":\"123456\",\"executionId\":\"exec-1\"}}\n",
+            "{\"id\":\"6\",\"timestamp\":\"2026-07-21T02:47:52.000Z\",\"payload\":{\"type\":\"turn_end\",\"stopReason\":\"end_turn\",\"executionId\":\"exec-1\"}}"
+        ),
+    );
+
+    let (records, _cursor_json) = kiro::parse(&home, None).expect("kiro v3 parse");
+    assert_eq!(records.len(), 1, "expected exactly one usage record per turn");
+    let rec = &records[0];
+    assert_eq!(rec.source, "kiro");
+    assert_eq!(rec.model, "gpt-5.6-sol");
+    // input = user(16 chars) + tool_result(6 chars) = 22 chars -> 22/4 = 5 tokens
+    assert_eq!(rec.input_tokens, 5);
+    // output = assistant(8 chars) + tool_call args (`{"command":"1234"}` compact = 18 chars) -> 8/4 + 18/4 = 2 + 4 = 6 tokens
+    assert_eq!(rec.output_tokens, 6);
+    assert_eq!(rec.total_tokens, rec.input_tokens + rec.output_tokens);
+}
+
+#[test]
+fn kiro_v3_turn_end_and_usage_summary_do_not_double_count() {
+    let home = temp_home();
+    write_kiro_v3_session_json(&home, "hash1", "bbbb", "claude-sonnet-4.6");
+    let messages_path = kiro_v3_messages_path(&home, "hash1", "bbbb");
+
+    // turn_end and usage_summary share the same executionId and arrive
+    // back-to-back — must only produce one record, not two.
+    write_text(
+        &messages_path,
+        concat!(
+            "{\"id\":\"1\",\"timestamp\":\"2026-07-21T02:47:47.050Z\",\"payload\":{\"type\":\"turn_start\",\"executionId\":\"exec-1\"}}\n",
+            "{\"id\":\"2\",\"timestamp\":\"2026-07-21T02:47:48.000Z\",\"payload\":{\"type\":\"user\",\"content\":\"12345678\"}}\n",
+            "{\"id\":\"3\",\"timestamp\":\"2026-07-21T02:47:49.000Z\",\"payload\":{\"type\":\"assistant\",\"operationType\":\"Say\",\"content\":\"12345678\",\"executionId\":\"exec-1\"}}\n",
+            "{\"id\":\"4\",\"timestamp\":\"2026-07-21T02:47:50.000Z\",\"payload\":{\"type\":\"turn_end\",\"stopReason\":\"end_turn\",\"executionId\":\"exec-1\"}}\n",
+            "{\"id\":\"5\",\"timestamp\":\"2026-07-21T02:47:50.100Z\",\"payload\":{\"type\":\"usage_summary\",\"promptTurnSummaries\":[{\"unit\":\"credit\",\"usage\":1.2,\"usedTools\":[]}],\"elapsedTime\":100,\"status\":\"success\",\"executionId\":\"exec-1\"}}"
+        ),
+    );
+
+    let (records, _) = kiro::parse(&home, None).expect("kiro v3 parse");
+    assert_eq!(
+        records.len(),
+        1,
+        "turn_end + usage_summary for the same turn must yield exactly one record"
+    );
+}
+
+#[test]
+fn kiro_v3_incremental_sync_only_counts_new_turns() {
+    let home = temp_home();
+    write_kiro_v3_session_json(&home, "hash1", "cccc", "gpt-5.6-sol");
+    let messages_path = kiro_v3_messages_path(&home, "hash1", "cccc");
+
+    write_text(
+        &messages_path,
+        concat!(
+            "{\"id\":\"1\",\"timestamp\":\"2026-07-21T02:00:00.000Z\",\"payload\":{\"type\":\"turn_start\",\"executionId\":\"exec-1\"}}\n",
+            "{\"id\":\"2\",\"timestamp\":\"2026-07-21T02:00:01.000Z\",\"payload\":{\"type\":\"user\",\"content\":\"12345678\"}}\n",
+            "{\"id\":\"3\",\"timestamp\":\"2026-07-21T02:00:02.000Z\",\"payload\":{\"type\":\"assistant\",\"operationType\":\"Say\",\"content\":\"12345678\",\"executionId\":\"exec-1\"}}\n",
+            "{\"id\":\"4\",\"timestamp\":\"2026-07-21T02:00:03.000Z\",\"payload\":{\"type\":\"turn_end\",\"stopReason\":\"end_turn\",\"executionId\":\"exec-1\"}}\n"
+        ),
+    );
+
+    let (first_records, cursor_json) = kiro::parse(&home, None).expect("first kiro v3 parse");
+    assert_eq!(first_records.len(), 1);
+
+    sleep(Duration::from_millis(1100));
+
+    // Append a second turn — the previously-read bytes must not be re-parsed.
+    let mut appended = fs::read_to_string(&messages_path).unwrap();
+    appended.push_str(concat!(
+        "{\"id\":\"5\",\"timestamp\":\"2026-07-21T03:00:00.000Z\",\"payload\":{\"type\":\"turn_start\",\"executionId\":\"exec-2\"}}\n",
+        "{\"id\":\"6\",\"timestamp\":\"2026-07-21T03:00:01.000Z\",\"payload\":{\"type\":\"user\",\"content\":\"1234567890123456\"}}\n",
+        "{\"id\":\"7\",\"timestamp\":\"2026-07-21T03:00:02.000Z\",\"payload\":{\"type\":\"assistant\",\"operationType\":\"Say\",\"content\":\"12345678\",\"executionId\":\"exec-2\"}}\n",
+        "{\"id\":\"8\",\"timestamp\":\"2026-07-21T03:00:03.000Z\",\"payload\":{\"type\":\"turn_end\",\"stopReason\":\"end_turn\",\"executionId\":\"exec-2\"}}\n"
+    ));
+    write_text(&messages_path, &appended);
+
+    let (second_records, _) =
+        kiro::parse(&home, Some(&cursor_json)).expect("second kiro v3 parse");
+    assert_eq!(
+        second_records.len(),
+        1,
+        "incremental parse must only pick up the newly appended turn"
+    );
+    // input = 16 chars -> 4 tokens
+    assert_eq!(second_records[0].input_tokens, 4);
+}
+
+#[test]
+fn kiro_v3_and_legacy_cli_format_do_not_conflict() {
+    let home = temp_home();
+
+    // Legacy flat format: ~/.kiro/sessions/cli/<uuid>.json + .jsonl
+    write_text(
+        &home.join(".kiro/sessions/cli/legacy-uuid.json"),
+        r#"{"session_state":{"conversation_metadata":{"user_turn_metadatas":[{"end_timestamp":"2026-07-21T01:00:00Z","message_ids":["m1"],"input_token_count":0,"output_token_count":0}]},"rts_model_state":{"model_info":{"model_id":"CLAUDE_SONNET_4_6"}}}}"#,
+    );
+    write_text(
+        &home.join(".kiro/sessions/cli/legacy-uuid.jsonl"),
+        concat!(
+            "{\"kind\":\"Prompt\",\"data\":{\"message_id\":\"m1\",\"content\":[{\"kind\":\"text\",\"data\":\"hello world test\"}]}}\n",
+            "{\"kind\":\"AssistantMessage\",\"data\":{\"message_id\":\"m1\",\"content\":[{\"kind\":\"text\",\"data\":\"hi there\"}]}}"
+        ),
+    );
+
+    // New v3 format: ~/.kiro/sessions/<hash>/sess_<uuid>/
+    write_kiro_v3_session_json(&home, "hash1", "dddd", "gpt-5.6-sol");
+    write_text(
+        &kiro_v3_messages_path(&home, "hash1", "dddd"),
+        concat!(
+            "{\"id\":\"1\",\"timestamp\":\"2026-07-21T02:00:00.000Z\",\"payload\":{\"type\":\"turn_start\",\"executionId\":\"exec-1\"}}\n",
+            "{\"id\":\"2\",\"timestamp\":\"2026-07-21T02:00:01.000Z\",\"payload\":{\"type\":\"user\",\"content\":\"12345678\"}}\n",
+            "{\"id\":\"3\",\"timestamp\":\"2026-07-21T02:00:02.000Z\",\"payload\":{\"type\":\"assistant\",\"operationType\":\"Say\",\"content\":\"12345678\",\"executionId\":\"exec-1\"}}\n",
+            "{\"id\":\"4\",\"timestamp\":\"2026-07-21T02:00:03.000Z\",\"payload\":{\"type\":\"turn_end\",\"stopReason\":\"end_turn\",\"executionId\":\"exec-1\"}}\n"
+        ),
+    );
+
+    let (records, _) = kiro::parse(&home, None).expect("kiro parse with both formats");
+    assert_eq!(
+        records.len(),
+        2,
+        "legacy cli/*.json session and v3 sess_* session must both be counted, exactly once each"
+    );
+    let models: Vec<&str> = records.iter().map(|r| r.model.as_str()).collect();
+    assert!(models.contains(&"claude-sonnet-4.6"));
+    assert!(models.contains(&"gpt-5.6-sol"));
 }
 
 #[test]
