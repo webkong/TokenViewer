@@ -55,7 +55,16 @@ struct PopoverView: View {
         }
         .frame(width: 420, height: popoverHeight)
         .background(Color(nsColor: .windowBackgroundColor))
-        .onAppear { onHeightChange?(popoverHeight) }
+        .onAppear {
+            onHeightChange?(popoverHeight)
+            // Custom uses a date picker that only exists in the Dashboard window —
+            // the popover's range picker doesn't offer it, so fall back to a safe
+            // default if the user left Custom selected there.
+            if viewModel.selectedRange == .custom {
+                viewModel.selectedRange = .week
+                viewModel.refresh()
+            }
+        }
         .onChange(of: popoverHeight) { onHeightChange?($0) }
         .onKeyPress(.escape) { onClose?(); return .handled }
         // NOTE: sync is triggered from StatusBarController.togglePopover (AppKit)
@@ -190,9 +199,13 @@ struct PopoverView: View {
                 sectionHeader(l10n.trend)
                 Spacer()
                 Picker("", selection: $viewModel.selectedRange) {
-                    ForEach(UsageViewModel.TimeRange.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    // Custom uses a date-range picker that doesn't fit the popover's
+                    // fixed width — only offered in the full Dashboard window.
+                    ForEach(UsageViewModel.TimeRange.allCases.filter { $0 != .custom }, id: \.self) {
+                        Text($0.localizedTitle).tag($0)
+                    }
                 }
-                .pickerStyle(.segmented).labelsHidden().frame(width: 180).controlSize(.mini)
+                .pickerStyle(.segmented).labelsHidden().frame(width: 220).controlSize(.mini)
                 .onChange(of: viewModel.selectedRange) { viewModel.refresh() }
             }
             TrendChartView(data: viewModel.dailyUsage, hourly: viewModel.selectedRange == .today)

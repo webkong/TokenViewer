@@ -40,6 +40,11 @@ struct UsageView: View {
     @ObservedObject var viewModel: UsageViewModel
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var currency = CurrencyStore.shared
+    /// Measured height of the Custom date-range capsule (padding included), used
+    /// to size the segmented range Picker to match exactly — otherwise the two
+    /// controls have slightly different total heights and the row visibly jumps
+    /// when Custom is toggled on/off.
+    @State private var customPickerHeight: CGFloat = 38
 
     var body: some View {
         GeometryReader { geo in
@@ -145,10 +150,27 @@ struct UsageView: View {
 
             Spacer(minLength: 0)
         }
+        // Pin the row to the custom picker's height so toggling Custom on/off
+        // never changes the row height (the custom capsule is taller than the
+        // segmented picker). The height is measured from an always-present
+        // hidden copy below — not the animated live one — so the measurement
+        // is stable and doesn't jitter during the show/hide transition.
+        .frame(height: customPickerHeight)
+        .background(
+            customDateRangeVisual
+                .hidden()
+                .fixedSize()
+                .allowsHitTesting(false)
+                .background(GeometryReader { g in
+                    Color.clear.preference(key: CustomPickerHeightKey.self, value: g.size.height)
+                }),
+            alignment: .leading
+        )
+        .onPreferenceChange(CustomPickerHeightKey.self) { customPickerHeight = $0 }
         .animation(.easeInOut(duration: 0.18), value: viewModel.selectedRange)
     }
 
-    private var customDateRangePicker: some View {
+    private var customDateRangeVisual: some View {
         HStack(spacing: 8) {
             UsageDateField(
                 title: l10n.rangeFrom,
@@ -170,8 +192,12 @@ struct UsageView: View {
         .padding(.vertical, 6)
         .background(Color(nsColor: .controlBackgroundColor), in: Capsule())
         .overlay(Capsule().strokeBorder(.quaternary, lineWidth: 0.5))
-        .onChange(of: viewModel.customFrom) { viewModel.refresh() }
-        .onChange(of: viewModel.customTo) { viewModel.refresh() }
+    }
+
+    private var customDateRangePicker: some View {
+        customDateRangeVisual
+            .onChange(of: viewModel.customFrom) { viewModel.refresh() }
+            .onChange(of: viewModel.customTo) { viewModel.refresh() }
     }
 }
 
@@ -219,6 +245,11 @@ private struct UsageDateField: View {
         .background(Color(nsColor: .textBackgroundColor).opacity(0.75), in: Capsule())
         .overlay(Capsule().strokeBorder(.quaternary.opacity(0.7), lineWidth: 0.5))
     }
+}
+
+private struct CustomPickerHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 38
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 // MARK: - Summary Cards
