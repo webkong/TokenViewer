@@ -414,11 +414,13 @@ struct SettingsView: View {
     // MARK: Skills
 
     @State private var skillsSourceRoot: String = ""
-    /// Last value loaded from/saved to the backend, used as "old path" for the copy-prompt on save.
+    /// Last value loaded from/saved to the backend, used as "old path" for the move prompt on save.
     @State private var lastSavedSkillsSourceRoot: String = ""
     @AppStorage("skillsEnabledProviders") private var enabledProvidersJSON: String = ProviderRegistry.defaultSkillSourcesJSON
-    @State private var pendingSkillsCopyOldPath: String? = nil
-    @State private var pendingSkillsCopyNewPath: String = ""
+    @State private var pendingSkillsMoveOldPath: String? = nil
+    @State private var pendingSkillsMoveNewPath: String = ""
+    @State private var pendingSkillsOverwriteOldPath: String? = nil
+    @State private var pendingSkillsOverwriteNewPath: String = ""
 
     private var enabledProviders: Set<String> {
         guard let data = enabledProvidersJSON.data(using: .utf8),
@@ -455,24 +457,13 @@ struct SettingsView: View {
                         AppFocus.clear()
                         let trimmedPath = skillsSourceRoot.trimmingCharacters(in: .whitespacesAndNewlines)
                         let oldPath = lastSavedSkillsSourceRoot
-                        let payload: [String: String] = ["source_root": trimmedPath]
-                        if let data = try? JSONSerialization.data(withJSONObject: payload) {
-                            let resultData = CoreBridge.shared.skillsSetGitConfig(data)
-                            if let resultData,
-                               let result = try? JSONDecoder().decode(SkillOperationResult.self, from: resultData),
-                               result.ok {
-                                SkillManagerViewModel.shared.refresh()
-                                ToastCenter.shared.success(l10n.toastSaved)
-                                lastSavedSkillsSourceRoot = trimmedPath
-                                if !oldPath.isEmpty, oldPath != trimmedPath {
-                                    pendingSkillsCopyOldPath = oldPath
-                                    pendingSkillsCopyNewPath = trimmedPath
-                                }
-                            } else {
-                                ToastCenter.shared.error(l10n.toastSaveFailed)
-                            }
+                        if !oldPath.isEmpty,
+                           !trimmedPath.isEmpty,
+                           standardizedSkillsPath(oldPath) != standardizedSkillsPath(trimmedPath) {
+                            pendingSkillsMoveOldPath = oldPath
+                            pendingSkillsMoveNewPath = trimmedPath
                         } else {
-                            ToastCenter.shared.error(l10n.toastSaveFailed)
+                            saveSkillsSourceRoot(trimmedPath)
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -514,25 +505,64 @@ struct SettingsView: View {
             providerRegistry.refreshInstallStatus()
         }
         .alert(
-            l10n.skillsCopyPromptTitle,
+            l10n.skillsMovePromptTitle,
             isPresented: Binding(
-                get: { pendingSkillsCopyOldPath != nil },
-                set: { if !$0 { pendingSkillsCopyOldPath = nil } }
+                get: { pendingSkillsMoveOldPath != nil },
+                set: { if !$0 { pendingSkillsMoveOldPath = nil } }
             )
         ) {
-            Button(l10n.skillsCopyPromptConfirm) {
-                if let oldPath = pendingSkillsCopyOldPath {
-                    copySkills(from: oldPath, to: pendingSkillsCopyNewPath)
+            Button(l10n.skillsMovePromptConfirm) {
+                if let oldPath = pendingSkillsMoveOldPath {
+                    let newPath = pendingSkillsMoveNewPath
+                    if skillsPathsAreNested(oldPath, newPath) {
+                        ToastCenter.shared.error(l10n.skillsMoveFailed)
+                    } else if FileManager.default.fileExists(atPath: standardizedSkillsPath(newPath)) {
+                        pendingSkillsOverwriteOldPath = oldPath
+                        pendingSkillsOverwriteNewPath = newPath
+                    } else if moveSkills(from: oldPath, to: newPath, overwrite: false) {
+                        saveSkillsSourceRoot(
+                            newPath,
+                            successMessage: l10n.skillsMoveSuccess,
+                            relinkExistingSkills: true
+                        )
+                    }
                 }
-                pendingSkillsCopyOldPath = nil
+                pendingSkillsMoveOldPath = nil
             }
             Button(l10n.cancel, role: .cancel) {
-                pendingSkillsCopyOldPath = nil
+                saveSkillsSourceRoot(pendingSkillsMoveNewPath)
+                pendingSkillsMoveOldPath = nil
             }
         } message: {
-            if let oldPath = pendingSkillsCopyOldPath {
-                Text(l10n.skillsCopyPromptMessage(oldPath, pendingSkillsCopyNewPath))
+            if let oldPath = pendingSkillsMoveOldPath {
+                Text(l10n.skillsMovePromptMessage(oldPath, pendingSkillsMoveNewPath))
             }
+        }
+        .alert(
+            l10n.skillsOverwritePromptTitle,
+            isPresented: Binding(
+                get: { pendingSkillsOverwriteOldPath != nil },
+                set: { if !$0 { pendingSkillsOverwriteOldPath = nil } }
+            )
+        ) {
+            Button(l10n.skillsOverwritePromptConfirm, role: .destructive) {
+                if let oldPath = pendingSkillsOverwriteOldPath {
+                    let newPath = pendingSkillsOverwriteNewPath
+                    if moveSkills(from: oldPath, to: newPath, overwrite: true) {
+                        saveSkillsSourceRoot(
+                            newPath,
+                            successMessage: l10n.skillsMoveSuccess,
+                            relinkExistingSkills: true
+                        )
+                    }
+                }
+                pendingSkillsOverwriteOldPath = nil
+            }
+            Button(l10n.cancel, role: .cancel) {
+                pendingSkillsOverwriteOldPath = nil
+            }
+        } message: {
+            Text(l10n.skillsOverwritePromptMessage(pendingSkillsOverwriteNewPath))
         }
     }
 
@@ -567,36 +597,128 @@ struct SettingsView: View {
         }
     }
 
-    /// Copies skill files from the previous source root into the newly saved one.
-    /// Existing items at the destination are left untouched (no overwrite) to avoid
-    /// clobbering skills already present there.
-    private func copySkills(from oldRawPath: String, to newRawPath: String) {
+    private func saveSkillsSourceRoot(
+        _ path: String,
+        successMessage: String? = nil,
+        relinkExistingSkills: Bool = false
+    ) {
+        let payload: [String: String] = ["source_root": path]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let resultData = CoreBridge.shared.skillsSetGitConfig(data),
+              let result = try? JSONDecoder().decode(SkillOperationResult.self, from: resultData),
+              result.ok else {
+            ToastCenter.shared.error(l10n.toastSaveFailed)
+            return
+        }
+
+        lastSavedSkillsSourceRoot = path
+        providerRegistry.reload()
+        if relinkExistingSkills, !relinkSkillsToMovedRoot(sourceRoot: path) {
+            SkillManagerViewModel.shared.refresh()
+            ToastCenter.shared.error(l10n.skillsMoveRelinkFailed)
+            return
+        }
+        SkillManagerViewModel.shared.refresh()
+        ToastCenter.shared.success(successMessage ?? l10n.toastSaved)
+    }
+
+    private func relinkSkillsToMovedRoot(sourceRoot: String) -> Bool {
+        var succeeded = true
+        for provider in providerRegistry.skillProviders {
+            for skillID in provider.linkedSkills {
+                let payload = ["skill_id": skillID, "agent_id": provider.source]
+                if let data = try? JSONEncoder().encode(payload),
+                   let resultData = CoreBridge.shared.skillsLink(data),
+                   let result = try? JSONDecoder().decode(SkillOperationResult.self, from: resultData),
+                   result.ok {
+                    continue
+                }
+
+                // Only surface an error when the final directory link still does not
+                // point at the moved source root.
+                if provider.linkType != "Directory"
+                    || !directoryLinkIsCurrent(
+                        provider: provider,
+                        skillID: skillID,
+                        sourceRoot: sourceRoot
+                    ) {
+                    succeeded = false
+                }
+            }
+        }
+        return succeeded
+    }
+
+    private func directoryLinkIsCurrent(
+        provider: SkillProvider,
+        skillID: String,
+        sourceRoot: String
+    ) -> Bool {
+        let linkPath = URL(
+            fileURLWithPath: standardizedSkillsPath(provider.skillsPath),
+            isDirectory: true
+        ).appendingPathComponent(skillID)
+        guard let rawDestination = try? FileManager.default.destinationOfSymbolicLink(atPath: linkPath.path) else {
+            return false
+        }
+
+        let destination: String
+        if rawDestination.hasPrefix("/") {
+            destination = standardizedSkillsPath(rawDestination)
+        } else {
+            destination = standardizedSkillsPath(
+                linkPath.deletingLastPathComponent().appendingPathComponent(rawDestination).path
+            )
+        }
+        let expected = URL(
+            fileURLWithPath: standardizedSkillsPath(sourceRoot),
+            isDirectory: true
+        ).appendingPathComponent(skillID).standardized.path
+        return destination == expected && FileManager.default.fileExists(atPath: expected)
+    }
+
+    private func standardizedSkillsPath(_ path: String) -> String {
+        (NSString(string: path).expandingTildeInPath as NSString).standardizingPath
+    }
+
+    private func skillsPathsAreNested(_ firstPath: String, _ secondPath: String) -> Bool {
+        let first = standardizedSkillsPath(firstPath)
+        let second = standardizedSkillsPath(secondPath)
+        return first.hasPrefix(second + "/") || second.hasPrefix(first + "/")
+    }
+
+    /// Moves the entire previous source root to the newly saved path. The destination
+    /// is replaced only after the user confirms the destructive overwrite prompt.
+    private func moveSkills(from oldRawPath: String, to newRawPath: String, overwrite: Bool) -> Bool {
         let fm = FileManager.default
-        let oldPath = (NSString(string: oldRawPath).expandingTildeInPath as NSString).standardizingPath
-        let newPath = (NSString(string: newRawPath.isEmpty ? "~/.tokenviewer/skills" : newRawPath).expandingTildeInPath as NSString).standardizingPath
+        let oldPath = standardizedSkillsPath(oldRawPath)
+        let newPath = standardizedSkillsPath(newRawPath)
         let oldURL = URL(fileURLWithPath: oldPath, isDirectory: true)
         let newURL = URL(fileURLWithPath: newPath, isDirectory: true)
 
         var isDir: ObjCBool = false
-        guard fm.fileExists(atPath: oldURL.path, isDirectory: &isDir), isDir.boolValue else {
-            ToastCenter.shared.error(l10n.skillsCopyFailed)
-            return
+        guard !skillsPathsAreNested(oldPath, newPath),
+              fm.fileExists(atPath: oldURL.path, isDirectory: &isDir),
+              isDir.boolValue else {
+            ToastCenter.shared.error(l10n.skillsMoveFailed)
+            return false
         }
 
         do {
-            try fm.createDirectory(at: newURL, withIntermediateDirectories: true)
-            let items = try fm.contentsOfDirectory(at: oldURL, includingPropertiesForKeys: nil)
-            var copiedCount = 0
-            for item in items {
-                let destination = newURL.appendingPathComponent(item.lastPathComponent)
-                guard !fm.fileExists(atPath: destination.path) else { continue }
-                try fm.copyItem(at: item, to: destination)
-                copiedCount += 1
+            try fm.createDirectory(at: newURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if overwrite {
+                try fm.replaceItemAt(newURL, withItemAt: oldURL)
+            } else {
+                guard !fm.fileExists(atPath: newURL.path) else {
+                    ToastCenter.shared.error(l10n.skillsMoveFailed)
+                    return false
+                }
+                try fm.moveItem(at: oldURL, to: newURL)
             }
-            SkillManagerViewModel.shared.refresh()
-            ToastCenter.shared.success(l10n.skillsCopySuccess(copiedCount))
+            return true
         } catch {
-            ToastCenter.shared.error(l10n.skillsCopyFailed)
+            ToastCenter.shared.error(l10n.skillsMoveFailed)
+            return false
         }
     }
 

@@ -188,6 +188,7 @@ final class SkillManagerViewModel: ObservableObject {
             let matchesSearch = searchText.isEmpty
                 || skill.manifest.name.localizedCaseInsensitiveContains(searchText)
                 || skill.manifest.description.localizedCaseInsensitiveContains(searchText)
+                || skill.relativePath.first?.localizedCaseInsensitiveContains(searchText) == true
 
             // Hide agent-built-in skills unless the user opts in.
             if !showBuiltInSkills && isBuiltInSkill(skill) {

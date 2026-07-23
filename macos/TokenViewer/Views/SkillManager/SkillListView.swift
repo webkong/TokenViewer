@@ -9,7 +9,7 @@ struct SkillListView: View {
     private let horizontalPadding: CGFloat = 30
 
     var body: some View {
-        let skills = filteredSkills
+        let groups = skillGroups
         VStack(spacing: 0) {
             SkillListHeader(viewModel: viewModel)
                 .padding(.horizontal, horizontalPadding)
@@ -19,22 +19,32 @@ struct SkillListView: View {
 
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(spacing: 0) {
-                    ForEach(Array(skills.enumerated()), id: \.element.id) { index, skill in
-                        SkillRowView(skill: skill, viewModel: viewModel) {
-                            preview = viewModel.skillMarkdownPreview(for: skill)
+                    ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+                        if group.isContainer {
+                            SkillDirectoryGroupView(
+                                group: group,
+                                viewModel: viewModel,
+                                horizontalPadding: horizontalPadding
+                            ) { skill in
+                                preview = viewModel.skillMarkdownPreview(for: skill)
+                            }
+                        } else if let skill = group.skills.first {
+                            SkillRowView(skill: skill, viewModel: viewModel) {
+                                preview = viewModel.skillMarkdownPreview(for: skill)
+                            }
+                                .padding(.vertical, 2)
+                                .padding(.horizontal, horizontalPadding)
+                                .transition(.skillListRow)
                         }
-                            .padding(.vertical, 2)
-                            .padding(.horizontal, horizontalPadding)
-                            .transition(.skillListRow)
 
-                        if index < skills.count - 1 {
+                        if index < groups.count - 1 {
                             Divider()
                                 .padding(.horizontal, horizontalPadding)
                                 .transition(.opacity)
                         }
                     }
                 }
-                .animation(.easeInOut(duration: 0.18), value: skills.map(\.id))
+                .animation(.easeInOut(duration: 0.18), value: groups.map(\.id))
             }
         }
         .sheet(item: $preview) { preview in
@@ -89,6 +99,125 @@ struct SkillListView: View {
         if viewModel.selectedFilter == SkillManagerViewModel.allFilter { return skills }
         // Already filtered by viewModel.filteredSkills
         return skills
+    }
+
+    private var skillGroups: [SkillListGroup] {
+        var groups: [String: SkillListGroup] = [:]
+
+        for skill in filteredSkills {
+            if skill.relativePath.count > 1, let containerName = skill.relativePath.first {
+                var rootURL = URL(fileURLWithPath: skill.sourceDir, isDirectory: true)
+                for _ in skill.relativePath {
+                    rootURL.deleteLastPathComponent()
+                }
+                let key = "\(rootURL.standardized.path)::\(containerName)"
+                if var group = groups[key] {
+                    group.skills.append(skill)
+                    groups[key] = group
+                } else {
+                    groups[key] = SkillListGroup(
+                        id: key,
+                        title: containerName,
+                        skills: [skill],
+                        isContainer: true
+                    )
+                }
+            } else {
+                let key = "skill::\(skill.sourceDir)"
+                groups[key] = SkillListGroup(
+                    id: key,
+                    title: skill.manifest.name,
+                    skills: [skill],
+                    isContainer: false
+                )
+            }
+        }
+
+        return groups.values
+            .map { group in
+                var sorted = group
+                sorted.skills.sort {
+                    $0.manifest.name.localizedCaseInsensitiveCompare($1.manifest.name) == .orderedAscending
+                }
+                return sorted
+            }
+            .sorted {
+                $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+            }
+    }
+}
+
+private struct SkillListGroup: Identifiable {
+    let id: String
+    let title: String
+    var skills: [SkillEntry]
+    let isContainer: Bool
+}
+
+private struct SkillDirectoryGroupView: View {
+    let group: SkillListGroup
+    @ObservedObject var viewModel: SkillManagerViewModel
+    let horizontalPadding: CGFloat
+    let onPreview: (SkillEntry) -> Void
+    @ObservedObject private var l10n = L10n.shared
+    @State private var isExpanded = true
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "folder.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.accentColor)
+                    Text(group.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(l10n.skillChildCount(group.skills.count))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .padding(.horizontal, horizontalPadding)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(spacing: 0) {
+                    ForEach(Array(group.skills.enumerated()), id: \.element.id) { index, skill in
+                        SkillRowView(skill: skill, viewModel: viewModel) {
+                            onPreview(skill)
+                        }
+                        .padding(.vertical, 2)
+                        .padding(.leading, horizontalPadding + 22)
+                        .padding(.trailing, horizontalPadding)
+                        .overlay(alignment: .leading) {
+                            Rectangle()
+                                .fill(Color.accentColor.opacity(0.18))
+                                .frame(width: 2)
+                                .padding(.leading, horizontalPadding + 8)
+                        }
+                        .transition(.skillListRow)
+
+                        if index < group.skills.count - 1 {
+                            Divider()
+                                .padding(.leading, horizontalPadding + 22)
+                                .padding(.trailing, horizontalPadding)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

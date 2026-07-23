@@ -34,6 +34,7 @@ struct SkillEntry: Codable, Identifiable, Hashable, Sendable {
     let id: String
     let manifest: SkillManifest
     let sourceDir: String
+    let relativePath: [String]
     let installedAt: String
     let agentIds: [String]
     let isBuiltIn: Bool
@@ -42,6 +43,7 @@ struct SkillEntry: Codable, Identifiable, Hashable, Sendable {
         case id
         case manifest
         case sourceDir
+        case relativePath
         case installedAt
         case agentIds
         case isBuiltIn
@@ -51,6 +53,7 @@ struct SkillEntry: Codable, Identifiable, Hashable, Sendable {
         id: String,
         manifest: SkillManifest,
         sourceDir: String,
+        relativePath: [String] = [],
         installedAt: String,
         agentIds: [String] = [],
         isBuiltIn: Bool = false
@@ -58,6 +61,7 @@ struct SkillEntry: Codable, Identifiable, Hashable, Sendable {
         self.id = id
         self.manifest = manifest
         self.sourceDir = sourceDir
+        self.relativePath = relativePath
         self.installedAt = installedAt
         self.agentIds = agentIds
         self.isBuiltIn = isBuiltIn
@@ -68,6 +72,7 @@ struct SkillEntry: Codable, Identifiable, Hashable, Sendable {
         id = try container.decode(String.self, forKey: .id)
         manifest = try container.decode(SkillManifest.self, forKey: .manifest)
         sourceDir = try container.decode(String.self, forKey: .sourceDir)
+        relativePath = try container.decodeIfPresent([String].self, forKey: .relativePath) ?? []
         installedAt = try container.decode(String.self, forKey: .installedAt)
         agentIds = try container.decodeIfPresent([String].self, forKey: .agentIds) ?? []
         isBuiltIn = try container.decodeIfPresent(Bool.self, forKey: .isBuiltIn) ?? false

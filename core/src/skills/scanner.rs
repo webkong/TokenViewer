@@ -25,12 +25,13 @@ impl Scanner {
             return Ok(skills);
         }
 
-        self.scan_path_inner(path, 0, &mut skills)?;
+        self.scan_path_inner(path, path, 0, &mut skills)?;
         Ok(skills)
     }
 
     fn scan_path_inner(
         &self,
+        scan_root: &Path,
         path: &Path,
         depth: usize,
         skills: &mut Vec<SkillEntry>,
@@ -56,14 +57,14 @@ impl Scanner {
             }
 
             if Self::validate_skill_dir(&sub_path) {
-                if let Ok(skill) = self.parse_skill_dir(&sub_path) {
+                if let Ok(skill) = self.parse_skill_dir(scan_root, &sub_path) {
                     skills.push(skill);
                 }
                 continue;
             }
 
             if depth < 2 {
-                let _ = self.scan_path_inner(&sub_path, depth + 1, skills);
+                let _ = self.scan_path_inner(scan_root, &sub_path, depth + 1, skills);
             }
         }
 
@@ -164,7 +165,7 @@ pub fn extract_description(skill_md_path: &Path) -> String {
 impl Scanner {
     /// Parse a skill directory into a SkillEntry.
     /// Reads manifest.json if present, otherwise generates a default manifest.
-    fn parse_skill_dir(&self, path: &Path) -> Result<SkillEntry, String> {
+    fn parse_skill_dir(&self, scan_root: &Path, path: &Path) -> Result<SkillEntry, String> {
         let id = path
             .file_name()
             .and_then(|n| n.to_str())
@@ -195,11 +196,18 @@ impl Scanner {
         }
 
         let installed_at = chrono::Utc::now().to_rfc3339();
+        let relative_path = path
+            .strip_prefix(scan_root)
+            .unwrap_or(path)
+            .components()
+            .filter_map(|component| component.as_os_str().to_str().map(str::to_string))
+            .collect();
 
         Ok(SkillEntry {
             id,
             manifest,
             source_dir: path.to_string_lossy().to_string(),
+            relative_path,
             installed_at,
             agent_ids: Vec::new(),
             is_built_in: false,
@@ -311,6 +319,23 @@ mod tests {
 
         assert_eq!(skills.len(), 1);
         assert_eq!(skills[0].id, "imagegen");
+        assert_eq!(skills[0].relative_path, vec![".system", "imagegen"]);
+    }
+
+    #[test]
+    fn test_scan_preserves_nested_bundle_path() {
+        let dir = TempDir::new().unwrap();
+        let bundle_skills = dir.path().join("team-operating-system").join("skills");
+        create_test_skill(&bundle_skills, "team-plan", "Plan team work");
+
+        let scanner = Scanner::new(dir.path().to_path_buf());
+        let skills = scanner.scan_all().unwrap();
+
+        assert_eq!(skills.len(), 1);
+        assert_eq!(
+            skills[0].relative_path,
+            vec!["team-operating-system", "skills", "team-plan"]
+        );
     }
 
     #[test]

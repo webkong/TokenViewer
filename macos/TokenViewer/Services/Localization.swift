@@ -242,6 +242,9 @@ final class L10n: ObservableObject {
     func skillCompatWarning(_ skill: String, _ agent: String) -> String { isZh ? "「\(skill)」标记为仅兼容部分代理。仍要为 \(agent) 创建链接吗？" : "This skill is marked compatible with specific agents only. Link it to \(agent) anyway?" }
     var skillCompatConfirm: String { isZh ? "仍然链接" : "Link Anyway" }
     var skillShowBuiltIn: String { isZh ? "显示内置技能" : "Show built-in skills" }
+    func skillChildCount(_ count: Int) -> String {
+        isZh ? "\(count) 个子技能" : "\(count) child skill(s)"
+    }
     var agentName: String { isZh ? "名称" : "Name" }
     var agentSkillsPath: String { isZh ? "技能路径" : "Skills Path" }
     var linkStrategy: String { isZh ? "链接策略" : "Link Strategy" }
@@ -250,16 +253,21 @@ final class L10n: ObservableObject {
     var pull: String { isZh ? "拉取" : "Pull" }
     var push: String { isZh ? "推送" : "Push" }
     var skillsSourceRoot: String { isZh ? "技能根目录" : "Skills Source Root" }
-    var skillsCopyPromptTitle: String { isZh ? "复制技能文件" : "Copy Skill Files" }
-    func skillsCopyPromptMessage(_ oldPath: String, _ newPath: String) -> String {
-        isZh ? "是否将「\(oldPath)」中的技能文件复制到新目录「\(newPath)」？已存在的同名文件将被跳过。"
-             : "Copy skill files from \"\(oldPath)\" to the new directory \"\(newPath)\"? Existing files with the same name will be skipped."
+    var skillsMovePromptTitle: String { isZh ? "移动技能目录" : "Move Skills Directory" }
+    func skillsMovePromptMessage(_ oldPath: String, _ newPath: String) -> String {
+        isZh ? "是否将整个技能目录从「\(oldPath)」移动并重命名为「\(newPath)」？移动后原目录将不再保留。"
+             : "Move and rename the entire skills directory from \"\(oldPath)\" to \"\(newPath)\"? The original directory will no longer remain."
     }
-    var skillsCopyPromptConfirm: String { isZh ? "复制" : "Copy" }
-    func skillsCopySuccess(_ count: Int) -> String {
-        isZh ? "已复制 \(count) 个技能文件" : "Copied \(count) skill item(s)"
+    var skillsMovePromptConfirm: String { isZh ? "移动" : "Move" }
+    var skillsMoveSuccess: String { isZh ? "技能目录已移动" : "Skills directory moved" }
+    var skillsMoveFailed: String { isZh ? "移动技能目录失败（目标目录可能已存在）" : "Failed to move skills directory (the destination may already exist)" }
+    var skillsMoveRelinkFailed: String { isZh ? "技能目录已移动，但部分代理链接更新失败" : "Skills directory moved, but some agent links could not be updated" }
+    var skillsOverwritePromptTitle: String { isZh ? "覆盖目标目录？" : "Overwrite Destination Directory?" }
+    func skillsOverwritePromptMessage(_ path: String) -> String {
+        isZh ? "目标目录「\(path)」已存在。继续将删除其中的全部文件，并用当前技能目录替换。此操作无法撤销。"
+             : "The destination directory \"\(path)\" already exists. Continuing will delete all of its files and replace it with the current skills directory. This cannot be undone."
     }
-    var skillsCopyFailed: String { isZh ? "复制技能文件失败" : "Failed to copy skill files" }
+    var skillsOverwritePromptConfirm: String { isZh ? "覆盖" : "Overwrite" }
     var save: String { isZh ? "保存" : "Save" }
     var toastSaved: String { isZh ? "保存成功" : "Saved" }
     var toastSaveFailed: String { isZh ? "保存失败" : "Save failed" }

@@ -97,6 +97,10 @@ pub struct SkillEntry {
     pub id: String,
     pub manifest: SkillManifest,
     pub source_dir: String,
+    /// Directory components relative to the root that was scanned.
+    /// A nested bundle may look like ["team-operating-system", "skills", "team-plan"].
+    #[serde(default)]
+    pub relative_path: Vec<String>,
     pub installed_at: String,
     #[serde(default)]
     pub agent_ids: Vec<String>,
