@@ -5,6 +5,23 @@ use std::path::Path;
 use super::utils::*;
 use crate::models::UsageRecord;
 
+/// Parse all Kiro data sources into `source = "kiro"` usage records.
+///
+/// Cache tokens are always 0 for Kiro — this is a limitation of Kiro's data,
+/// not a gap in this parser. Verified across every source (2026-07):
+///   - kiro-cli `data.sqlite3` `conversations_v2`: the table is now empty
+///     (Kiro CLI v3 migrated away from it).
+///   - v3 `sess_*/messages.jsonl` (the live format): carries no token-level
+///     detail at all — only `contextUsage` (a context-window percentage) and
+///     `usage_summary` (an opaque `credit` billing unit with no token breakdown
+///     and no credit→token rate), so tokens are char-estimated (÷4) and cache
+///     hits are unknowable from local logs.
+///   - IDE `devdata.sqlite` / `tokens_generated.jsonl` (stopped writing ~Feb
+///     2026): only ever had `tokens_prompt`/`tokens_generated`, no cache columns.
+/// Unlike Claude Code / Codex — whose logs record the API's
+/// `cache_read_input_tokens` directly — Kiro never persists cache accounting
+/// locally, so a passive log reader cannot recover it. Revisit only if Kiro
+/// starts emitting per-token usage in its session logs.
 pub fn parse(
     home_dir: &Path,
     cursor_data: Option<&str>,
@@ -84,6 +101,7 @@ pub fn parse(
                             model: resolved_model,
                             input_tokens: prompt as u64,
                             output_tokens: generated as u64,
+                            // devdata.sqlite has no cache columns — see cache note on `parse()`.
                             cached_input_tokens: 0,
                             cache_creation_input_tokens: 0,
                             reasoning_output_tokens: 0,
@@ -265,6 +283,10 @@ fn parse_kiro_v3_sessions(
                                 model: model.clone(),
                                 input_tokens,
                                 output_tokens,
+                                // No cache data by design: Kiro never records API
+                                // cache accounting anywhere in its local logs (see
+                                // the cache note on `parse()`), and a char-based
+                                // estimate can't recover which tokens were cache hits.
                                 cached_input_tokens: 0,
                                 cache_creation_input_tokens: 0,
                                 reasoning_output_tokens: 0,
