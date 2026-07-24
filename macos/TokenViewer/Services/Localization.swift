@@ -182,6 +182,8 @@ final class L10n: ObservableObject {
     var skillOnboardingStep2Desc: String { isZh ? "给某个技能选择要开放给哪些 Agent 后，会在该 Agent 的专属技能目录（如 ~/.claude/skills）创建软链接指向全局库。没有链接的 Agent 完全看不到这个技能——精细控制权始终在你手上。" : "When you link a skill to an agent, a symlink is created inside that agent's own skills directory (e.g. ~/.claude/skills) pointing back to the shared library. Agents without a link never see the skill — you stay in full control of visibility." }
     var skillOnboardingStep3Title: String { isZh ? "把已有技能整理进全局库" : "Organize existing skills into the library" }
     var skillOnboardingStep3Desc: String { isZh ? "如果某个 Agent 目录下已经有技能，点击「整理」会把它移入全局库并自动补上软链接，此后就能像其它技能一样按需分享给别的 Agent。" : "If an agent already has a skill in its own folder, use \"Organize\" to move it into the shared library and automatically re-link it back — from then on it can be shared with other agents just like any other skill." }
+    var skillOnboardingStep4Title: String { isZh ? "集中管理 Skill 环境变量" : "Manage skill environment variables" }
+    var skillOnboardingStep4Desc: String { isZh ? "官方 Agent Skills 协议没有定义环境变量字段。TokenViewer 会识别 Frontmatter 中明确的 env、environment 等扩展 Key，以及 SKILL.md 环境变量章节或包含 `$NAME`、`${NAME}`、`NAME=value` 等明确环境变量语法的正文小节。配置写入 ~/.tokenviewer/skill-env.sh，并由 .zshrc 和 .bashrc 加载。" : "The official Agent Skills specification does not define an environment-variable field. TokenViewer recognizes explicit env/environment extension keys in frontmatter, plus variables in Environment sections or body sections containing clear environment-variable syntax such as `$NAME`, `${NAME}`, or `NAME=value`. Configuration is written to ~/.tokenviewer/skill-env.sh and loaded by .zshrc and .bashrc." }
     var skillOnboardingGotIt: String { isZh ? "知道了" : "Got it" }
     var skillSearchPlaceholder: String { isZh ? "搜索技能…" : "Search skills…" }
     var skillFilter: String { isZh ? "筛选" : "Filter" }
@@ -245,6 +247,26 @@ final class L10n: ObservableObject {
     func skillChildCount(_ count: Int) -> String {
         isZh ? "\(count) 个子技能" : "\(count) child skill(s)"
     }
+    var skillEnvironmentTitle: String { isZh ? "环境变量" : "Environment Variables" }
+    var skillEnvironmentSecureNote: String { isZh ? "保存到用户 Shell 环境配置" : "Saved to the user shell environment" }
+    var skillEnvironmentRequired: String { isZh ? "必填" : "Required" }
+    var skillEnvironmentInferred: String { isZh ? "自动检测" : "Detected" }
+    var skillEnvironmentInferredNote: String { isZh ? "从 SKILL.md 中符合环境变量语法的引用检测" : "Detected from environment-variable syntax in SKILL.md" }
+    var skillEnvironmentReveal: String { isZh ? "显示或隐藏值" : "Show or hide value" }
+    var skillEnvironmentValuePlaceholder: String { isZh ? "输入变量值" : "Enter value" }
+    var skillEnvironmentActivationNote: String { isZh ? "配置写入 ~/.tokenviewer/skill-env.sh，并由 .zshrc 和 .bashrc 加载；重新打开终端后，AI Agent 才能继承。" : "Configuration is written to ~/.tokenviewer/skill-env.sh and loaded by .zshrc and .bashrc; AI agents inherit it after the terminal is reopened." }
+    var skillEnvironmentRequiredMissing: String { isZh ? "请填写所有必填变量" : "Complete all required variables" }
+    var skillEnvironmentSaved: String { isZh ? "环境变量已保存" : "Environment variables saved" }
+    var skillEnvironmentSaveFailed: String { isZh ? "部分环境变量保存失败" : "Some environment variables could not be saved" }
+    func skillEnvironmentUsedBy(_ skills: String) -> String {
+        isZh ? "相关 Skills：\(skills)" : "Used by: \(skills)"
+    }
+    var skillEnvironmentManageTip: String { isZh ? "管理所有 Skill 环境变量" : "Manage all skill environment variables" }
+    var skillEnvironmentManageTitle: String { isZh ? "环境变量管理" : "Environment Variable Manager" }
+    var skillEnvironmentManageSubtitle: String { isZh ? "按 Skill 分组搜索和配置 AI Agent 环境变量" : "Search and configure AI agent environment variables grouped by skill" }
+    var skillEnvironmentSearchPlaceholder: String { isZh ? "搜索变量或 Skill" : "Search variables or skills" }
+    var skillEnvironmentNone: String { isZh ? "当前没有 Skill 声明环境变量" : "No skills currently declare environment variables" }
+    var skillEnvironmentSearchEmpty: String { isZh ? "没有匹配的环境变量" : "No matching environment variables" }
     var agentName: String { isZh ? "名称" : "Name" }
     var agentSkillsPath: String { isZh ? "技能路径" : "Skills Path" }
     var linkStrategy: String { isZh ? "链接策略" : "Link Strategy" }

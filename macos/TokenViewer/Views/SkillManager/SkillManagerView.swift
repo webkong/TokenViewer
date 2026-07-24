@@ -4,6 +4,7 @@ struct SkillManagerView: View {
     @StateObject private var viewModel = SkillManagerViewModel.shared
     @State private var showSyncSheet = false
     @State private var showInstallSheet = false
+    @State private var showEnvironmentSheet = false
     @State private var showOrganizeAllConfirm = false
     @State private var showRestoreAllConfirm = false
     @State private var showOnboarding = false
@@ -51,6 +52,9 @@ struct SkillManagerView: View {
         }
         .sheet(isPresented: $showInstallSheet) {
             SkillInstallSheet(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showEnvironmentSheet) {
+            SkillEnvironmentManagerSheet(viewModel: viewModel)
         }
         .alert(L10n.shared.skillOrganizeAllConfirmTitle, isPresented: $showOrganizeAllConfirm) {
             Button(L10n.shared.cancel, role: .cancel) {}
@@ -100,6 +104,15 @@ struct SkillManagerView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
             .quickHelp(L10n.shared.skillInstallTip)
+
+            Button {
+                showEnvironmentSheet = true
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .buttonStyle(.borderless)
+            .quickHelp(L10n.shared.skillEnvironmentManageTip)
 
             Button { viewModel.refresh(showToast: true) } label: {
                 Image(systemName: "arrow.triangle.2.circlepath")
@@ -232,6 +245,119 @@ struct SkillManagerView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+}
+
+private struct SkillEnvironmentManagerSheet: View {
+    @ObservedObject var viewModel: SkillManagerViewModel
+    @ObservedObject private var l10n = L10n.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(l10n.skillEnvironmentManageTitle)
+                        .font(.headline)
+                    Text(l10n.skillEnvironmentManageSubtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                HStack(spacing: 5) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    TextField(l10n.skillEnvironmentSearchPlaceholder, text: $searchText)
+                        .textFieldStyle(.plain)
+                        .frame(width: 190)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(.quinary, in: RoundedRectangle(cornerRadius: 6))
+                Button(l10n.gitDone) {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+            }
+            .padding(18)
+
+            Divider()
+
+            if filteredSkillGroups.isEmpty {
+                VStack(spacing: 10) {
+                    Spacer()
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 30))
+                        .foregroundStyle(.secondary)
+                    Text(searchText.isEmpty
+                        ? l10n.skillEnvironmentNone
+                        : l10n.skillEnvironmentSearchEmpty)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(filteredSkillGroups) { group in
+                            SkillEnvironmentEditor(
+                                variables: group.variables,
+                                title: group.skill.manifest.name,
+                                subtitle: group.skill.manifest.description
+                            )
+                            .padding(14)
+                            .background(
+                                Color(nsColor: .controlBackgroundColor),
+                                in: RoundedRectangle(cornerRadius: 10)
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(.separator.opacity(0.45), lineWidth: 1)
+                            }
+                        }
+                    }
+                    .padding(18)
+                }
+            }
+        }
+        .frame(width: 820, height: 560)
+    }
+
+    private var filteredSkillGroups: [SkillEnvironmentGroup] {
+        viewModel.skills.compactMap { skill in
+            let variables = skill.manifest.environmentVariables
+            guard !variables.isEmpty else { return nil }
+            guard !searchText.isEmpty else {
+                return SkillEnvironmentGroup(skill: skill, variables: variables)
+            }
+
+            let skillMatches = skill.manifest.name.localizedCaseInsensitiveContains(searchText)
+                || skill.manifest.description.localizedCaseInsensitiveContains(searchText)
+            let matchingVariables = skillMatches ? variables : variables.filter {
+                $0.name.localizedCaseInsensitiveContains(searchText)
+                    || $0.note.localizedCaseInsensitiveContains(searchText)
+            }
+            guard !matchingVariables.isEmpty else { return nil }
+            return SkillEnvironmentGroup(skill: skill, variables: matchingVariables)
+        }
+        .sorted {
+            $0.skill.manifest.name.localizedCaseInsensitiveCompare(
+                $1.skill.manifest.name
+            ) == .orderedAscending
+        }
+    }
+}
+
+private struct SkillEnvironmentGroup: Identifiable {
+    let skill: SkillEntry
+    let variables: [SkillEnvironmentVariable]
+
+    var id: String { skill.id }
 }
 
 // MARK: - Filter Chip

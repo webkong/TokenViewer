@@ -115,10 +115,25 @@ pub struct SkillManifest {
     pub tags: Vec<String>,
     pub compatible_agents: Vec<String>,
     pub version: String,
+    #[serde(default)]
+    pub environment_variables: Vec<SkillEnvironmentVariable>,
     /// false (default) when synthesized because no manifest.json was found;
     /// true when loaded from a user-authored manifest.json on disk.
     #[serde(default)]
     pub has_manifest: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SkillEnvironmentVariable {
+    pub name: String,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default)]
+    pub note: String,
+    #[serde(default)]
+    pub secret: bool,
+    #[serde(default)]
+    pub inferred: bool,
 }
 
 impl SkillManifest {
@@ -151,6 +166,7 @@ mod tests {
             tags: vec![],
             compatible_agents: vec!["*".into()],
             version: "unknown".into(),
+            environment_variables: vec![],
             has_manifest: false,
         };
         m.merge_compatible_agent("codex");
@@ -165,11 +181,15 @@ mod tests {
             tags: vec![],
             compatible_agents: vec!["*".into()],
             version: "unknown".into(),
+            environment_variables: vec![],
             has_manifest: false,
         };
         m.merge_compatible_agent("codex");
         m.merge_compatible_agent("claude");
-        assert_eq!(m.compatible_agents, vec!["codex".to_string(), "claude".to_string()]);
+        assert_eq!(
+            m.compatible_agents,
+            vec!["codex".to_string(), "claude".to_string()]
+        );
     }
 
     #[test]
@@ -180,6 +200,7 @@ mod tests {
             tags: vec![],
             compatible_agents: vec!["*".into()],
             version: "unknown".into(),
+            environment_variables: vec![],
             has_manifest: false,
         };
         m.merge_compatible_agent("codex");
@@ -195,11 +216,15 @@ mod tests {
             tags: vec![],
             compatible_agents: vec!["codex".into(), "cursor".into()],
             version: "1.0".into(),
+            environment_variables: vec![],
             has_manifest: true,
         };
         // Even if called for another agent, user-authored values win.
         m.merge_compatible_agent("claude");
-        assert_eq!(m.compatible_agents, vec!["codex".to_string(), "cursor".to_string()]);
+        assert_eq!(
+            m.compatible_agents,
+            vec!["codex".to_string(), "cursor".to_string()]
+        );
     }
 
     #[test]
@@ -212,10 +237,14 @@ mod tests {
             tags: vec![],
             compatible_agents: vec!["opencode".into()],
             version: "unknown".into(),
+            environment_variables: vec![],
             has_manifest: false,
         };
         m.merge_compatible_agent("codex");
-        assert_eq!(m.compatible_agents, vec!["opencode".to_string(), "codex".to_string()]);
+        assert_eq!(
+            m.compatible_agents,
+            vec!["opencode".to_string(), "codex".to_string()]
+        );
     }
 
     /// Simulates the ffi.rs scan ordering: a manifest-less global skill is
@@ -236,6 +265,7 @@ mod tests {
             tags: vec![],
             compatible_agents: vec!["*".into()],
             version: "unknown".into(),
+            environment_variables: vec![],
             has_manifest: false,
         };
 
@@ -264,6 +294,7 @@ mod tests {
             tags: vec![],
             compatible_agents: vec!["*".into()],
             version: "unknown".into(),
+            environment_variables: vec![],
             has_manifest: false,
         };
 

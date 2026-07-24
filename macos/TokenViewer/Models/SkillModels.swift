@@ -6,6 +6,7 @@ struct SkillManifest: Codable, Hashable, Sendable {
     let tags: [String]
     let compatibleAgents: [String]
     let version: String
+    let environmentVariables: [SkillEnvironmentVariable]
     /// false (default) when the manifest was synthesized because no
     /// manifest.json existed; true when loaded from a user-authored file.
     let hasManifest: Bool
@@ -16,6 +17,7 @@ struct SkillManifest: Codable, Hashable, Sendable {
         case tags
         case compatibleAgents
         case version
+        case environmentVariables
         case hasManifest
     }
 
@@ -26,7 +28,38 @@ struct SkillManifest: Codable, Hashable, Sendable {
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         compatibleAgents = try c.decodeIfPresent([String].self, forKey: .compatibleAgents) ?? []
         version = try c.decodeIfPresent(String.self, forKey: .version) ?? "unknown"
+        environmentVariables = try c.decodeIfPresent(
+            [SkillEnvironmentVariable].self,
+            forKey: .environmentVariables
+        ) ?? []
         hasManifest = try c.decodeIfPresent(Bool.self, forKey: .hasManifest) ?? false
+    }
+}
+
+struct SkillEnvironmentVariable: Codable, Hashable, Sendable, Identifiable {
+    let name: String
+    let required: Bool
+    let note: String
+    let secret: Bool
+    let inferred: Bool
+
+    var id: String { name }
+
+    init(name: String, required: Bool, note: String, secret: Bool, inferred: Bool) {
+        self.name = name
+        self.required = required
+        self.note = note
+        self.secret = secret
+        self.inferred = inferred
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        required = try container.decodeIfPresent(Bool.self, forKey: .required) ?? false
+        note = try container.decodeIfPresent(String.self, forKey: .note) ?? ""
+        secret = try container.decodeIfPresent(Bool.self, forKey: .secret) ?? false
+        inferred = try container.decodeIfPresent(Bool.self, forKey: .inferred) ?? false
     }
 }
 

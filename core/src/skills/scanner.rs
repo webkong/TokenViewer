@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::skills::models::{SkillEntry, SkillManifest};
+use crate::skills::models::{SkillEntry, SkillEnvironmentVariable, SkillManifest};
 
 pub struct Scanner {
     source_root: PathBuf,
@@ -162,6 +162,464 @@ pub fn extract_description(skill_md_path: &Path) -> String {
     desc
 }
 
+/// Extract environment-variable declarations from SKILL.md frontmatter.
+///
+/// The Agent Skills specification does not define a structured environment
+/// variable field. It does allow arbitrary metadata, so accept only extension
+/// keys that explicitly identify themselves as `env`/`environment`, such as
+/// `environment_variables`, `required-env`, or `metadata.env`.
+pub fn extract_environment_variables(skill_md_path: &Path) -> Vec<SkillEnvironmentVariable> {
+    let content = match fs::read_to_string(skill_md_path) {
+        Ok(content) => content,
+        Err(_) => return Vec::new(),
+    };
+    let mut lines = content.lines();
+    if lines.next().map(str::trim) != Some("---") {
+        return Vec::new();
+    }
+
+    let mut frontmatter = Vec::new();
+    for line in lines {
+        if line.trim() == "---" {
+            break;
+        }
+        frontmatter.push(line);
+    }
+
+    let Some((section_index, section_indent)) =
+        frontmatter.iter().enumerate().find_map(|(index, line)| {
+            is_environment_frontmatter_key(line).then_some((index, leading_whitespace_count(line)))
+        })
+    else {
+        return Vec::new();
+    };
+
+    let mut variables = Vec::new();
+    let mut current: Option<SkillEnvironmentVariable> = None;
+    if let Some((_, inline_value)) = frontmatter[section_index].split_once(':') {
+        collect_inline_frontmatter_environment_variables(inline_value, &mut variables);
+    }
+
+    for line in frontmatter.into_iter().skip(section_index + 1) {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if leading_whitespace_count(line) <= section_indent {
+            break;
+        }
+
+        if let Some(item) = trimmed.strip_prefix("- ") {
+            if let Some(variable) = current.take() {
+                push_valid_environment_variable(&mut variables, variable);
+            }
+            let mut variable = SkillEnvironmentVariable {
+                name: String::new(),
+                required: false,
+                note: String::new(),
+                secret: false,
+                inferred: false,
+            };
+            if let Some(value) = item.strip_prefix("name:") {
+                variable.name = yaml_scalar(value);
+            } else {
+                variable.name = yaml_scalar(item);
+            }
+            current = Some(variable);
+            continue;
+        }
+
+        if let Some((key, value)) = trimmed.split_once(':') {
+            let key = key.trim();
+            if is_valid_environment_variable_name(key)
+                && key == key.to_ascii_uppercase()
+                && !matches!(key, "NAME" | "REQUIRED" | "NOTE" | "SECRET")
+            {
+                if let Some(variable) = current.take() {
+                    push_valid_environment_variable(&mut variables, variable);
+                }
+                let value = yaml_scalar(value);
+                current = Some(SkillEnvironmentVariable {
+                    name: key.to_string(),
+                    required: false,
+                    note: if value.is_empty() || value.eq_ignore_ascii_case("null") {
+                        String::new()
+                    } else {
+                        value
+                    },
+                    secret: false,
+                    inferred: false,
+                });
+                continue;
+            }
+        }
+
+        if let Some(variable) = current.as_mut() {
+            if let Some(value) = trimmed.strip_prefix("name:") {
+                variable.name = yaml_scalar(value);
+            } else if let Some(value) = trimmed.strip_prefix("required:") {
+                variable.required = yaml_scalar(value).eq_ignore_ascii_case("true");
+            } else if let Some(value) = trimmed.strip_prefix("note:") {
+                variable.note = yaml_scalar(value);
+            } else if let Some(value) = trimmed.strip_prefix("secret:") {
+                variable.secret = yaml_scalar(value).eq_ignore_ascii_case("true");
+            }
+        }
+    }
+
+    if let Some(variable) = current {
+        push_valid_environment_variable(&mut variables, variable);
+    }
+    variables
+}
+
+fn collect_inline_frontmatter_environment_variables(
+    value: &str,
+    variables: &mut Vec<SkillEnvironmentVariable>,
+) {
+    let value = value.trim();
+    if value.is_empty() {
+        return;
+    }
+    let value = value
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(value);
+    for name in value.split(',').map(yaml_scalar) {
+        push_valid_environment_variable(
+            variables,
+            SkillEnvironmentVariable {
+                name,
+                required: false,
+                note: String::new(),
+                secret: false,
+                inferred: false,
+            },
+        );
+    }
+}
+
+fn is_environment_frontmatter_key(line: &str) -> bool {
+    let trimmed = line.trim();
+    let Some((key, _)) = trimmed.split_once(':') else {
+        return false;
+    };
+    let tokens: Vec<&str> = key
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|token| !token.is_empty())
+        .collect();
+    tokens.iter().any(|token| {
+        token.eq_ignore_ascii_case("env")
+            || token.eq_ignore_ascii_case("envs")
+            || token.eq_ignore_ascii_case("environment")
+            || token.eq_ignore_ascii_case("environments")
+    })
+}
+
+fn leading_whitespace_count(value: &str) -> usize {
+    value
+        .chars()
+        .take_while(|character| character.is_whitespace())
+        .count()
+}
+
+fn yaml_scalar(value: &str) -> String {
+    let value = value.trim();
+    if value.len() >= 2 {
+        let first = value.as_bytes()[0];
+        let last = value.as_bytes()[value.len() - 1];
+        if (first == b'"' && last == b'"') || (first == b'\'' && last == b'\'') {
+            return value[1..value.len() - 1].to_string();
+        }
+    }
+    value.to_string()
+}
+
+fn push_valid_environment_variable(
+    variables: &mut Vec<SkillEnvironmentVariable>,
+    mut variable: SkillEnvironmentVariable,
+) {
+    if !is_valid_environment_variable_name(&variable.name)
+        || variables
+            .iter()
+            .any(|existing| existing.name == variable.name)
+    {
+        return;
+    }
+    if !variable.secret {
+        let uppercase = variable.name.to_ascii_uppercase();
+        variable.secret = ["KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL"]
+            .iter()
+            .any(|marker| uppercase.contains(marker));
+    }
+    variables.push(variable);
+}
+
+/// Infer optional environment variables from the Skill instructions.
+///
+/// Explicit Environment/ENV sections are always scanned. Other sections are
+/// scanned only when they contain a strong environment-variable signal such as
+/// `$NAME`, `${NAME}`, or an inline-code assignment like `NAME=value`, and only
+/// compound `UPPER_SNAKE_CASE` names are inferred from those implicit sections.
+/// This lets descriptive sections such as "Storage" declare related variables
+/// while avoiding unrelated uppercase words elsewhere in the document.
+pub fn infer_environment_variables(skill_md_path: &Path) -> Vec<SkillEnvironmentVariable> {
+    let content = match fs::read_to_string(skill_md_path) {
+        Ok(content) => content,
+        Err(_) => return Vec::new(),
+    };
+    let mut names = Vec::new();
+    let mut section_lines = Vec::new();
+    let mut environment_heading_level: Option<usize> = None;
+    for line in markdown_body(&content).lines() {
+        if let Some((level, title)) = markdown_heading(line) {
+            collect_environment_names_from_section(
+                &section_lines,
+                environment_heading_level.is_some(),
+                &mut names,
+            );
+            section_lines.clear();
+            if environment_heading_level.is_some_and(|active| level <= active) {
+                environment_heading_level = None;
+            }
+            if is_environment_heading(title) {
+                environment_heading_level = Some(level);
+            }
+            continue;
+        }
+        section_lines.push(line);
+    }
+    collect_environment_names_from_section(
+        &section_lines,
+        environment_heading_level.is_some(),
+        &mut names,
+    );
+
+    names
+        .into_iter()
+        .filter(|name| !is_standard_environment_variable(name))
+        .map(|name| {
+            let uppercase = name.to_ascii_uppercase();
+            SkillEnvironmentVariable {
+                name,
+                required: false,
+                note: String::new(),
+                secret: ["KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL"]
+                    .iter()
+                    .any(|marker| uppercase.contains(marker)),
+                inferred: true,
+            }
+        })
+        .collect()
+}
+
+fn collect_environment_names_from_section(
+    lines: &[&str],
+    is_explicit_environment_section: bool,
+    names: &mut Vec<String>,
+) {
+    let mut strong_names = Vec::new();
+    for line in lines {
+        collect_dollar_environment_names(line, &mut strong_names);
+        collect_assigned_inline_environment_names(line, &mut strong_names);
+    }
+    if !is_explicit_environment_section && strong_names.is_empty() {
+        return;
+    }
+
+    let mut section_names = Vec::new();
+    for line in lines {
+        collect_dollar_environment_names(line, &mut section_names);
+        collect_inline_code_environment_names(line, &mut section_names);
+        collect_leading_environment_name(line, &mut section_names);
+    }
+    for name in section_names {
+        if is_explicit_environment_section || name.contains('_') {
+            add_environment_name(&name, names);
+        }
+    }
+}
+
+fn markdown_body(content: &str) -> &str {
+    let Some(rest) = content.strip_prefix("---") else {
+        return content;
+    };
+    let Some(end) = rest.find("\n---") else {
+        return content;
+    };
+    &rest[end + 4..]
+}
+
+fn markdown_heading(line: &str) -> Option<(usize, &str)> {
+    let trimmed = line.trim_start();
+    let level = trimmed
+        .chars()
+        .take_while(|character| *character == '#')
+        .count();
+    if level == 0 || level > 6 {
+        return None;
+    }
+    let title = trimmed[level..].trim();
+    (!title.is_empty()).then_some((level, title))
+}
+
+fn is_environment_heading(title: &str) -> bool {
+    let normalized = title
+        .trim_matches(|character: char| !character.is_alphanumeric())
+        .to_ascii_lowercase();
+    matches!(
+        normalized.as_str(),
+        "env"
+            | "envs"
+            | "environment"
+            | "environments"
+            | "environment variable"
+            | "environment variables"
+            | "env variable"
+            | "env variables"
+    ) || normalized.contains("环境变量")
+}
+
+fn collect_dollar_environment_names(line: &str, names: &mut Vec<String>) {
+    let bytes = line.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] != b'$' {
+            index += 1;
+            continue;
+        }
+        index += 1;
+        if index < bytes.len() && bytes[index] == b'{' {
+            index += 1;
+        }
+        let start = index;
+        while index < bytes.len() && (bytes[index] == b'_' || bytes[index].is_ascii_alphanumeric())
+        {
+            index += 1;
+        }
+        if start < index {
+            add_environment_name(&line[start..index], names);
+        }
+    }
+}
+
+fn collect_inline_code_environment_names(line: &str, names: &mut Vec<String>) {
+    let mut remainder = line;
+    while let Some(start) = remainder.find('`') {
+        remainder = &remainder[start + 1..];
+        let Some(end) = remainder.find('`') else {
+            break;
+        };
+        let token = remainder[..end].trim();
+        remainder = &remainder[end + 1..];
+
+        let token = token
+            .strip_prefix("${")
+            .or_else(|| token.strip_prefix('$'))
+            .unwrap_or(token);
+        let name: String = token
+            .chars()
+            .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+            .collect();
+        let suffix = &token[name.len()..];
+        if !name.is_empty()
+            && (suffix.is_empty()
+                || suffix.starts_with('=')
+                || suffix.starts_with(':')
+                || suffix.starts_with('}'))
+        {
+            add_environment_name(&name, names);
+        }
+    }
+}
+
+fn collect_assigned_inline_environment_names(line: &str, names: &mut Vec<String>) {
+    let mut remainder = line;
+    while let Some(start) = remainder.find('`') {
+        remainder = &remainder[start + 1..];
+        let Some(end) = remainder.find('`') else {
+            break;
+        };
+        let token = remainder[..end].trim();
+        remainder = &remainder[end + 1..];
+
+        let name: String = token
+            .chars()
+            .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+            .collect();
+        if !name.is_empty() && token[name.len()..].starts_with('=') {
+            add_environment_name(&name, names);
+        }
+    }
+}
+
+fn collect_leading_environment_name(line: &str, names: &mut Vec<String>) {
+    let candidate = line
+        .trim()
+        .trim_start_matches(|character: char| {
+            character == '-' || character == '*' || character == '+' || character.is_whitespace()
+        })
+        .strip_prefix("export ")
+        .unwrap_or_else(|| {
+            line.trim().trim_start_matches(|character: char| {
+                character == '-'
+                    || character == '*'
+                    || character == '+'
+                    || character.is_whitespace()
+            })
+        });
+    let name: String = candidate
+        .trim_start_matches('`')
+        .chars()
+        .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+        .collect();
+    if !name.is_empty() {
+        add_environment_name(&name, names);
+    }
+}
+
+fn add_environment_name(name: &str, names: &mut Vec<String>) {
+    if is_valid_environment_variable_name(name)
+        && name == name.to_ascii_uppercase()
+        && name.chars().any(|character| character.is_ascii_uppercase())
+        && !names.iter().any(|existing| existing == name)
+    {
+        names.push(name.to_string());
+    }
+}
+
+fn is_standard_environment_variable(name: &str) -> bool {
+    matches!(
+        name,
+        "HOME"
+            | "PATH"
+            | "PWD"
+            | "OLDPWD"
+            | "SHELL"
+            | "USER"
+            | "LOGNAME"
+            | "TMPDIR"
+            | "SHLVL"
+            | "TERM"
+            | "LANG"
+            | "LC_ALL"
+            | "DISPLAY"
+            | "HOSTNAME"
+            | "UID"
+            | "EUID"
+            | "PPID"
+            | "RANDOM"
+            | "SECONDS"
+            | "LINENO"
+    )
+}
+
+fn is_valid_environment_variable_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    matches!(chars.next(), Some(first) if first == '_' || first.is_ascii_alphabetic())
+        && chars.all(|character| character == '_' || character.is_ascii_alphanumeric())
+}
+
 impl Scanner {
     /// Parse a skill directory into a SkillEntry.
     /// Reads manifest.json if present, otherwise generates a default manifest.
@@ -188,11 +646,28 @@ impl Scanner {
                 tags: Vec::new(),
                 compatible_agents: vec!["*".to_string()],
                 version: "unknown".to_string(),
+                environment_variables: Vec::new(),
                 has_manifest: false,
             }
         };
         if manifest_path.is_file() {
             manifest.has_manifest = true;
+        }
+        let declared_variables = std::mem::take(&mut manifest.environment_variables);
+        for variable in declared_variables {
+            push_valid_environment_variable(&mut manifest.environment_variables, variable);
+        }
+        let skill_md_path = ["SKILL.md", "skill.md"]
+            .iter()
+            .map(|name| path.join(name))
+            .find(|candidate| candidate.is_file());
+        if let Some(skill_md_path) = skill_md_path {
+            for variable in extract_environment_variables(&skill_md_path) {
+                push_valid_environment_variable(&mut manifest.environment_variables, variable);
+            }
+            for variable in infer_environment_variables(&skill_md_path) {
+                push_valid_environment_variable(&mut manifest.environment_variables, variable);
+            }
         }
 
         let installed_at = chrono::Utc::now().to_rfc3339();
@@ -335,6 +810,135 @@ mod tests {
         assert_eq!(
             skills[0].relative_path,
             vec!["team-operating-system", "skills", "team-plan"]
+        );
+    }
+
+    #[test]
+    fn test_scan_extracts_environment_variables_from_frontmatter() {
+        let dir = TempDir::new().unwrap();
+        let skill_dir = dir.path().join("web-collector");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            r#"---
+name: web-collector
+dependencies:
+  environment_variables:
+    - name: OPENAI_API_KEY
+      required: true
+      note: "API access"
+    - name: CACHE_DIR
+      required: false
+---
+# Web Collector
+"#,
+        )
+        .unwrap();
+
+        let scanner = Scanner::new(dir.path().to_path_buf());
+        let skills = scanner.scan_all().unwrap();
+
+        assert_eq!(skills.len(), 1);
+        assert_eq!(
+            skills[0].manifest.environment_variables,
+            vec![
+                SkillEnvironmentVariable {
+                    name: "OPENAI_API_KEY".to_string(),
+                    required: true,
+                    note: "API access".to_string(),
+                    secret: true,
+                    inferred: false,
+                },
+                SkillEnvironmentVariable {
+                    name: "CACHE_DIR".to_string(),
+                    required: false,
+                    note: String::new(),
+                    secret: false,
+                    inferred: false,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn test_scan_infers_environment_variables_from_skill_instructions() {
+        let dir = TempDir::new().unwrap();
+        let skill_dir = dir.path().join("self-improving-agent");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            r#"---
+name: self-improving-agent
+---
+# Storage
+
+`TokenViewer` is a product name, not an environment variable.
+
+## 存储目录
+
+1. `SELF_IMPROVEMENT_HOME`: explicit storage directory.
+2. `SELF_IMPROVEMENT_SCOPE=project`: use project storage.
+3. `SELF_IMPROVEMENT_PROJECT_ROOT`: explicit project root.
+4. `${AGENTS_HOME:-$HOME/.agents}/learnings/`.
+5. `$SINGLE` is a shell-local placeholder, not a compound environment key.
+
+## Other configuration
+
+`NOT_AN_ENVIRONMENT_VARIABLE` is outside the Environment section.
+"#,
+        )
+        .unwrap();
+
+        let scanner = Scanner::new(dir.path().to_path_buf());
+        let skills = scanner.scan_all().unwrap();
+        let variables = &skills[0].manifest.environment_variables;
+
+        assert_eq!(
+            variables
+                .iter()
+                .map(|variable| variable.name.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "SELF_IMPROVEMENT_HOME",
+                "SELF_IMPROVEMENT_SCOPE",
+                "SELF_IMPROVEMENT_PROJECT_ROOT",
+                "AGENTS_HOME"
+            ]
+        );
+        assert!(variables.iter().all(|variable| variable.inferred));
+        assert!(!variables.iter().any(|variable| variable.name == "SINGLE"));
+    }
+
+    #[test]
+    fn test_scan_accepts_explicit_env_frontmatter_extension_key() {
+        let dir = TempDir::new().unwrap();
+        let skill_dir = dir.path().join("env-extension");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            r#"---
+name: env-extension
+metadata:
+  required-env:
+    - name: SERVICE_API_KEY
+      required: true
+---
+# Instructions
+"#,
+        )
+        .unwrap();
+
+        let scanner = Scanner::new(dir.path().to_path_buf());
+        let skills = scanner.scan_all().unwrap();
+        assert_eq!(
+            skills[0].manifest.environment_variables,
+            vec![SkillEnvironmentVariable {
+                name: "SERVICE_API_KEY".to_string(),
+                required: true,
+                note: String::new(),
+                secret: true,
+                inferred: false,
+            }]
         );
     }
 

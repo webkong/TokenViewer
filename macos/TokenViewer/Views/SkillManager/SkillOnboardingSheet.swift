@@ -38,6 +38,12 @@ struct SkillOnboardingSheet: View {
                     title: l10n.skillOnboardingStep3Title,
                     description: l10n.skillOnboardingStep3Desc
                 )
+                OnboardingStep(
+                    number: "4",
+                    icon: "gearshape.fill",
+                    title: l10n.skillOnboardingStep4Title,
+                    description: l10n.skillOnboardingStep4Desc
+                )
             }
 
             HStack {

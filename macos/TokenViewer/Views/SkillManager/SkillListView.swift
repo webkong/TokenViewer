@@ -538,6 +538,7 @@ private struct SkillMarkdownPreviewSheet: View {
     @State private var isLoadingContent = true
     @State private var contentError: String?
     @State private var isContentTruncated = false
+    @State private var showEnvironmentSheet = false
     @State private var initialLoadTask: Task<Void, Never>?
     @State private var fileLoadTask: Task<Void, Never>?
 
@@ -558,6 +559,9 @@ private struct SkillMarkdownPreviewSheet: View {
             }
         }
         .frame(minWidth: 820, idealWidth: 900, minHeight: 520, idealHeight: 620)
+        .sheet(isPresented: $showEnvironmentSheet) {
+            SkillEnvironmentConfigurationSheet(skill: preview.skill)
+        }
         .onAppear { startInitialLoad() }
         .onDisappear {
             initialLoadTask?.cancel()
@@ -703,6 +707,15 @@ private struct SkillMarkdownPreviewSheet: View {
 
             Spacer()
 
+            if !preview.skill.manifest.environmentVariables.isEmpty {
+                Button {
+                    showEnvironmentSheet = true
+                } label: {
+                    Label(l10n.skillEnvironmentTitle, systemImage: "gearshape.fill")
+                }
+                .quickHelp(l10n.skillEnvironmentManageTip)
+            }
+
             Button(l10n.openInFinder) {
                 openInFinder()
             }
@@ -730,6 +743,234 @@ private struct SkillMarkdownPreviewSheet: View {
 
     private func standardizedPath(_ path: String) -> String {
         (NSString(string: path).expandingTildeInPath as NSString).standardizingPath
+    }
+}
+
+private struct SkillEnvironmentConfigurationSheet: View {
+    let skill: SkillEntry
+    @ObservedObject private var l10n = L10n.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var saveTrigger = 0
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(skill.manifest.name)
+                        .font(.headline)
+                    Text(l10n.skillEnvironmentTitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(l10n.save) {
+                    saveTrigger += 1
+                }
+                .buttonStyle(.borderedProminent)
+                Button(l10n.gitDone) {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+            }
+            .padding(18)
+
+            Divider()
+
+            ScrollView {
+                SkillEnvironmentEditor(
+                    variables: skill.manifest.environmentVariables,
+                    showsHeader: false,
+                    saveTrigger: saveTrigger
+                )
+                .padding(18)
+            }
+        }
+        .frame(width: 760, height: 440)
+    }
+}
+
+struct SkillEnvironmentEditor: View {
+    let variables: [SkillEnvironmentVariable]
+    var relatedSkills: [String: [String]] = [:]
+    var title: String? = nil
+    var subtitle: String? = nil
+    var showsHeader = true
+    var saveTrigger = 0
+    @ObservedObject private var l10n = L10n.shared
+    @State private var values: [String: String] = [:]
+    @State private var revealed: Set<String> = []
+    @State private var isSaving = false
+    @State private var statusMessage: String?
+    @State private var statusIsError = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if showsHeader {
+                HStack(spacing: 7) {
+                    Image(systemName: "gearshape.fill")
+                        .foregroundStyle(Color.accentColor)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(title ?? l10n.skillEnvironmentTitle)
+                            .font(.system(size: 13, weight: .semibold))
+                        if let subtitle, !subtitle.isEmpty {
+                            Text(subtitle)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        } else {
+                            Text(l10n.skillEnvironmentSecureNote)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    if let statusMessage {
+                        Text(statusMessage)
+                            .font(.caption2)
+                            .foregroundStyle(statusIsError ? .red : .green)
+                    }
+                    Button(l10n.save) {
+                        save()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(isSaving)
+                }
+            } else if let statusMessage {
+                Text(statusMessage)
+                    .font(.caption2)
+                    .foregroundStyle(statusIsError ? .red : .green)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+
+            ForEach(variables) { variable in
+                HStack(alignment: .center, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 5) {
+                            Text(variable.name)
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            if variable.required {
+                                Text(l10n.skillEnvironmentRequired)
+                                    .font(.caption2)
+                                    .foregroundStyle(.red)
+                            }
+                            if variable.inferred {
+                                Text(l10n.skillEnvironmentInferred)
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                            }
+                        }
+                        if !variable.note.isEmpty {
+                            Text(variable.note)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        } else if variable.inferred {
+                            Text(l10n.skillEnvironmentInferredNote)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        if let skills = relatedSkills[variable.name], !skills.isEmpty {
+                            Text(l10n.skillEnvironmentUsedBy(skills.joined(separator: ", ")))
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(2)
+                        }
+                    }
+                    .frame(width: 270, alignment: .leading)
+
+                    environmentField(for: variable)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11))
+
+                    if variable.secret {
+                        Button {
+                            if revealed.contains(variable.name) {
+                                revealed.remove(variable.name)
+                            } else {
+                                revealed.insert(variable.name)
+                            }
+                        } label: {
+                            Image(systemName: revealed.contains(variable.name) ? "eye.slash" : "eye")
+                        }
+                        .buttonStyle(.borderless)
+                        .quickHelp(l10n.skillEnvironmentReveal)
+                    } else {
+                        Color.clear.frame(width: 18)
+                    }
+                }
+            }
+
+            Text(l10n.skillEnvironmentActivationNote)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .onAppear(perform: loadValues)
+        .onChange(of: saveTrigger) { _, _ in
+            save()
+        }
+    }
+
+    @ViewBuilder
+    private func environmentField(for variable: SkillEnvironmentVariable) -> some View {
+        let binding = Binding(
+            get: { values[variable.name, default: ""] },
+            set: {
+                values[variable.name] = $0
+                statusMessage = nil
+            }
+        )
+        if variable.secret && !revealed.contains(variable.name) {
+            SecureField(l10n.skillEnvironmentValuePlaceholder, text: binding)
+        } else {
+            TextField(l10n.skillEnvironmentValuePlaceholder, text: binding)
+        }
+    }
+
+    private func loadValues() {
+        values = Dictionary(
+            uniqueKeysWithValues: variables.map {
+                ($0.name, SkillEnvironmentManager.shared.value(for: $0.name) ?? "")
+            }
+        )
+    }
+
+    private func save() {
+        if variables.contains(where: { $0.required && values[$0.name, default: ""].isEmpty }) {
+            statusIsError = true
+            statusMessage = l10n.skillEnvironmentRequiredMissing
+            return
+        }
+
+        let snapshot = values
+        let variables = variables
+        isSaving = true
+        statusMessage = nil
+        Task.detached {
+            var succeeded = true
+            for variable in variables {
+                let value = snapshot[variable.name, default: ""]
+                do {
+                    if value.isEmpty {
+                        try SkillEnvironmentManager.shared.remove(variable.name)
+                    } else {
+                        try SkillEnvironmentManager.shared.save(value, for: variable.name)
+                    }
+                } catch {
+                    succeeded = false
+                }
+            }
+            await MainActor.run {
+                isSaving = false
+                statusIsError = !succeeded
+                statusMessage = succeeded
+                    ? l10n.skillEnvironmentSaved
+                    : l10n.skillEnvironmentSaveFailed
+            }
+        }
     }
 }
 
