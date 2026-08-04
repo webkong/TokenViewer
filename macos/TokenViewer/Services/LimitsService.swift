@@ -113,13 +113,18 @@ enum LimitsService {
             return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
         let idToken = tokens["id_token"] as? String
-        let plan = planLabel(jwtClaim(accessToken, "chatgpt_plan_type") ?? idToken.flatMap { jwtClaim($0, "chatgpt_plan_type") }, "Codex")
+        let tokenPlan = jwtClaim(accessToken, "chatgpt_plan_type") ?? idToken.flatMap { jwtClaim($0, "chatgpt_plan_type") }
+        let plan = codexPlanLabel(tokenPlan)
         let accountId = tokens["account_id"] as? String ?? jwtClaim(accessToken, "chatgpt_account_id")
-        let subscriptionExpiresAt = await codexSubscriptionExpiresAt(
-            accessToken: accessToken,
-            idToken: idToken,
-            accountId: accountId
-        )
+        let subscriptionExpiresAt: Date? = if plan == "Business" {
+            nil
+        } else {
+            await codexSubscriptionExpiresAt(
+                accessToken: accessToken,
+                idToken: idToken,
+                accountId: accountId
+            )
+        }
 
         var req = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/wham/usage")!)
         req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
@@ -130,7 +135,9 @@ enum LimitsService {
             return ProviderLimit(name: name, planLabel: plan, configured: true, error: "Request failed", subscriptionExpiresAt: subscriptionExpiresAt, windows: [])
         }
         let windows = codexLimitWindows(from: json)
-        return ProviderLimit(name: name, planLabel: plan, configured: true, error: nil, subscriptionExpiresAt: subscriptionExpiresAt, windows: windows)
+        let resolvedPlan = codexPlanLabel(json["plan_type"] as? String) ?? plan
+        let resolvedSubscriptionExpiresAt = resolvedPlan == "Business" ? nil : subscriptionExpiresAt
+        return ProviderLimit(name: name, planLabel: resolvedPlan, configured: true, error: nil, subscriptionExpiresAt: resolvedSubscriptionExpiresAt, windows: windows)
     }
 
     static func codexLimitWindows(from json: [String: Any]) -> [LimitWindow] {
@@ -143,6 +150,7 @@ enum LimitsService {
     private enum CodexRateWindowKind: Equatable {
         case session
         case weekly
+        case monthly
     }
 
     private static func codexRateLimitPayload(from json: [String: Any]) -> [String: Any]? {
@@ -188,6 +196,8 @@ enum LimitsService {
                 session = window
             case .weekly where weekly == nil:
                 weekly = window
+            case .monthly:
+                break
             default:
                 break
             }
@@ -247,6 +257,7 @@ enum LimitsService {
         guard let seconds = numeric(window["limit_window_seconds"] ?? window["limitWindowSeconds"]) else { return nil }
         if seconds == 18_000 { return .session }
         if seconds == 604_800 { return .weekly }
+        if seconds >= 25 * 86_400, seconds <= 35 * 86_400 { return .monthly }
         return nil
     }
 
@@ -260,8 +271,20 @@ enum LimitsService {
             return "5 Hour"
         case .weekly:
             return "Weekly"
+        case .monthly:
+            return "Monthly"
         case nil:
             return fallback
+        }
+    }
+
+    private static func codexPlanLabel(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "team", "business":
+            return "Business"
+        default:
+            return planLabel(raw, "Codex")
         }
     }
 
