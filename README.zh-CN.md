@@ -39,7 +39,7 @@
 - 📊 今天 / 7 天 / 30 天 / 总计的 Token 数量和费用估算
 - 📈 每日趋势图，含缓存命中率和费用叠加线
 - 🗓️ 53 周活跃度热力图
-- 🔒 8 个工具的实时配额进度条（Codex、Copilot、Kiro、Cursor、Gemini、Kimi……）
+- 🔒 8 个工具的实时配额进度条（ChatGPT、Copilot、Kiro、Cursor、Gemini、Kimi……）
 - 🏠 100% 本地——所有数据存储在 `~/.tokenviewer/data.db`，无账号，无 API Key
 
 > **初次打开提示「无法打开」？**
@@ -55,7 +55,7 @@
 
 ## ✨ 功能特性
 
-- 🔌 **开箱支持 25 个工具** — Claude Code、Codex、Kiro、Cursor、GitHub Copilot、Gemini CLI、Opencode、Roocode、Kilo Code、Zed、Goose、Grok、Kimi、Craft、OpenClaw、Hermes、Antigravity、CodeBuddy、WorkBuddy、OhMyPi、Pi、KiloCLI、EveryCode、MiMoCode、ZCode
+- 🔌 **开箱支持 25 个工具** — Claude Code、ChatGPT、Kiro、Cursor、GitHub Copilot、Gemini CLI、Opencode、Roocode、Kilo Code、Zed、Goose、Grok、Kimi、Craft、OpenClaw、Hermes、Antigravity、CodeBuddy、WorkBuddy、OhMyPi、Pi、KiloCLI、EveryCode、MiMoCode、ZCode
 - 🏠 **100% 本地** — Token 数据绝不离开你的设备，无账号，无 API Key
 - 🚀 **零配置** — 读取工具已有的日志文件，无需在这些工具中安装任何东西
 - 📊 **精美仪表盘** — 用量趋势、模型分布、费用分析、工具分布、每日明细表
@@ -98,7 +98,7 @@
 | 工具 | 数据来源 | 方式 |
 |------|---------|------|
 | **Claude Code** | `~/.claude/projects/*.jsonl` | 被动读取 |
-| **Codex** | `~/.codex/sessions/**/rollout-*.jsonl` | 被动读取 |
+| **ChatGPT** | `~/.codex/sessions/**/rollout-*.jsonl` | 被动读取 |
 | **ZCode** | `~/.zcode/cli/db/db.sqlite` | SQLite 读取（`model_usage` 表） |
 | **Kiro CLI** | `~/.kiro/sessions/cli/*.json` + `.jsonl` | Session 文件 + 字符估算 |
 | **Kiro IDE** | `~/Library/.../kiro.kiroagent/dev_data/` | SQLite + JSONL |
@@ -136,7 +136,7 @@ TokenViewer 可以显示 9 个工具的实时配额用量和重置倒计时：
 | 工具 | 档位显示 | 数据来源 |
 |------|---------|---------|
 | **Claude** | Max / Pro | Anthropic OAuth API（Keychain） |
-| **Codex** | Plus / Team / Pro | ChatGPT wham API（`~/.codex/auth.json`） |
+| **ChatGPT** | Plus / Business / Pro | ChatGPT wham API（`~/.codex/auth.json`） |
 | **GitHub Copilot** | Individual / Business | GitHub API（`~/.config/github-copilot/`） |
 | **Kiro** | Free / Pro / Pro+ / Power | `kiro-cli /usage` |
 | **Cursor** | Pro / Team / Enterprise | `cursor.com/api/usage-summary` |

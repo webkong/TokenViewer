@@ -572,7 +572,7 @@ fn builtin_providers() -> Vec<ProviderSkillsConfig> {
                 Some("claude"),
                 "#d97757",
             ),
-            ("codex", "Codex", "codex", Some("codex"), "#3b82f6"),
+            ("codex", "ChatGPT", "codex", Some("codex"), "#3b82f6"),
             (
                 "cursor",
                 "Cursor",
