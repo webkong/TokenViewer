@@ -111,12 +111,12 @@ An agent can have **two independent integrations**, and they don't always coexis
 
 Two groups result:
 
-- **Canonical (15)** — have a limits card (parser optional): Claude Code, Codex, Cursor, Kiro, GitHub Copilot, Kimi, Antigravity, Zed, Trae, Windsurf, Qoder, CodeBuddy, WorkBuddy, Gemini, ZCode. These are commercial subscription products with a queryable quota (some via the cockpit-tools account cache). **Trae / Windsurf / Qoder have *only* a limits card, no usage parser.**
+- **Canonical (15)** — have a limits card (parser optional): Claude Code, ChatGPT (internal source `"codex"`), Cursor, Kiro, GitHub Copilot, Kimi, Antigravity, Zed, Trae, Windsurf, Qoder, CodeBuddy, WorkBuddy, Gemini, ZCode. These are commercial subscription products with a queryable quota (some via the cockpit-tools account cache). **Trae / Windsurf / Qoder have *only* a limits card, no usage parser.**
 - **Parser-only (11)** — usage parser but no limits card: OpenCode, OpenClaw, Hermes, Grok, RooCode, KiloCode, Kilo CLI, Goose, OhMyPi, Pi, Craft.
 
 **Why parser-only have no limits card:** a limits card needs a queryable "subscription quota + reset" endpoint. These tools are mostly open-source / bring-your-own-key / router agents (OpenCode, OpenClaw, RooCode, KiloCode, Kilo CLI, Goose, Craft, Pi, OhMyPi) or direct-API providers (Grok, Hermes). They have no proprietary subscription of their own — the real quota belongs to whatever upstream API key the user configured (OpenAI / Anthropic / OpenRouter / …), so there's nothing for TokenViewer to query. Only local-log token usage is available.
 
-> `all_parsers()` actually has 25 entries: the 11 parser-only + 12 canonical-with-parser + `everycode` (folded into the Codex brand/icon, not listed separately) + `mimocode`.
+> `all_parsers()` actually has 25 entries: the 11 parser-only + 12 canonical-with-parser + `everycode` (folded into the ChatGPT brand/icon, not listed separately) + `mimocode`. Keep the internal source ID, parser name, CLI paths, and logo key as `"codex"`; only the user-facing product name is ChatGPT.
 
 ## Adding a new provider parser
 1. Create `core/src/parsers/<name>.rs` with `pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>>`.

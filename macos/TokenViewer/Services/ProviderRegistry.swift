@@ -202,7 +202,8 @@ final class ProviderRegistry: ObservableObject {
     // MARK: - Generic Fallback
 
     private static func prettySourceName(_ source: String) -> String {
-        source
+        if source == "codex" { return "ChatGPT" }
+        return source
             .split(separator: "-")
             .map { part in
                 let lower = part.lowercased()

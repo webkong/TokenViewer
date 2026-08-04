@@ -14,9 +14,9 @@ const copy = {
     htmlLang: "en",
     pageTitle: "TokenViewer - AI Token Usage Tracker for macOS",
     pageDescription:
-      "TokenViewer is a free, native macOS menu-bar app that tracks your AI token usage and costs across 25 providers — Claude, Codex, Kiro, Cursor, Copilot, ZCode and more. Local-first, no cloud required.",
+      "TokenViewer is a free, native macOS menu-bar app that tracks your AI token usage and costs across 25 providers — Claude, ChatGPT, Kiro, Cursor, Copilot, ZCode and more. Local-first, no cloud required.",
     pageKeywords:
-      "AI token tracker, token usage macOS, Claude token counter, Codex usage, Kiro token, AI cost tracker, menu bar app macOS, AI skills manager",
+      "AI token tracker, token usage macOS, Claude token counter, ChatGPT Codex usage, Kiro token, AI cost tracker, menu bar app macOS, AI skills manager",
     brandHome: "TokenViewer home",
     nav: {
       features: "Features",
@@ -69,7 +69,7 @@ const copy = {
       description:
         "TokenViewer reads local data from the AI tools you already use — no API keys or logins required.",
       list: [
-        "Claude Code", "Codex", "Kiro", "Cursor", "GitHub Copilot",
+        "Claude Code", "ChatGPT", "Kiro", "Cursor", "GitHub Copilot",
         "Gemini CLI", "Opencode", "Roocode", "Kilo Code", "Zed",
         "Goose", "Grok", "Kimi", "Craft", "OpenClaw",
         "Hermes", "Antigravity", "CodeBuddy", "WorkBuddy", "OhMyPi", "Pi",
@@ -79,7 +79,7 @@ const copy = {
     skills: {
       title: "One skills library for every AI agent",
       description:
-        "TokenViewer's Skills manager keeps a single shared copy of your SKILL.md files and links them into whichever coding agents you use — Claude Code, Codex, Cursor, Kiro, and 40+ more — so you write a skill once and every agent can use it.",
+        "TokenViewer's Skills manager keeps a single shared copy of your SKILL.md files and links them into whichever coding agents you use — Claude Code, ChatGPT, Cursor, Kiro, and 40+ more — so you write a skill once and every agent can use it.",
       points: [
         {
           icon: Layers,
@@ -89,7 +89,7 @@ const copy = {
         {
           icon: Zap,
           title: "One-click organize",
-          text: "Already have skills scattered across different agent folders? Organize pulls them into the shared library and replaces the original with a link — including nested layouts like Codex's built-in skills.",
+          text: "Already have skills scattered across different agent folders? Organize pulls them into the shared library and replaces the original with a link — including ChatGPT's nested built-in skills.",
         },
         {
           icon: Shield,
@@ -108,9 +108,9 @@ const copy = {
     htmlLang: "zh-CN",
     pageTitle: "TokenViewer - macOS AI Token 用量追踪器",
     pageDescription:
-      "TokenViewer 是一款免费的原生 macOS 菜单栏应用，追踪 25 个 AI 工具的 Token 用量与费用 — 包括 Claude、Codex、Kiro、Cursor、Copilot、ZCode 等。本地优先，无需云端。",
+      "TokenViewer 是一款免费的原生 macOS 菜单栏应用，追踪 25 个 AI 工具的 Token 用量与费用 — 包括 Claude、ChatGPT、Kiro、Cursor、Copilot、ZCode 等。本地优先，无需云端。",
     pageKeywords:
-      "AI Token 追踪, Token 用量 macOS, Claude Token 统计, Codex 用量, Kiro Token, AI 费用追踪, macOS 菜单栏应用, AI 技能管理",
+      "AI Token 追踪, Token 用量 macOS, Claude Token 统计, ChatGPT Codex 用量, Kiro Token, AI 费用追踪, macOS 菜单栏应用, AI 技能管理",
     brandHome: "TokenViewer 官网首页",
     nav: {
       features: "功能",
@@ -163,7 +163,7 @@ const copy = {
       description:
         "TokenViewer 直接读取你已使用工具的本地数据——无需 API Key，无需登录。",
       list: [
-        "Claude Code", "Codex", "Kiro", "Cursor", "GitHub Copilot",
+        "Claude Code", "ChatGPT", "Kiro", "Cursor", "GitHub Copilot",
         "Gemini CLI", "Opencode", "Roocode", "Kilo Code", "Zed",
         "Goose", "Grok", "Kimi", "Craft", "OpenClaw",
         "Hermes", "Antigravity", "CodeBuddy", "WorkBuddy", "OhMyPi", "Pi",
@@ -173,7 +173,7 @@ const copy = {
     skills: {
       title: "一份技能库，服务所有 AI Agent",
       description:
-        "TokenViewer 的技能管理功能把你的 SKILL.md 统一保存在共享目录，并链接到 Claude Code、Codex、Cursor、Kiro 等 40 多个编程 Agent 各自的技能目录——写一次技能，所有 Agent 都能用。",
+        "TokenViewer 的技能管理功能把你的 SKILL.md 统一保存在共享目录，并链接到 Claude Code、ChatGPT、Cursor、Kiro 等 40 多个编程 Agent 各自的技能目录——写一次技能，所有 Agent 都能用。",
       points: [
         {
           icon: Layers,
@@ -183,7 +183,7 @@ const copy = {
         {
           icon: Zap,
           title: "一键整理",
-          text: "技能散落在各个 Agent 目录里？「整理」会把它们收进共享库，并在原位置留下链接——即使是 Codex 内置的嵌套目录结构也能正确处理。",
+          text: "技能散落在各个 Agent 目录里？「整理」会把它们收进共享库，并在原位置留下链接——即使是 ChatGPT 内置的嵌套目录结构也能正确处理。",
         },
         {
           icon: Shield,
@@ -391,7 +391,7 @@ function SkillsSection({ t }) {
 // Provider logo mapping
 const PROVIDER_LOGOS = {
   "Claude Code": "claude-code",
-  "Codex": "codex",
+  "ChatGPT": "codex",
   "Kiro": "kiro",
   "Cursor": "cursor",
   "GitHub Copilot": "copilot",

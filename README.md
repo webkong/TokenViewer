@@ -39,7 +39,7 @@ A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects tok
 - 📊 Today / 7-day / 30-day / Total token counts and cost estimates
 - 📈 Daily trend chart with cache hit rate and cost overlay
 - 🗓️ 53-week activity heatmap
-- 🔒 Live quota bars for 8 providers (Codex, Copilot, Kiro, Cursor, Gemini, Kimi …)
+- 🔒 Live quota bars for 8 providers (ChatGPT, Copilot, Kiro, Cursor, Gemini, Kimi …)
 - 🏠 100% local — all data in `~/.tokenviewer/data.db`. No account, no API keys.
 
 > **"TokenViewer.app can't be opened" — first-launch Gatekeeper warning**
@@ -55,14 +55,14 @@ A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects tok
 
 ## ✨ Features
 
-- 🔌 **25 AI tools out of the box** — Claude Code, Codex, Kiro, Cursor, GitHub Copilot, Gemini CLI, Opencode, Roocode, Kilo Code, Zed, Goose, Grok, Kimi, Craft, OpenClaw, Hermes, Antigravity, CodeBuddy, WorkBuddy, OhMyPi, Pi, KiloCLI, EveryCode, MiMoCode, ZCode
+- 🔌 **25 AI tools out of the box** — Claude Code, ChatGPT, Kiro, Cursor, GitHub Copilot, Gemini CLI, Opencode, Roocode, Kilo Code, Zed, Goose, Grok, Kimi, Craft, OpenClaw, Hermes, Antigravity, CodeBuddy, WorkBuddy, OhMyPi, Pi, KiloCLI, EveryCode, MiMoCode, ZCode
 - 🏠 **100% local** — Token data never leaves your machine. No account, no API keys.
 - 🚀 **Zero config** — Reads existing log files your tools already produce. Nothing installed into those tools.
 - 📊 **Beautiful dashboard** — Usage trends, model breakdown, cost analysis, provider breakdown, daily detail table
 - 🖥️ **Native app** — SwiftUI + Rust core. No Electron, no Node.js, no browser. Instant launch.
 - 📈 **Smooth trend chart** — Catmull-Rom spline with hover tooltip showing input / output / cache / reasoning / cost
 - 🗓️ **Activity heatmap** — 53-week GitHub-style grid in both the dashboard and the menu-bar panel
-- 📉 **Rate limit tracking** — Live quota bars with reset countdowns for 8 providers: Codex, GitHub Copilot, Kiro (Free / Pro / Pro+ / Power), Cursor, Gemini, Kimi, Claude, Antigravity
+- 📉 **Rate limit tracking** — Live quota bars with reset countdowns for 8 providers: ChatGPT, GitHub Copilot, Kiro (Free / Pro / Pro+ / Power), Cursor, Gemini, Kimi, Claude, Antigravity
 - 💰 **Cost engine** — Per-model pricing for all major providers + Kiro, Cursor, Kimi overrides. Multi-currency display (live exchange rates).
 - 🌍 **Chinese / English UI** — Switch in Settings at any time
 - ⚡ **Incremental sync** — File offset cursors + mtime skip + rayon parallel parsing keep repeated syncs under 100 ms when nothing changed
@@ -98,7 +98,7 @@ A **native macOS menu-bar app** built with SwiftUI + Rust that auto-collects tok
 | Tool | Data Source | Method |
 |------|-------------|--------|
 | **Claude Code** | `~/.claude/projects/*.jsonl` | Passive reader |
-| **Codex** | `~/.codex/sessions/**/rollout-*.jsonl` | Passive reader |
+| **ChatGPT** | `~/.codex/sessions/**/rollout-*.jsonl` | Passive reader |
 | **ZCode** | `~/.zcode/cli/db/db.sqlite` | SQLite reader (`model_usage` table) |
 | **Kiro CLI** | `~/.kiro/sessions/cli/*.json` + `.jsonl` | Session file reader + char-based token estimate |
 | **Kiro IDE** | `~/Library/.../kiro.kiroagent/dev_data/` | SQLite + JSONL |
@@ -136,7 +136,7 @@ TokenViewer can show live quota usage and reset countdowns for 9 providers:
 | Provider | Plan Labels | Data Source |
 |----------|-------------|-------------|
 | **Claude** | Max / Pro | Anthropic OAuth API (Keychain) |
-| **Codex** | Plus / Team / Pro | ChatGPT wham API (`~/.codex/auth.json`) |
+| **ChatGPT** | Plus / Business / Pro | ChatGPT wham API (`~/.codex/auth.json`) |
 | **GitHub Copilot** | Individual / Business | GitHub API (`~/.config/github-copilot/`) |
 | **Kiro** | Free / Pro / Pro+ / Power | `kiro-cli /usage` |
 | **Cursor** | Pro / Team / Enterprise | `cursor.com/api/usage-summary` (SQLite session token) |
