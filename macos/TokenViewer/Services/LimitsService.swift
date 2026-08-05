@@ -105,11 +105,22 @@ enum LimitsService {
 
     static func fetchCodex() async -> ProviderLimit {
         let name = "codex"
-        let home = NSHomeDirectory()
-        let authPath = ProcessInfo.processInfo.environment["CODEX_HOME"].map { "\($0)/auth.json" } ?? "\(home)/.codex/auth.json"
-        guard let auth = readJSON(authPath),
-              let tokens = auth["tokens"] as? [String: Any],
-              let accessToken = tokens["access_token"] as? String else {
+        let discoveredHomes = CoreBridge.shared.getCodexHomes()
+        let authPaths = discoveredHomes
+            .filter(\.hasAuth)
+            .map { "\($0.path)/auth.json" }
+        let fallbackPath = "\(NSHomeDirectory())/.codex/auth.json"
+        let candidates = authPaths.isEmpty ? [fallbackPath] : authPaths
+        let resolvedAuth = candidates.lazy.compactMap { path -> ([String: Any], String)? in
+            guard let auth = readJSON(path),
+                  let tokens = auth["tokens"] as? [String: Any],
+                  let accessToken = tokens["access_token"] as? String,
+                  !accessToken.isEmpty else {
+                return nil
+            }
+            return (tokens, accessToken)
+        }.first
+        guard let (tokens, accessToken) = resolvedAuth else {
             return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
         let idToken = tokens["id_token"] as? String

@@ -1,72 +1,37 @@
 use serde_json::Value;
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use super::utils::*;
+use crate::codex_home::{discover_codex_homes, CodexHome};
 use crate::models::UsageRecord;
 
 pub fn parse(
     home_dir: &Path,
     cursor_data: Option<&str>,
 ) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
+    let homes = discover_codex_homes(home_dir, &[], &[], false);
+    parse_with_homes(home_dir, cursor_data, &homes)
+}
+
+pub fn parse_with_homes(
+    home_dir: &Path,
+    cursor_data: Option<&str>,
+    homes: &[CodexHome],
+) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     let mut cursor = FileCursor::from_json(cursor_data);
     let mut all_records = Vec::new();
-
-    let standard_base = home_dir.join(".codex/sessions");
-    let mut session_bases = vec![standard_base.clone()];
-    let mut seen_bases = std::collections::HashSet::new();
-    seen_bases.insert(standard_base);
-
-    // $CODEX_HOME overrides/extends where Codex looks for its config + session
-    // data. Some launchers (e.g. sandboxed dev tooling) redirect it to a
-    // sandboxed runtime home, so rollout files land outside ~/.codex. Codex
-    // itself (and reference tools like ccusage) treat $CODEX_HOME as one
-    // directory OR a comma-separated list of directories — mirror that so any
-    // tool following the same convention is picked up without special-casing
-    // it by name. Missing entries are silently skipped (scan_codex_base is a
-    // no-op if the path doesn't exist), so an unresolvable/irrelevant entry
-    // costs nothing.
-    //
-    // Only consult it when `home_dir` is the real OS home directory — never
-    // for synthetic/test home dirs — so behavior (and tests, which use temp
-    // dirs) is unaffected by whatever $CODEX_HOME happens to be set to in the
-    // calling process's shell.
-    if dirs::home_dir().as_deref() == Some(home_dir) {
-        if let Ok(raw) = std::env::var("CODEX_HOME") {
-            for entry in raw.split(',') {
-                let entry = entry.trim();
-                if entry.is_empty() {
-                    continue;
-                }
-                let alt_base = PathBuf::from(entry).join("sessions");
-                if seen_bases.insert(alt_base.clone()) {
-                    session_bases.push(alt_base);
-                }
-            }
-        }
-
-        // Orca runs Codex with a sandboxed runtime home. TokenViewer is often
-        // launched from Finder or a login item and therefore cannot rely on
-        // inheriting Orca's CODEX_HOME environment variable. Discover Orca's
-        // stable macOS runtime path directly so those sessions are always
-        // included in usage sync.
-        let orca_base =
-            home_dir.join("Library/Application Support/orca/codex-runtime-home/home/sessions");
-        if seen_bases.insert(orca_base.clone()) {
-            session_bases.push(orca_base);
-        }
+    let mut session_bases: Vec<PathBuf> = homes
+        .iter()
+        .filter(|item| item.exists && item.has_sessions)
+        .map(|item| item.path_buf().join("sessions"))
+        .collect();
+    if session_bases.is_empty() {
+        session_bases.push(home_dir.join(".codex/sessions"));
     }
-
-    let mut seen_rollouts = std::collections::HashSet::new();
-    for base in session_bases {
-        scan_codex_base(
-            &base,
-            &mut cursor,
-            &mut all_records,
-            &mut seen_rollouts,
-            "codex",
-        );
-    }
+    scan_codex_bases(&session_bases, &mut cursor, &mut all_records, "codex");
 
     Ok((aggregate_records(all_records), cursor.to_json()))
 }
@@ -80,73 +45,79 @@ pub fn parse_codex_format(
     let base = home_dir.join(rel_dir);
     let mut cursor = FileCursor::from_json(cursor_data);
     let mut all_records = Vec::new();
-    let mut seen_rollouts = std::collections::HashSet::new();
-    scan_codex_base(
-        &base,
-        &mut cursor,
-        &mut all_records,
-        &mut seen_rollouts,
-        source,
-    );
+    scan_codex_bases(&[base], &mut cursor, &mut all_records, source);
     Ok((aggregate_records(all_records), cursor.to_json()))
 }
 
-/// Scan a single sessions base directory, appending matched records into
-/// `all_records` and advancing `cursor` in place. No-op if `base` doesn't exist.
-fn scan_codex_base(
-    base: &Path,
+/// Scan all known Codex session roots. Rollout filenames carry a globally
+/// unique session UUID, so copies and hard links from isolated host apps are
+/// grouped before parsing. The largest/newest copy wins.
+fn scan_codex_bases(
+    bases: &[PathBuf],
     cursor: &mut FileCursor,
     all_records: &mut Vec<UsageRecord>,
-    seen_rollouts: &mut std::collections::HashSet<OsString>,
     source: &str,
 ) {
-    if !base.exists() {
-        return;
+    let mut rollouts: HashMap<OsString, PathBuf> = HashMap::new();
+    for base in bases {
+        if !base.exists() {
+            continue;
+        }
+        let pattern = format!("{}/**/rollout-*.jsonl", base.display());
+        for file in cursor.glob_cached(&pattern, base) {
+            let Some(name) = file.file_name().map(OsString::from) else {
+                continue;
+            };
+            match rollouts.get(&name) {
+                Some(existing) if file_rank(existing) >= file_rank(&file) => {}
+                _ => {
+                    rollouts.insert(name, file);
+                }
+            }
+        }
     }
-    let pattern = format!("{}/**/rollout-*.jsonl", base.display());
-    let files = cursor.glob_cached(&pattern, base);
 
-    for file in files {
-        // Orca mirrors standard Codex sessions as hard links under its runtime
-        // home. A rollout filename contains the globally unique session ID, so
-        // use it as the cross-root identity and import each session only once.
-        let Some(rollout_name) = file.file_name().map(OsString::from) else {
-            continue;
-        };
-        if !seen_rollouts.insert(rollout_name) {
-            continue;
-        }
-        let key = file.to_string_lossy().to_string();
-        if !cursor.file_changed(&key) {
+    let mut files: Vec<(OsString, PathBuf)> = rollouts.into_iter().collect();
+    files.sort_by(|left, right| left.0.cmp(&right.0));
+    for (rollout_name, file) in files {
+        let physical_key = file.to_string_lossy().to_string();
+        let logical_key = format!("rollout:{}", rollout_name.to_string_lossy());
+        migrate_legacy_rollout_cursor(cursor, &logical_key, &rollout_name);
+        if !cursor.file_changed(&physical_key) {
             continue;
         }
-        let offset = cursor.get_offset(&key);
+        let offset = cursor.offsets.get(&logical_key).copied().unwrap_or(0);
         let file_len = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
-        let start_offset = if offset > file_len {
-            cursor.last_models.remove(&key);
-            cursor.last_providers.remove(&key);
-            0
-        } else {
-            offset
-        };
+        // Codex rollouts are append-only. A shorter copy from another host is
+        // stale; replaying it from zero would double-count historical usage.
+        if offset > file_len {
+            continue;
+        }
+        let start_offset = offset;
         let mut last_model = cursor
             .last_models
-            .get(&key)
+            .get(&logical_key)
             .cloned()
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| String::from("unknown"));
-        let mut last_provider = cursor.last_providers.get(&key).cloned().unwrap_or_default();
+        let mut last_provider = cursor
+            .last_providers
+            .get(&logical_key)
+            .cloned()
+            .unwrap_or_default();
         let (lines, new_offset) = match read_lines_from_offset(&file, start_offset) {
             Ok(r) => r,
             Err(_) => continue,
         };
         if lines.is_empty() {
-            cursor.set_offset(&key, new_offset);
+            cursor.offsets.insert(logical_key.clone(), new_offset);
             if !last_model.is_empty() {
-                cursor.last_models.insert(key.clone(), last_model);
+                cursor.last_models.insert(logical_key.clone(), last_model);
             }
             if !last_provider.is_empty() {
-                cursor.last_providers.insert(key.clone(), last_provider);
+                cursor
+                    .last_providers
+                    .insert(logical_key.clone(), last_provider);
             }
             continue;
         }
@@ -234,7 +205,7 @@ fn scan_codex_base(
             let (fi, fo, fc_read, fc_write, fr) = if use_delta {
                 // Delta on raw values first, then normalize input -= cached
                 let cur = [raw_input, output, cached, cache_creation, reasoning];
-                let d = cursor.delta(&key, cur);
+                let d = cursor.delta(&logical_key, cur);
                 (d[0].saturating_sub(d[2]), d[1], d[2], d[3], d[4])
             } else {
                 (
@@ -280,12 +251,65 @@ fn scan_codex_base(
             });
         }
 
-        cursor.set_offset(&key, new_offset);
+        cursor.offsets.insert(logical_key.clone(), new_offset);
         if !last_model.is_empty() {
-            cursor.last_models.insert(key.clone(), last_model);
+            cursor.last_models.insert(logical_key.clone(), last_model);
         }
         if !last_provider.is_empty() {
-            cursor.last_providers.insert(key.clone(), last_provider);
+            cursor
+                .last_providers
+                .insert(logical_key.clone(), last_provider);
         }
+    }
+}
+
+fn file_rank(path: &Path) -> (u64, u64) {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return (0, 0);
+    };
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+        .map(|value| value.as_secs())
+        .unwrap_or(0);
+    (metadata.len(), modified)
+}
+
+fn migrate_legacy_rollout_cursor(
+    cursor: &mut FileCursor,
+    logical_key: &str,
+    rollout_name: &OsString,
+) {
+    if cursor.offsets.contains_key(logical_key) {
+        return;
+    }
+    let rollout_name = rollout_name.to_string_lossy();
+    let legacy_key = cursor
+        .offsets
+        .iter()
+        .filter(|(key, _)| {
+            Path::new(key)
+                .file_name()
+                .is_some_and(|name| name == rollout_name.as_ref())
+        })
+        .max_by_key(|(_, offset)| **offset)
+        .map(|(key, _)| key.clone());
+    let Some(legacy_key) = legacy_key else {
+        return;
+    };
+    if let Some(offset) = cursor.offsets.get(&legacy_key).copied() {
+        cursor.offsets.insert(logical_key.to_string(), offset);
+    }
+    if let Some(snapshot) = cursor.snapshots.get(&legacy_key).copied() {
+        cursor.snapshots.insert(logical_key.to_string(), snapshot);
+    }
+    if let Some(model) = cursor.last_models.get(&legacy_key).cloned() {
+        cursor.last_models.insert(logical_key.to_string(), model);
+    }
+    if let Some(provider) = cursor.last_providers.get(&legacy_key).cloned() {
+        cursor
+            .last_providers
+            .insert(logical_key.to_string(), provider);
     }
 }

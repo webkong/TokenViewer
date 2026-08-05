@@ -1,3 +1,4 @@
+pub mod codex_home;
 pub mod ffi;
 pub mod models;
 pub mod parsers;

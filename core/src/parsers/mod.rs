@@ -30,6 +30,7 @@ use std::path::Path;
 
 use rayon::prelude::*;
 
+use crate::codex_home::CodexHome;
 use crate::models::UsageRecord;
 
 pub struct ParseResult {
@@ -81,11 +82,25 @@ pub fn all_parser_sources() -> Vec<&'static str> {
 
 /// Parse all providers in parallel. `cursors` maps source name -> cursor JSON string.
 pub fn parse_all(home_dir: &Path, cursors: &HashMap<String, String>) -> Vec<ParseResult> {
+    let codex_homes = crate::codex_home::discover_codex_homes(home_dir, &[], &[], false);
+    parse_all_with_codex_homes(home_dir, cursors, &codex_homes)
+}
+
+pub fn parse_all_with_codex_homes(
+    home_dir: &Path,
+    cursors: &HashMap<String, String>,
+    codex_homes: &[CodexHome],
+) -> Vec<ParseResult> {
     all_parsers()
         .into_par_iter()
         .map(|(source, parser_fn)| {
             let cursor_data = cursors.get(source).map(|s| s.as_str());
-            match parser_fn(home_dir, cursor_data) {
+            let parsed = if source == "codex" {
+                codex::parse_with_homes(home_dir, cursor_data, codex_homes)
+            } else {
+                parser_fn(home_dir, cursor_data)
+            };
+            match parsed {
                 Ok((records, new_cursor)) => ParseResult {
                     source: source.to_string(),
                     records,

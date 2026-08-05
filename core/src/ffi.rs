@@ -131,6 +131,48 @@ pub extern "C" fn tt_sync_all(handle: *mut CoreHandle) -> *mut c_char {
     to_json_cstring(&json)
 }
 
+/// Discover Codex homes used by the default CLI and isolated host apps.
+/// `force` triggers the bounded filesystem scan instead of using its daily cache.
+///
+/// # Safety
+/// `handle` must be a valid pointer returned by `tt_init`, or null.
+#[no_mangle]
+pub extern "C" fn tt_get_codex_homes(handle: *mut CoreHandle, force: i32) -> *mut c_char {
+    let handle = match unsafe { handle.as_ref() } {
+        Some(handle) => handle,
+        None => return std::ptr::null_mut(),
+    };
+    let homes = crate::codex_home::discover_with_database(&handle.db, &handle.home_dir, force != 0);
+    to_json_cstring(&homes)
+}
+
+/// Replace user-configured extra Codex homes. Takes a JSON string array and
+/// returns `{ "ok": true, "homes": [...] }` on success.
+///
+/// # Safety
+/// `handle` and `json` must be valid pointers.
+#[no_mangle]
+pub extern "C" fn tt_set_codex_additional_homes(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let handle = match unsafe { handle.as_ref() } {
+        Some(handle) => handle,
+        None => return to_json_cstring(&serde_json::json!({"ok": false, "error": "Null handle"})),
+    };
+    if json.is_null() {
+        return to_json_cstring(&serde_json::json!({"ok": false, "error": "Null json"}));
+    }
+    let paths: Vec<String> = match unsafe { from_cstring_json(json) } {
+        Ok(paths) => paths,
+        Err(error) => return to_json_cstring(&serde_json::json!({"ok": false, "error": error})),
+    };
+    match crate::codex_home::set_additional_homes(&handle.db, &handle.home_dir, &paths) {
+        Ok(homes) => to_json_cstring(&serde_json::json!({"ok": true, "homes": homes})),
+        Err(error) => to_json_cstring(&serde_json::json!({"ok": false, "error": error})),
+    }
+}
+
 /// Clear processed data and immediately resync from raw sources.
 /// Returns the same JSON shape as `tt_sync_all`.
 ///
