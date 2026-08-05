@@ -933,7 +933,7 @@ struct SkillEnvironmentEditor: View {
     private func loadValues() {
         values = Dictionary(
             uniqueKeysWithValues: variables.map {
-                ($0.name, SkillEnvironmentManager.shared.value(for: $0.name) ?? "")
+                ($0.name, SkillEnvironmentManager.shared.value(for: $0.name) ?? $0.defaultValue)
             }
         )
     }
