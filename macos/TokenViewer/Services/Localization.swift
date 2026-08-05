@@ -151,7 +151,27 @@ final class L10n: ObservableObject {
     var data: String { isZh ? "数据" : "Data" }
     var dataManagement: String { isZh ? "数据管理" : "Data Management" }
     var directory: String { isZh ? "目录" : "Directory" }
+    var add: String { isZh ? "添加" : "Add" }
     var openInFinder: String { isZh ? "在 Finder 中打开" : "Open in Finder" }
+    var codexHomesTitle: String { isZh ? "ChatGPT 数据目录" : "ChatGPT Data Directories" }
+    var codexHomesDescription: String { isZh ? "自动发现默认 Codex、Orca、Antigravity Cockpit 等隔离目录。自动发现不会修改目录内容；手动添加可覆盖未识别的宿主应用。" : "Discover the default Codex home and isolated directories used by Orca, Antigravity Cockpit, and other hosts. Discovery never modifies these directories; add a path for hosts that cannot be detected automatically." }
+    var codexHomePlaceholder: String { isZh ? "添加额外 Codex Home 路径" : "Add an extra Codex Home path" }
+    var codexHomesRescan: String { isZh ? "重新扫描 ChatGPT 数据目录" : "Rescan ChatGPT data directories" }
+    var codexHomesEmpty: String { isZh ? "未发现 ChatGPT 数据目录" : "No ChatGPT data directories found" }
+    var codexHomeSessions: String { isZh ? "会话" : "Sessions" }
+    var codexHomeAuth: String { isZh ? "账户" : "Account" }
+    var codexHomeMissing: String { isZh ? "目录不存在" : "Missing" }
+    func codexHomeSource(_ source: String) -> String {
+        switch source {
+        case "user_configured": return isZh ? "手动添加" : "User"
+        case "environment": return "CODEX_HOME"
+        case "default": return isZh ? "默认" : "Default"
+        case "known_host": return isZh ? "已知应用" : "Known Host"
+        case "discovered": return isZh ? "自动发现" : "Discovered"
+        case "cached": return isZh ? "历史发现" : "Cached"
+        default: return source
+        }
+    }
     var rebuildData: String { isZh ? "重建数据" : "Rebuild Data" }
     var rebuildDataDesc: String { isZh ? "清理已处理的数据和同步游标，然后从原始数据重新拉取。" : "Clears processed data and sync cursors, then rescans raw source files." }
     var rebuildDataHint: String { isZh ? "当数据看起来缺失、过旧，或同步游标异常时使用。" : "Use when data looks stale, missing, or sync cursors are out of date." }

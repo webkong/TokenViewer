@@ -14,6 +14,9 @@ struct SettingsView: View {
     @State private var launchAtLogin = false
     @State private var showRebuildAlert = false
     @State private var showResetSettingsAlert = false
+    @State private var codexHomes: [CodexHomeInfo] = []
+    @State private var newCodexHome = ""
+    @State private var isScanningCodexHomes = false
     @ObservedObject private var theme = ThemeManager.shared
     @ObservedObject private var currency = CurrencyStore.shared
     @ObservedObject private var l10n = L10n.shared
@@ -35,6 +38,7 @@ struct SettingsView: View {
                     sidebarItem(id: "general", title: l10n.general, icon: "gear")
                     sidebarItem(id: "appearance", title: l10n.appearance, icon: "paintpalette")
                     sidebarItem(id: "menuBar", title: l10n.menuBarSectionTitle, icon: "menubar.rectangle")
+                    sidebarItem(id: "chatgpt", title: l10n.codexHomesTitle, icon: "terminal")
                     sidebarItem(id: "skills", title: l10n.skills, icon: "puzzlepiece.extension")
                     sidebarItem(id: "data", title: l10n.dataManagement, icon: "externaldrive")
                 }
@@ -51,6 +55,7 @@ struct SettingsView: View {
                         generalSection.id("general")
                         appearanceSection.id("appearance")
                         menuBarSection.id("menuBar")
+                        codexHomesSection.id("chatgpt")
                         skillsSection.id("skills")
                         dataSection.id("data")
                     }
@@ -71,6 +76,154 @@ struct SettingsView: View {
             }
             providerRegistry.loadIfNeeded()
             providerRegistry.refreshInstallStatus()
+            refreshCodexHomes(force: false)
+        }
+    }
+
+    // MARK: ChatGPT / Codex homes
+
+    private var codexHomesSection: some View {
+        SettingsCard(title: l10n.codexHomesTitle) {
+            Text(l10n.codexHomesDescription)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 6) {
+                TextField(l10n.codexHomePlaceholder, text: $newCodexHome)
+                    .textFieldStyle(.roundedBorder)
+                Button(l10n.skillInstallChooseFolder) {
+                    chooseCodexHome()
+                }
+                .font(.system(size: 11))
+                Button(l10n.add) {
+                    addCodexHome()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(newCodexHome.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button {
+                    refreshCodexHomes(force: true)
+                } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .rotationEffect(.degrees(isScanningCodexHomes ? 360 : 0))
+                        .animation(
+                            isScanningCodexHomes
+                                ? .linear(duration: 1).repeatForever(autoreverses: false)
+                                : .default,
+                            value: isScanningCodexHomes
+                        )
+                }
+                .buttonStyle(.borderless)
+                .disabled(isScanningCodexHomes)
+                .help(l10n.codexHomesRescan)
+            }
+
+            Divider()
+
+            if codexHomes.isEmpty && !isScanningCodexHomes {
+                Text(l10n.codexHomesEmpty)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 7) {
+                    ForEach(codexHomes) { item in
+                        HStack(spacing: 8) {
+                            Image(systemName: item.exists ? "folder.fill" : "folder.badge.questionmark")
+                                .foregroundStyle(item.exists ? Color.accentColor : Color.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.path)
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .textSelection(.enabled)
+                                HStack(spacing: 6) {
+                                    Text(l10n.codexHomeSource(item.source))
+                                    if item.hasSessions { Text(l10n.codexHomeSessions) }
+                                    if item.hasAuth { Text(l10n.codexHomeAuth) }
+                                    if !item.exists { Text(l10n.codexHomeMissing) }
+                                }
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if item.exists {
+                                Button {
+                                    NSWorkspace.shared.open(URL(fileURLWithPath: item.path))
+                                } label: {
+                                    Image(systemName: "folder")
+                                }
+                                .buttonStyle(.borderless)
+                                .help(l10n.openInFinder)
+                            }
+                            if item.isUserConfigured {
+                                Button(role: .destructive) {
+                                    removeCodexHome(item.path)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(.borderless)
+                                .help(l10n.skillDelete)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        }
+    }
+
+    private func refreshCodexHomes(force: Bool) {
+        guard !isScanningCodexHomes else { return }
+        isScanningCodexHomes = true
+        Task {
+            let homes = await Task.detached {
+                CoreBridge.shared.getCodexHomes(force: force)
+            }.value
+            codexHomes = homes
+            isScanningCodexHomes = false
+        }
+    }
+
+    private func chooseCodexHome() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = l10n.add
+        if panel.runModal() == .OK, let url = panel.url {
+            newCodexHome = url.path
+        }
+    }
+
+    private func addCodexHome() {
+        let path = newCodexHome.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty else { return }
+        var paths = codexHomes.filter(\.isUserConfigured).map(\.path)
+        if !paths.contains(path) { paths.append(path) }
+        saveCodexHomes(paths)
+    }
+
+    private func removeCodexHome(_ path: String) {
+        saveCodexHomes(codexHomes.filter { $0.isUserConfigured && $0.path != path }.map(\.path))
+    }
+
+    private func saveCodexHomes(_ paths: [String]) {
+        isScanningCodexHomes = true
+        Task {
+            let result = await Task.detached { () -> ([CodexHomeInfo]?, String?) in
+                switch CoreBridge.shared.setCodexAdditionalHomes(paths) {
+                case .success(let homes): return (homes, nil)
+                case .failure(let error): return (nil, error.localizedDescription)
+                }
+            }.value
+            isScanningCodexHomes = false
+            if let homes = result.0 {
+                codexHomes = homes
+                newCodexHome = ""
+                ToastCenter.shared.success(l10n.toastSaved)
+            } else {
+                ToastCenter.shared.error(result.1 ?? l10n.toastSaveFailed)
+            }
         }
     }
 

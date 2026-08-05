@@ -1,5 +1,23 @@
 import Foundation
 
+struct CodexHomeInfo: Codable, Hashable, Identifiable, Sendable {
+    let path: String
+    let source: String
+    let exists: Bool
+    let hasSessions: Bool
+    let hasAuth: Bool
+    let hasConfig: Bool
+    let isUserConfigured: Bool
+
+    var id: String { path }
+}
+
+private struct CodexHomesUpdateResponse: Codable {
+    let ok: Bool
+    let homes: [CodexHomeInfo]?
+    let error: String?
+}
+
 /// Swift wrapper around the Rust FFI core.
 /// All FFI calls are serialized through a private queue so the Rust handle is
 /// never accessed concurrently from the main thread and background sync tasks.
@@ -27,6 +45,32 @@ final class CoreBridge: @unchecked Sendable {
 
     func syncAll() -> Data? {
         call { tt_sync_all($0) }
+    }
+
+    func getCodexHomes(force: Bool = false) -> [CodexHomeInfo] {
+        guard let data = call({ tt_get_codex_homes($0, force ? 1 : 0) }) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return (try? decoder.decode([CodexHomeInfo].self, from: data)) ?? []
+    }
+
+    func setCodexAdditionalHomes(_ paths: [String]) -> Result<[CodexHomeInfo], Error> {
+        guard let payload = try? JSONEncoder().encode(paths),
+              let json = String(data: payload, encoding: .utf8),
+              let data = call({ handle in
+                  json.withCString { tt_set_codex_additional_homes(handle, $0) }
+              }) else {
+            return .failure(CoreBridgeError.invalidResponse)
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let response = try? decoder.decode(CodexHomesUpdateResponse.self, from: data) else {
+            return .failure(CoreBridgeError.invalidResponse)
+        }
+        if response.ok {
+            return .success(response.homes ?? [])
+        }
+        return .failure(CoreBridgeError.operationFailed(response.error ?? "Unknown error"))
     }
 
     func rebuildAll() -> Data? {
@@ -64,6 +108,18 @@ final class CoreBridge: @unchecked Sendable {
             guard let h = handle, let ptr = body(h) else { return nil }
             defer { tt_free_string(ptr) }
             return String(cString: ptr).data(using: .utf8)
+        }
+    }
+}
+
+private enum CoreBridgeError: LocalizedError {
+    case invalidResponse
+    case operationFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse: return "Invalid core response"
+        case .operationFailed(let message): return message
         }
     }
 }

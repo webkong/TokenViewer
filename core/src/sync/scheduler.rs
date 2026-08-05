@@ -18,7 +18,8 @@ pub fn sync_all(db: &Database, home_dir: &Path) -> SyncResult {
         }
     }
 
-    let results = parsers::parse_all(home_dir, &cursors);
+    let codex_homes = crate::codex_home::discover_with_database(db, home_dir, false);
+    let results = parsers::parse_all_with_codex_homes(home_dir, &cursors, &codex_homes);
 
     let mut providers_synced = 0u32;
     let mut records_added = 0u32;

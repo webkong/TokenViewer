@@ -1,10 +1,13 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rusqlite::Connection;
+use tokenviewer_core::codex_home::{CodexHome, CodexHomeSource};
+use tokenviewer_core::parsers::utils::FileCursor;
 use tokenviewer_core::parsers::{codex, kiro, parse_all, workbuddy};
 use tokenviewer_core::storage::Database;
 use tokenviewer_core::sync::sync_all;
@@ -403,6 +406,120 @@ fn codex_incremental_sync_keeps_model_context() {
     assert_ne!(second_records[0].model, "unknown");
 }
 
+#[test]
+fn codex_isolated_home_copy_uses_rollout_identity_without_double_counting() {
+    let home = temp_home();
+    let default_home = home.join(".codex");
+    let isolated_home = home.join(".host/instances/codex");
+    let rollout_name = "rollout-2026-08-05T00-00-00-session-uuid.jsonl";
+    let original = default_home.join("sessions/2026/08/05").join(rollout_name);
+    let copied = isolated_home.join("sessions/2026/08/05").join(rollout_name);
+    let first_content = concat!(
+        "{\"timestamp\":\"2026-08-05T00:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"model_provider\":\"openai\",\"model\":\"gpt-test\"}}\n",
+        "{\"timestamp\":\"2026-08-05T00:01:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":10,\"output_tokens\":20,\"cached_input_tokens\":1,\"cache_creation_input_tokens\":2,\"reasoning_output_tokens\":3}}}}"
+    );
+    write_text(&original, first_content);
+
+    let first_homes = vec![codex_home_info(&default_home)];
+    let (first_records, cursor) = codex::parse_with_homes(&home, None, &first_homes).unwrap();
+    assert_eq!(
+        first_records
+            .iter()
+            .map(|record| record.total_tokens)
+            .sum::<u64>(),
+        35
+    );
+
+    write_text(
+        &copied,
+        &format!(
+            "{}\n{}",
+            first_content,
+            "{\"timestamp\":\"2026-08-05T00:02:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":15,\"output_tokens\":30,\"cached_input_tokens\":1,\"cache_creation_input_tokens\":2,\"reasoning_output_tokens\":3}}}}"
+        ),
+    );
+    let homes = vec![
+        codex_home_info(&default_home),
+        codex_home_info(&isolated_home),
+    ];
+    let (second_records, second_cursor) =
+        codex::parse_with_homes(&home, Some(&cursor), &homes).unwrap();
+    assert_eq!(
+        second_records
+            .iter()
+            .map(|record| record.total_tokens)
+            .sum::<u64>(),
+        15
+    );
+
+    let (third_records, _) = codex::parse_with_homes(&home, Some(&second_cursor), &homes).unwrap();
+    assert!(third_records.is_empty());
+}
+
+#[test]
+fn codex_migrates_path_based_cursor_to_rollout_identity() {
+    let home = temp_home();
+    let codex_home = home.join(".codex");
+    let rollout_name = "rollout-2026-08-05T00-00-00-legacy-cursor.jsonl";
+    let file = codex_home.join("sessions/2026/08/05").join(rollout_name);
+    let first_content = concat!(
+        "{\"timestamp\":\"2026-08-05T00:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"model_provider\":\"openai\",\"model\":\"gpt-test\"}}\n",
+        "{\"timestamp\":\"2026-08-05T00:01:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":10,\"output_tokens\":20,\"cached_input_tokens\":1,\"cache_creation_input_tokens\":2,\"reasoning_output_tokens\":3}}}}"
+    );
+    write_text(&file, first_content);
+
+    let homes = vec![codex_home_info(&codex_home)];
+    let (_, cursor_json) = codex::parse_with_homes(&home, None, &homes).unwrap();
+    let mut cursor = FileCursor::from_json(Some(&cursor_json));
+    let logical_key = format!("rollout:{rollout_name}");
+    let legacy_key = file.to_string_lossy().to_string();
+    let legacy_offset = cursor.offsets.remove(&logical_key).unwrap();
+    cursor.offsets.insert(legacy_key.clone(), legacy_offset);
+    if let Some(value) = cursor.snapshots.remove(&logical_key) {
+        cursor.snapshots.insert(legacy_key.clone(), value);
+    }
+    if let Some(value) = cursor.last_models.remove(&logical_key) {
+        cursor.last_models.insert(legacy_key.clone(), value);
+    }
+    if let Some(value) = cursor.last_providers.remove(&logical_key) {
+        cursor.last_providers.insert(legacy_key, value);
+    }
+
+    write_text(
+        &file,
+        &format!(
+            "{}\n{}",
+            first_content,
+            "{\"timestamp\":\"2026-08-05T00:02:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":15,\"output_tokens\":30,\"cached_input_tokens\":1,\"cache_creation_input_tokens\":2,\"reasoning_output_tokens\":3}}}}"
+        ),
+    );
+    let legacy_cursor = cursor.to_json();
+    let (records, migrated_cursor) =
+        codex::parse_with_homes(&home, Some(&legacy_cursor), &homes).unwrap();
+    assert_eq!(
+        records
+            .iter()
+            .map(|record| record.total_tokens)
+            .sum::<u64>(),
+        15
+    );
+    assert!(FileCursor::from_json(Some(&migrated_cursor))
+        .offsets
+        .contains_key(&logical_key));
+}
+
+fn codex_home_info(path: &Path) -> CodexHome {
+    CodexHome {
+        path: path.to_string_lossy().to_string(),
+        source: CodexHomeSource::Discovered,
+        exists: true,
+        has_sessions: true,
+        has_auth: false,
+        has_config: false,
+        is_user_configured: false,
+    }
+}
+
 /// Kiro CLI v3 session directory: ~/.kiro/sessions/<workspace-hash>/sess_<uuid>/
 /// with session.json (metadata incl. modelId) + messages.jsonl (event log).
 fn write_kiro_v3_session_json(home: &Path, workspace_hash: &str, session_id: &str, model_id: &str) {
@@ -449,7 +566,11 @@ fn kiro_v3_session_parses_turn_into_char_estimated_usage() {
     );
 
     let (records, _cursor_json) = kiro::parse(&home, None).expect("kiro v3 parse");
-    assert_eq!(records.len(), 1, "expected exactly one usage record per turn");
+    assert_eq!(
+        records.len(),
+        1,
+        "expected exactly one usage record per turn"
+    );
     let rec = &records[0];
     assert_eq!(rec.source, "kiro");
     assert_eq!(rec.model, "gpt-5.6-sol");
@@ -518,8 +639,7 @@ fn kiro_v3_incremental_sync_only_counts_new_turns() {
     ));
     write_text(&messages_path, &appended);
 
-    let (second_records, _) =
-        kiro::parse(&home, Some(&cursor_json)).expect("second kiro v3 parse");
+    let (second_records, _) = kiro::parse(&home, Some(&cursor_json)).expect("second kiro v3 parse");
     assert_eq!(
         second_records.len(),
         1,
@@ -679,15 +799,17 @@ fn workbuddy_sync_reuses_saved_cursor() {
 }
 
 fn temp_home() -> PathBuf {
+    static NEXT_TEMP_HOME: AtomicU64 = AtomicU64::new(0);
     let mut dir = std::env::temp_dir();
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock went backwards")
         .as_nanos();
     dir.push(format!(
-        "tokenviewer-parser-regressions-{}-{}",
+        "tokenviewer-parser-regressions-{}-{}-{}",
         std::process::id(),
-        stamp
+        stamp,
+        NEXT_TEMP_HOME.fetch_add(1, Ordering::Relaxed)
     ));
     fs::create_dir_all(&dir).unwrap();
     dir
