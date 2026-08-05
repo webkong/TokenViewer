@@ -341,6 +341,7 @@ private struct SkillEnvironmentManagerSheet: View {
             let matchingVariables = skillMatches ? variables : variables.filter {
                 $0.name.localizedCaseInsensitiveContains(searchText)
                     || $0.note.localizedCaseInsensitiveContains(searchText)
+                    || $0.defaultValue.localizedCaseInsensitiveContains(searchText)
             }
             guard !matchingVariables.isEmpty else { return nil }
             return SkillEnvironmentGroup(skill: skill, variables: matchingVariables)

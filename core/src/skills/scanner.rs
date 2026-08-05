@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -215,6 +215,7 @@ pub fn extract_environment_variables(skill_md_path: &Path) -> Vec<SkillEnvironme
             }
             let mut variable = SkillEnvironmentVariable {
                 name: String::new(),
+                default_value: String::new(),
                 required: false,
                 note: String::new(),
                 secret: false,
@@ -241,12 +242,13 @@ pub fn extract_environment_variables(skill_md_path: &Path) -> Vec<SkillEnvironme
                 let value = yaml_scalar(value);
                 current = Some(SkillEnvironmentVariable {
                     name: key.to_string(),
-                    required: false,
-                    note: if value.is_empty() || value.eq_ignore_ascii_case("null") {
+                    default_value: if value.is_empty() || value.eq_ignore_ascii_case("null") {
                         String::new()
                     } else {
                         value
                     },
+                    required: false,
+                    note: String::new(),
                     secret: false,
                     inferred: false,
                 });
@@ -257,6 +259,14 @@ pub fn extract_environment_variables(skill_md_path: &Path) -> Vec<SkillEnvironme
         if let Some(variable) = current.as_mut() {
             if let Some(value) = trimmed.strip_prefix("name:") {
                 variable.name = yaml_scalar(value);
+            } else if let Some(value) = trimmed
+                .strip_prefix("default:")
+                .or_else(|| trimmed.strip_prefix("default_value:"))
+                .or_else(|| trimmed.strip_prefix("default-value:"))
+                .or_else(|| trimmed.strip_prefix("defaultValue:"))
+                .or_else(|| trimmed.strip_prefix("value:"))
+            {
+                variable.default_value = yaml_scalar(value);
             } else if let Some(value) = trimmed.strip_prefix("required:") {
                 variable.required = yaml_scalar(value).eq_ignore_ascii_case("true");
             } else if let Some(value) = trimmed.strip_prefix("note:") {
@@ -290,6 +300,7 @@ fn collect_inline_frontmatter_environment_variables(
             variables,
             SkillEnvironmentVariable {
                 name,
+                default_value: String::new(),
                 required: false,
                 note: String::new(),
                 secret: false,
@@ -339,11 +350,7 @@ fn push_valid_environment_variable(
     variables: &mut Vec<SkillEnvironmentVariable>,
     mut variable: SkillEnvironmentVariable,
 ) {
-    if !is_valid_environment_variable_name(&variable.name)
-        || variables
-            .iter()
-            .any(|existing| existing.name == variable.name)
-    {
+    if !is_valid_environment_variable_name(&variable.name) {
         return;
     }
     if !variable.secret {
@@ -352,7 +359,22 @@ fn push_valid_environment_variable(
             .iter()
             .any(|marker| uppercase.contains(marker));
     }
-    variables.push(variable);
+    if let Some(existing) = variables
+        .iter_mut()
+        .find(|existing| existing.name == variable.name)
+    {
+        if existing.default_value.is_empty() {
+            existing.default_value = variable.default_value;
+        }
+        if existing.note.is_empty() {
+            existing.note = variable.note;
+        }
+        existing.required |= variable.required;
+        existing.secret |= variable.secret;
+        existing.inferred &= variable.inferred;
+    } else {
+        variables.push(variable);
+    }
 }
 
 /// Infer optional environment variables from the Skill instructions.
@@ -369,6 +391,7 @@ pub fn infer_environment_variables(skill_md_path: &Path) -> Vec<SkillEnvironment
         Err(_) => return Vec::new(),
     };
     let mut names = Vec::new();
+    let mut defaults = HashMap::new();
     let mut section_lines = Vec::new();
     let mut environment_heading_level: Option<usize> = None;
     for line in markdown_body(&content).lines() {
@@ -377,6 +400,7 @@ pub fn infer_environment_variables(skill_md_path: &Path) -> Vec<SkillEnvironment
                 &section_lines,
                 environment_heading_level.is_some(),
                 &mut names,
+                &mut defaults,
             );
             section_lines.clear();
             if environment_heading_level.is_some_and(|active| level <= active) {
@@ -393,6 +417,7 @@ pub fn infer_environment_variables(skill_md_path: &Path) -> Vec<SkillEnvironment
         &section_lines,
         environment_heading_level.is_some(),
         &mut names,
+        &mut defaults,
     );
 
     names
@@ -401,6 +426,7 @@ pub fn infer_environment_variables(skill_md_path: &Path) -> Vec<SkillEnvironment
         .map(|name| {
             let uppercase = name.to_ascii_uppercase();
             SkillEnvironmentVariable {
+                default_value: defaults.remove(&name).unwrap_or_default(),
                 name,
                 required: false,
                 note: String::new(),
@@ -417,6 +443,7 @@ fn collect_environment_names_from_section(
     lines: &[&str],
     is_explicit_environment_section: bool,
     names: &mut Vec<String>,
+    defaults: &mut HashMap<String, String>,
 ) {
     let mut strong_names = Vec::new();
     for line in lines {
@@ -438,6 +465,79 @@ fn collect_environment_names_from_section(
             add_environment_name(&name, names);
         }
     }
+    for line in lines {
+        collect_environment_defaults(line, defaults);
+    }
+}
+
+fn collect_environment_defaults(line: &str, defaults: &mut HashMap<String, String>) {
+    let mut remainder = line;
+    while let Some(start) = remainder.find("${") {
+        remainder = &remainder[start + 2..];
+        let Some(end) = remainder.find('}') else {
+            break;
+        };
+        let expression = &remainder[..end];
+        remainder = &remainder[end + 1..];
+        let Some((name, value)) = expression
+            .split_once(":-")
+            .or_else(|| expression.split_once(":="))
+            .or_else(|| expression.split_once('-'))
+            .or_else(|| expression.split_once('='))
+        else {
+            continue;
+        };
+        insert_environment_default(name, value, defaults);
+    }
+
+    let mut code = line;
+    while let Some(start) = code.find('`') {
+        code = &code[start + 1..];
+        let Some(end) = code.find('`') else {
+            break;
+        };
+        collect_assignment_default(code[..end].trim(), defaults);
+        code = &code[end + 1..];
+    }
+
+    let candidate = line
+        .trim()
+        .trim_start_matches(|character: char| {
+            character == '-' || character == '*' || character == '+' || character.is_whitespace()
+        })
+        .strip_prefix("export ")
+        .unwrap_or_else(|| {
+            line.trim().trim_start_matches(|character: char| {
+                character == '-'
+                    || character == '*'
+                    || character == '+'
+                    || character.is_whitespace()
+            })
+        });
+    collect_assignment_default(candidate, defaults);
+}
+
+fn collect_assignment_default(value: &str, defaults: &mut HashMap<String, String>) {
+    let Some((name, value)) = value.split_once('=') else {
+        return;
+    };
+    insert_environment_default(name.trim(), value.trim(), defaults);
+}
+
+fn insert_environment_default(name: &str, value: &str, defaults: &mut HashMap<String, String>) {
+    if !is_valid_environment_variable_name(name)
+        || name != name.to_ascii_uppercase()
+        || is_standard_environment_variable(name)
+    {
+        return;
+    }
+    let value = yaml_scalar(value)
+        .trim_end_matches(|character: char| character == ',' || character == ';')
+        .to_string();
+    if value.is_empty() || value.starts_with("$(") {
+        return;
+    }
+    defaults.entry(name.to_string()).or_insert(value);
 }
 
 fn markdown_body(content: &str) -> &str {
@@ -825,10 +925,10 @@ name: web-collector
 dependencies:
   environment_variables:
     - name: OPENAI_API_KEY
+      default: sk-example
       required: true
       note: "API access"
-    - name: CACHE_DIR
-      required: false
+    CACHE_DIR: /tmp/web-collector-cache
 ---
 # Web Collector
 "#,
@@ -844,6 +944,7 @@ dependencies:
             vec![
                 SkillEnvironmentVariable {
                     name: "OPENAI_API_KEY".to_string(),
+                    default_value: "sk-example".to_string(),
                     required: true,
                     note: "API access".to_string(),
                     secret: true,
@@ -851,6 +952,7 @@ dependencies:
                 },
                 SkillEnvironmentVariable {
                     name: "CACHE_DIR".to_string(),
+                    default_value: "/tmp/web-collector-cache".to_string(),
                     required: false,
                     note: String::new(),
                     secret: false,
@@ -907,6 +1009,24 @@ name: self-improving-agent
         );
         assert!(variables.iter().all(|variable| variable.inferred));
         assert!(!variables.iter().any(|variable| variable.name == "SINGLE"));
+        assert_eq!(
+            variables
+                .iter()
+                .find(|variable| variable.name == "SELF_IMPROVEMENT_SCOPE")
+                .map(|variable| variable.default_value.as_str()),
+            Some("project")
+        );
+        assert_eq!(
+            variables
+                .iter()
+                .find(|variable| variable.name == "AGENTS_HOME")
+                .map(|variable| variable.default_value.as_str()),
+            Some("$HOME/.agents")
+        );
+        assert!(variables
+            .iter()
+            .find(|variable| variable.name == "SELF_IMPROVEMENT_HOME")
+            .is_some_and(|variable| variable.default_value.is_empty()));
     }
 
     #[test]
@@ -934,6 +1054,7 @@ metadata:
             skills[0].manifest.environment_variables,
             vec![SkillEnvironmentVariable {
                 name: "SERVICE_API_KEY".to_string(),
+                default_value: String::new(),
                 required: true,
                 note: String::new(),
                 secret: true,

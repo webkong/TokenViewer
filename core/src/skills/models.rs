@@ -127,6 +127,8 @@ pub struct SkillManifest {
 pub struct SkillEnvironmentVariable {
     pub name: String,
     #[serde(default)]
+    pub default_value: String,
+    #[serde(default)]
     pub required: bool,
     #[serde(default)]
     pub note: String,

@@ -38,6 +38,7 @@ struct SkillManifest: Codable, Hashable, Sendable {
 
 struct SkillEnvironmentVariable: Codable, Hashable, Sendable, Identifiable {
     let name: String
+    let defaultValue: String
     let required: Bool
     let note: String
     let secret: Bool
@@ -45,8 +46,16 @@ struct SkillEnvironmentVariable: Codable, Hashable, Sendable, Identifiable {
 
     var id: String { name }
 
-    init(name: String, required: Bool, note: String, secret: Bool, inferred: Bool) {
+    init(
+        name: String,
+        defaultValue: String = "",
+        required: Bool,
+        note: String,
+        secret: Bool,
+        inferred: Bool
+    ) {
         self.name = name
+        self.defaultValue = defaultValue
         self.required = required
         self.note = note
         self.secret = secret
@@ -56,6 +65,7 @@ struct SkillEnvironmentVariable: Codable, Hashable, Sendable, Identifiable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)
+        defaultValue = try container.decodeIfPresent(String.self, forKey: .defaultValue) ?? ""
         required = try container.decodeIfPresent(Bool.self, forKey: .required) ?? false
         note = try container.decodeIfPresent(String.self, forKey: .note) ?? ""
         secret = try container.decodeIfPresent(Bool.self, forKey: .secret) ?? false
