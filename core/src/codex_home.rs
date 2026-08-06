@@ -141,6 +141,16 @@ pub fn discover_codex_homes(
             false,
         );
     }
+
+    // Host apps can create a new isolated CODEX_HOME at any time. Keep this
+    // known, narrow root out of the 24-hour broad-scan cache so the next sync
+    // sees newly-created Antigravity instances immediately.
+    scan_for_codex_homes(
+        &home.join(".antigravity_cockpit/instances/codex"),
+        2,
+        &mut candidates,
+    );
+
     for path in cached {
         add_candidate(
             &mut candidates,
@@ -426,6 +436,26 @@ mod tests {
         let homes = discover_codex_homes(dir.path(), &[missing.clone()], &[], false);
         assert!(homes.iter().any(|item| {
             item.path == missing.to_string_lossy() && item.is_user_configured && !item.exists
+        }));
+    }
+
+    #[test]
+    fn discovers_new_antigravity_instance_without_broad_scan() {
+        let dir = TempDir::new().unwrap();
+        let instance = dir
+            .path()
+            .join(".antigravity_cockpit/instances/codex/new-instance");
+        fs::create_dir_all(instance.join("sessions/2026/08/06")).unwrap();
+        fs::write(instance.join("config.toml"), "model = 'test'").unwrap();
+
+        let homes = discover_codex_homes(dir.path(), &[], &[], false);
+        let expected_path = normalize_path(&instance);
+
+        assert!(homes.iter().any(|item| {
+            item.path == expected_path
+                && item.exists
+                && item.has_sessions
+                && item.source == CodexHomeSource::Discovered
         }));
     }
 }
