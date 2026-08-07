@@ -11,6 +11,7 @@ pub struct SyncResult {
 }
 
 pub fn sync_all(db: &Database, home_dir: &Path) -> SyncResult {
+    let mut errors = Vec::new();
     let mut cursors = HashMap::new();
     for source in parsers::all_parser_sources() {
         if let Ok(Some(c)) = db.get_cursor(source) {
@@ -19,11 +20,14 @@ pub fn sync_all(db: &Database, home_dir: &Path) -> SyncResult {
     }
 
     let codex_homes = crate::codex_home::discover_with_database(db, home_dir, false);
+    let model_aliases = parsers::codex::unambiguous_model_aliases(&codex_homes);
+    if let Err(error) = db.remap_usage_models("codex", &model_aliases) {
+        errors.push(format!("codex: model alias migration failed: {error}"));
+    }
     let results = parsers::parse_all_with_codex_homes(home_dir, &cursors, &codex_homes);
 
     let mut providers_synced = 0u32;
     let mut records_added = 0u32;
-    let mut errors = Vec::new();
 
     for result in results {
         if result.records.is_empty() {
