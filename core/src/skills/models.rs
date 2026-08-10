@@ -14,6 +14,8 @@ pub struct SkillInstallRequest {
     #[serde(default)]
     pub git_url: Option<String>,
     #[serde(default)]
+    pub github_token: Option<String>,
+    #[serde(default)]
     pub replace_existing: bool,
     #[serde(default, alias = "selected_skill_i_ds")]
     pub selected_skill_ids: Vec<String>,

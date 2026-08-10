@@ -84,6 +84,40 @@ impl SymlinkManager {
         }
     }
 
+    /// Rebuild a SingleFile provider from the skills that remain linked to it.
+    pub fn rebuild_single_file(
+        &self,
+        agent: &ProviderSkillsConfig,
+        skill_ids: &[String],
+    ) -> Result<(), String> {
+        if agent.link_type != LinkType::SingleFile {
+            return Err(format!(
+                "Provider {} is not a SingleFile provider",
+                agent.source
+            ));
+        }
+        let target = expand_path(&agent.skills_path)?;
+        if skill_ids.is_empty() {
+            if target.is_symlink() || target.is_file() {
+                fs::remove_file(&target).map_err(|e| {
+                    format!("Failed to remove single file {}: {}", target.display(), e)
+                })?;
+            }
+            return Ok(());
+        }
+
+        let sources = skill_ids
+            .iter()
+            .map(|skill_id| self.source_root.join(skill_id))
+            .collect::<Vec<_>>();
+        for source in &sources {
+            if !source.is_dir() {
+                return Err(format!("Skill source does not exist: {}", source.display()));
+            }
+        }
+        self.write_single_file(&sources, &target)
+    }
+
     /// Remove all symlinks for an agent (all linked skills).
     pub fn remove_all_links(&self, agent: &ProviderSkillsConfig) -> Result<(), String> {
         let skill_ids: Vec<String> = agent.linked_skills.clone();
@@ -151,17 +185,23 @@ impl SymlinkManager {
 
     /// SingleFile strategy: merge all SKILL.md files into one.
     fn link_single_file(&self, source: &Path, target: &Path) -> Result<(), String> {
+        self.write_single_file(&[source.to_path_buf()], target)
+    }
+
+    fn write_single_file(&self, sources: &[PathBuf], target: &Path) -> Result<(), String> {
         let mut content = String::new();
 
-        for entry in walkdir::WalkDir::new(source)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            if entry.file_name() == "SKILL.md" {
-                let file_content = fs::read_to_string(entry.path())
-                    .map_err(|e| format!("Failed to read {}: {}", entry.path().display(), e))?;
-                content.push_str(&file_content);
-                content.push_str("\n\n---\n\n");
+        for source in sources {
+            for entry in walkdir::WalkDir::new(source)
+                .into_iter()
+                .filter_map(|e| e.ok())
+            {
+                if entry.file_name() == "SKILL.md" {
+                    let file_content = fs::read_to_string(entry.path())
+                        .map_err(|e| format!("Failed to read {}: {}", entry.path().display(), e))?;
+                    content.push_str(&file_content);
+                    content.push_str("\n\n---\n\n");
+                }
             }
         }
 
@@ -673,7 +713,10 @@ mod tests {
 
         let organized = manager.organize_all(&[agent], &scanner).unwrap();
 
-        assert_eq!(organized, vec![("formatter".to_string(), "some-agent".to_string())]);
+        assert_eq!(
+            organized,
+            vec![("formatter".to_string(), "some-agent".to_string())]
+        );
         let shared_skill = source_root.join("formatter");
         assert!(shared_skill.exists());
         assert!(nested_skill.is_symlink());

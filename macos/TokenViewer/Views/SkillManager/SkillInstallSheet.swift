@@ -273,6 +273,7 @@ struct SkillInstallPayload: Codable {
     let sourceType: SkillInstallSourceType
     let path: String
     let gitURL: String
+    let githubToken: String?
     let replaceExisting: Bool
     let selectedSkillIDs: [String]
 
@@ -280,6 +281,7 @@ struct SkillInstallPayload: Codable {
         case sourceType = "source_type"
         case path
         case gitURL = "git_url"
+        case githubToken = "github_token"
         case replaceExisting = "replace_existing"
         case selectedSkillIDs = "selected_skill_ids"
     }

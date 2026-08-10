@@ -145,10 +145,22 @@ final class SkillManagerViewModel: ObservableObject {
         installSuccessMessage = nil
         installIsInstalling = true
 
+        let githubToken: String? = {
+            guard installSourceType == .git,
+                  UserDefaults.standard.bool(forKey: "syncTokenSaved_github")
+            else { return nil }
+            guard let token = KeychainManager.shared.getToken(for: "github")?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !token.isEmpty
+            else { return nil }
+            return token
+        }()
+
         let request = SkillInstallPayload(
             sourceType: installSourceType,
             path: installSelectedPath.trimmingCharacters(in: .whitespacesAndNewlines),
             gitURL: installGitURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            githubToken: githubToken,
             replaceExisting: installReplaceExisting,
             selectedSkillIDs: Array(installSelectedSkillIDs).sorted()
         )

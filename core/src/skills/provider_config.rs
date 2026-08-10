@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -210,6 +210,40 @@ impl ProviderSkillsRegistry {
             }
         }
         self.persist_linked_skills(&linked)
+    }
+
+    /// Remove a deleted skill from every persisted provider association.
+    pub fn unlink_skill_from_all(&mut self, skill_id: &str) -> Result<(), String> {
+        self.unlink_skills_from_all(&HashSet::from([skill_id.to_string()]))
+    }
+
+    /// Remove deleted skills from every persisted provider association in one read/write pass.
+    pub fn unlink_skills_from_all(&mut self, skill_ids: &HashSet<String>) -> Result<(), String> {
+        if skill_ids.is_empty() {
+            return Ok(());
+        }
+        let mut linked = self.load_linked_skills();
+        let linked_changed = linked
+            .values()
+            .any(|linked_ids| linked_ids.iter().any(|id| skill_ids.contains(id)));
+        if linked_changed {
+            linked.retain(|_, linked_ids| {
+                linked_ids.retain(|id| !skill_ids.contains(id));
+                !linked_ids.is_empty()
+            });
+            self.persist_linked_skills(&linked)?;
+        }
+
+        let mut overrides_changed = false;
+        for overrides in self.overrides.values_mut() {
+            let previous_len = overrides.linked_skills.len();
+            overrides.linked_skills.retain(|id| !skill_ids.contains(id));
+            overrides_changed |= overrides.linked_skills.len() != previous_len;
+        }
+        if overrides_changed {
+            self.persist_overrides()?;
+        }
+        Ok(())
     }
 
     /// Check if a skill is linked to a provider.
