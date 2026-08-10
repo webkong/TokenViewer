@@ -151,6 +151,102 @@ mod tests {
         assert!(core.git.is_some());
         assert!(source_root.join(".git").exists());
     }
+
+    #[test]
+    fn delete_skill_cleans_links_and_install_metadata() {
+        let dir = TempDir::new().unwrap();
+        let source_root = dir.path().join("shared-skills");
+        let agent_skills = dir.path().join("agent-skills");
+        let config_dir = dir.path().join(".agents");
+        let install_source = dir.path().join("install-source");
+        for skill_id in ["delete-me", "keep-me"] {
+            let skill_dir = install_source.join(skill_id);
+            fs::create_dir_all(&skill_dir).unwrap();
+            fs::write(skill_dir.join("SKILL.md"), format!("# {}\n", skill_id)).unwrap();
+        }
+
+        let mut core = test_core_for_agent(
+            source_root.clone(),
+            "cursor",
+            agent_skills.clone(),
+            config_dir,
+        );
+        core.install_skills(SkillInstallRequest {
+            source_type: "folder".to_string(),
+            path: Some(install_source.to_string_lossy().to_string()),
+            git_url: None,
+            github_token: None,
+            replace_existing: false,
+            selected_skill_ids: vec!["delete-me".to_string(), "keep-me".to_string()],
+        })
+        .unwrap();
+
+        let agent = core.registry.find("cursor").unwrap();
+        core.symlink.create_skill_link(&agent, "delete-me").unwrap();
+        core.registry.link_skill("cursor", "delete-me").unwrap();
+        assert!(agent_skills.join("delete-me").is_symlink());
+
+        core.delete_skill("delete-me").unwrap();
+
+        assert!(!source_root.join("delete-me").exists());
+        assert!(source_root.join("keep-me").exists());
+        assert!(!agent_skills.join("delete-me").is_symlink());
+        assert!(!core.registry.is_skill_linked("cursor", "delete-me"));
+        let metadata = fs::read_to_string(dir.path().join(".tokenviewer/install.json")).unwrap();
+        let metadata: serde_json::Value = serde_json::from_str(&metadata).unwrap();
+        assert!(metadata["skills"].get("delete-me").is_none());
+        assert!(metadata["skills"].get("keep-me").is_some());
+
+        let error = core.delete_skill("delete-me").unwrap_err();
+        assert!(error.contains("Skill not found"));
+
+        let agent = core.registry.find("cursor").unwrap();
+        core.symlink.create_skill_link(&agent, "keep-me").unwrap();
+        core.registry.link_skill("cursor", "keep-me").unwrap();
+        fs::remove_dir_all(source_root.join("keep-me")).unwrap();
+        core.cleanup_missing_skill_metadata().unwrap();
+        assert!(agent_skills.join("keep-me").is_symlink());
+        assert!(core.registry.is_skill_linked("cursor", "keep-me"));
+        assert!(!dir.path().join(".tokenviewer/install.json").exists());
+    }
+
+    #[test]
+    fn delete_skill_rebuilds_single_file_with_remaining_skills() {
+        let dir = TempDir::new().unwrap();
+        let source_root = dir.path().join("shared-skills");
+        let merged_file = dir.path().join("AGENT.md");
+        let config_dir = dir.path().join(".agents");
+        for (skill_id, content) in [("delete-me", "Delete me"), ("keep-me", "Keep me")] {
+            let skill_dir = source_root.join(skill_id);
+            fs::create_dir_all(&skill_dir).unwrap();
+            fs::write(skill_dir.join("SKILL.md"), content).unwrap();
+        }
+
+        let mut core = test_core_for_agent(
+            source_root.clone(),
+            "cursor",
+            merged_file.clone(),
+            config_dir,
+        );
+        core.registry
+            .set_override("cursor", None, Some(self::models::LinkType::SingleFile))
+            .unwrap();
+        for skill_id in ["delete-me", "keep-me"] {
+            core.registry.link_skill("cursor", skill_id).unwrap();
+        }
+        let agent = core.registry.find("cursor").unwrap();
+        core.symlink
+            .rebuild_single_file(&agent, &agent.linked_skills)
+            .unwrap();
+
+        core.delete_skill("delete-me").unwrap();
+
+        let content = fs::read_to_string(&merged_file).unwrap();
+        assert!(!content.contains("Delete me"));
+        assert!(content.contains("Keep me"));
+        assert!(core.registry.is_skill_linked("cursor", "keep-me"));
+        assert!(!core.registry.is_skill_linked("cursor", "delete-me"));
+    }
 }
 
 impl SkillsCore {
@@ -171,7 +267,7 @@ impl SkillsCore {
             .map(|skill| skill.id)
             .collect();
 
-        Ok(Self {
+        let mut core = Self {
             registry,
             scanner,
             symlink,
@@ -186,7 +282,11 @@ impl SkillsCore {
             git_branch: "main".to_string(),
             git_user_name: None,
             git_user_email: None,
-        })
+        };
+        if let Err(error) = core.cleanup_missing_skill_metadata() {
+            eprintln!("Failed to clean stale Skill metadata: {}", error);
+        }
+        Ok(core)
     }
 
     pub fn ensure_git_initialized(&mut self) -> Result<(), String> {
@@ -208,13 +308,80 @@ impl SkillsCore {
         Ok(())
     }
 
-    pub fn delete_skill(&self, skill_id: &str) -> Result<(), String> {
+    pub fn delete_skill(&mut self, skill_id: &str) -> Result<(), String> {
         let path = self.source_root.join(skill_id);
-        if !path.exists() {
+        if !path.exists() && !path.is_symlink() {
             return Err(format!("Skill not found: {}", path.display()));
         }
-        std::fs::remove_dir_all(&path)
-            .map_err(|e| format!("Failed to delete skill {}: {}", path.display(), e))?;
+        let linked_agents = self
+            .registry
+            .all()
+            .into_iter()
+            .filter(|agent| agent.linked_skills.iter().any(|id| id == skill_id))
+            .collect::<Vec<_>>();
+        for agent in &linked_agents {
+            if agent.link_type == self::models::LinkType::SingleFile {
+                let remaining = agent
+                    .linked_skills
+                    .iter()
+                    .filter(|id| id.as_str() != skill_id)
+                    .cloned()
+                    .collect::<Vec<_>>();
+                self.symlink.rebuild_single_file(agent, &remaining)?;
+            } else {
+                self.symlink.remove_skill_link(agent, skill_id)?;
+            }
+        }
+
+        if path.is_symlink() {
+            std::fs::remove_file(&path)
+                .map_err(|e| format!("Failed to delete skill {}: {}", path.display(), e))?;
+        } else if path.exists() {
+            std::fs::remove_dir_all(&path)
+                .map_err(|e| format!("Failed to delete skill {}: {}", path.display(), e))?;
+        }
+
+        self.registry.unlink_skill_from_all(skill_id)?;
+        SkillInstaller::new(self.source_root.clone(), self.config_dir.clone())
+            .remove_install_record(skill_id)?;
+        self.known_skill_ids.remove(skill_id);
+        Ok(())
+    }
+
+    fn cleanup_missing_skill_metadata(&mut self) -> Result<(), String> {
+        if !self.source_root.is_dir() {
+            eprintln!(
+                "Skipped stale Skill metadata cleanup because source root is unavailable: {}",
+                self.source_root.display()
+            );
+            return Ok(());
+        }
+
+        // A missing source directory can be transient (for example during migration or when the
+        // library lives on a temporarily unavailable volume). Keep provider associations and
+        // generated SingleFile content intact; only install records whose recorded destination is
+        // definitely absent are safe to prune here.
+        for agent in self.registry.all() {
+            for skill_id in &agent.linked_skills {
+                let source = self.source_root.join(skill_id);
+                if !source.exists() {
+                    eprintln!(
+                        "Preserved linked Skill metadata for missing source {} (provider {})",
+                        source.display(),
+                        agent.source
+                    );
+                }
+            }
+        }
+
+        let installer = SkillInstaller::new(self.source_root.clone(), self.config_dir.clone());
+        for skill_id in installer.prune_missing_install_records()? {
+            self.known_skill_ids.remove(&skill_id);
+            eprintln!(
+                "Removed stale Skill install record for missing destination: {}",
+                skill_id
+            );
+        }
         Ok(())
     }
 
