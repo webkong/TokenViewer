@@ -63,7 +63,7 @@ fn parse_claude_line(v: &Value, source: &str) -> Option<UsageRecord> {
         cache_creation_input_tokens: cache_creation,
         reasoning_output_tokens: 0,
         total_tokens: total,
-        conversation_count: 0, // set by caller from user-turn count
+        conversation_count: 0, // usage rows never carry the turn count; user prompts are counted separately
     })
 }
 
@@ -112,30 +112,70 @@ pub fn parse_claude_format(
         // the reference implementation.
         let is_main = !key.contains("/subagents/");
         let offset = cursor.get_offset(&key);
-        let (lines, new_offset) = match read_lines_from_offset(&file, offset) {
+        let reader = match OffsetLineReader::new(&file, offset) {
             Ok(r) => r,
             Err(_) => continue,
         };
+        let mut new_offset = offset;
+        // User prompts can arrive at the end of one sync and their assistant
+        // usage in the next. Keep their time buckets pending until a real model
+        // is present instead of assigning them to the previous model.
+        let mut pending_conversation_buckets = cursor
+            .pending_conversation_buckets
+            .remove(&key)
+            .unwrap_or_default();
+        let mut last_model = cursor
+            .last_models
+            .get(&key)
+            .cloned()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| String::from("claude-unknown"));
 
-        // Accumulate user-typed turns and attribute them to the next assistant
-        // usage record (so conv counts land on a real model bucket, not a synthetic
-        // one). One user prompt typically triggers several assistant messages; only
-        // the first carries the turn count, the rest carry 0 — so conv ≈ #prompts.
-        let mut pending_convs: u32 = 0;
-        for line in &lines {
-            let v: serde_json::Value = match serde_json::from_str(line) {
+        for (line, line_offset) in reader {
+            new_offset = line_offset;
+
+            // Cheap substring pre-filters before any JSON parse: a line either
+            // carries token usage (must contain "usage") or is a user prompt we
+            // count as a conversation (must be a compact `type:"user"` line).
+            let has_usage = line.contains("\"usage\"");
+            let is_user_line = is_main
+                && (line.contains("\"type\":\"user\"") || line.contains("\"type\": \"user\""));
+            if !has_usage && !is_user_line {
+                continue;
+            }
+
+            let v: serde_json::Value = match serde_json::from_str(&line) {
                 Ok(v) => v,
                 Err(_) => continue,
             };
 
-            // Count real user prompts as conversation turns.
+            // Queue real user prompts, deduped by uuid. The following assistant
+            // usage record supplies the model, even when it arrives in a later
+            // incremental sync.
             if is_main
                 && v.get("type").and_then(|t| t.as_str()) == Some("user")
                 && claude_user_has_text(&v)
             {
-                pending_convs += 1;
+                let uuid = v.get("uuid").and_then(|u| u.as_str()).unwrap_or("");
+                if !uuid.is_empty() {
+                    let user_key = format!("u:{uuid}");
+                    if !cursor.mark_seen(&user_key) {
+                        continue;
+                    }
+                }
+                let hour_start = v
+                    .get("timestamp")
+                    .and_then(|t| t.as_str())
+                    .filter(|s| !s.is_empty())
+                    .map(iso_to_bucket)
+                    .unwrap_or_else(|| file_mtime_bucket(&file));
+                pending_conversation_buckets.push(hour_start);
+                continue;
             }
 
+            if !has_usage {
+                continue;
+            }
             if v.pointer("/message/usage").is_none() && v.get("usage").is_none() {
                 continue;
             }
@@ -155,13 +195,35 @@ pub fn parse_claude_format(
                     continue;
                 }
             }
-            if let Some(mut record) = parse_claude_line(&v, source) {
-                record.conversation_count = pending_convs;
-                pending_convs = 0;
+            if let Some(record) = parse_claude_line(&v, source) {
+                if !record.model.is_empty() && record.model != "claude-unknown" {
+                    last_model = record.model.clone();
+                    for hour_start in pending_conversation_buckets.drain(..) {
+                        all_records.push(UsageRecord {
+                            id: None,
+                            hour_start,
+                            source: source.to_string(),
+                            model: record.model.clone(),
+                            input_tokens: 0,
+                            output_tokens: 0,
+                            cached_input_tokens: 0,
+                            cache_creation_input_tokens: 0,
+                            reasoning_output_tokens: 0,
+                            total_tokens: 0,
+                            conversation_count: 1,
+                        });
+                    }
+                }
                 all_records.push(record);
             }
         }
         cursor.set_offset(&key, new_offset);
+        cursor.last_models.insert(key.clone(), last_model);
+        if !pending_conversation_buckets.is_empty() {
+            cursor
+                .pending_conversation_buckets
+                .insert(key, pending_conversation_buckets);
+        }
     }
 
     let aggregated = aggregate_records(all_records);

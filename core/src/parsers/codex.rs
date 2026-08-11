@@ -135,26 +135,30 @@ fn scan_codex_bases(
             .get(&logical_key)
             .cloned()
             .unwrap_or_default();
-        let (lines, new_offset) = match read_lines_from_offset(&file, start_offset) {
+        let reader = match OffsetLineReader::new(&file, start_offset) {
             Ok(r) => r,
             Err(_) => continue,
         };
-        if lines.is_empty() {
-            cursor.offsets.insert(logical_key.clone(), new_offset);
-            if !last_model.is_empty() {
-                cursor.last_models.insert(logical_key.clone(), last_model);
-            }
-            if !last_provider.is_empty() {
-                cursor
-                    .last_providers
-                    .insert(logical_key.clone(), last_provider);
-            }
-            continue;
-        }
+        let mut new_offset = start_offset;
         let bucket = file_mtime_bucket(&file);
 
-        for line in &lines {
-            let v: Value = match serde_json::from_str(line) {
+        for (line, line_offset) in reader {
+            new_offset = line_offset;
+
+            // Cheap substring pre-filter before any JSON parse. The loop body
+            // only reacts to session_meta / turn_context / thread_settings /
+            // task_started / token_count events; any line that can match one of
+            // those branches necessarily contains its literal type name.
+            if !line.contains("token_count")
+                && !line.contains("turn_context")
+                && !line.contains("session_meta")
+                && !line.contains("thread_settings")
+                && !line.contains("task_started")
+            {
+                continue;
+            }
+
+            let v: Value = match serde_json::from_str(&line) {
                 Ok(v) => v,
                 Err(_) => continue,
             };

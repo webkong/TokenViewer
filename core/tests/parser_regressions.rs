@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use rusqlite::Connection;
 use tokenviewer_core::codex_home::{CodexHome, CodexHomeSource};
 use tokenviewer_core::parsers::utils::FileCursor;
-use tokenviewer_core::parsers::{codex, kiro, parse_all, workbuddy};
+use tokenviewer_core::parsers::{claude, codex, kiro, parse_all, workbuddy};
 use tokenviewer_core::storage::Database;
 use tokenviewer_core::sync::sync_all;
 
@@ -404,6 +404,50 @@ fn codex_incremental_sync_keeps_model_context() {
     assert_eq!(second_records.len(), 1);
     assert_eq!(second_records[0].model, "gpt-4.1");
     assert_ne!(second_records[0].model, "unknown");
+}
+
+#[test]
+fn claude_pending_conversation_uses_following_model_across_syncs() {
+    let home = temp_home();
+    let file = home.join(".claude/projects/project-a/session.jsonl");
+    let sonnet_usage = r#"{"type":"assistant","timestamp":"2026-01-01T00:01:00Z","message":{"id":"msg-sonnet","model":"claude-sonnet-4.6","usage":{"input_tokens":10,"output_tokens":5}}}"#;
+    let user_prompt = r#"{"type":"user","uuid":"user-opus","timestamp":"2026-01-01T00:02:00Z","message":{"content":[{"type":"text","text":"switch model"}]}}"#;
+    let opus_usage = r#"{"type":"assistant","timestamp":"2026-01-01T00:03:00Z","message":{"id":"msg-opus","model":"claude-opus-4.6","usage":{"input_tokens":12,"output_tokens":6}}}"#;
+
+    write_text(&file, sonnet_usage);
+    let (_, first_cursor) = claude::parse(&home, None).expect("initial Claude parse");
+
+    write_text(&file, &format!("{sonnet_usage}\n{user_prompt}"));
+    let mut cursor = FileCursor::from_json(Some(&first_cursor));
+    cursor.mtimes.clear();
+    let (prompt_records, second_cursor) =
+        claude::parse(&home, Some(&cursor.to_json())).expect("prompt-only Claude parse");
+    assert!(prompt_records.is_empty());
+    assert_eq!(
+        FileCursor::from_json(Some(&second_cursor))
+            .pending_conversation_buckets
+            .values()
+            .map(Vec::len)
+            .sum::<usize>(),
+        1
+    );
+
+    write_text(
+        &file,
+        &format!("{sonnet_usage}\n{user_prompt}\n{opus_usage}"),
+    );
+    let mut cursor = FileCursor::from_json(Some(&second_cursor));
+    cursor.mtimes.clear();
+    let (records, final_cursor) =
+        claude::parse(&home, Some(&cursor.to_json())).expect("assistant Claude parse");
+
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].model, "claude-opus-4.6");
+    assert_eq!(records[0].conversation_count, 1);
+    assert_eq!(records[0].total_tokens, 18);
+    assert!(FileCursor::from_json(Some(&final_cursor))
+        .pending_conversation_buckets
+        .is_empty());
 }
 
 #[test]
