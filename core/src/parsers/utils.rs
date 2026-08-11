@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -115,9 +115,15 @@ pub struct FileCursor {
     /// Used by cumulative-total sources to emit only the delta each sync.
     #[serde(default)]
     pub snapshots: HashMap<String, [u64; 5]>,
-    /// Per-key seen IDs for dedup (capped).
+    /// Per-key seen IDs for dedup (capped). Kept as a Vec to preserve insertion
+    /// order for oldest-first eviction; `seen_set` mirrors it for O(1) lookup.
     #[serde(default)]
     pub seen_ids: Vec<String>,
+    /// O(1) membership mirror of `seen_ids`. Not serialized — rebuilt lazily
+    /// from `seen_ids` on first `mark_seen` after deserialization.
+    #[serde(skip)]
+    #[serde(default)]
+    seen_set: HashSet<String>,
     /// Per-file last mtime stamp for skip-if-unchanged optimization.
     #[serde(default)]
     pub mtimes: HashMap<String, u64>,
@@ -133,6 +139,10 @@ pub struct FileCursor {
     /// metadata across incremental reads.
     #[serde(default)]
     pub last_providers: HashMap<String, String>,
+    /// Claude user-prompt buckets waiting for the following assistant usage
+    /// record to provide the actual model. Persisted across incremental syncs.
+    #[serde(default)]
+    pub pending_conversation_buckets: HashMap<String, Vec<String>>,
     /// Codex fork rollouts replay the parent session before the first new turn.
     /// Maps rollout logical key -> child session UUID while that replay prefix
     /// is still being consumed.
@@ -210,14 +220,22 @@ impl FileCursor {
     }
 
     /// Returns true if id was newly inserted (not seen before). Caps at 50k.
+    /// Membership is O(1) via a lazily-rebuilt `HashSet`; insertion order is
+    /// kept in `seen_ids` so eviction still drops the oldest entries.
     pub fn mark_seen(&mut self, id: &str) -> bool {
-        if self.seen_ids.iter().any(|s| s == id) {
+        if self.seen_set.len() != self.seen_ids.len() {
+            // Freshly deserialized cursor: rebuild the set from the Vec.
+            self.seen_set = self.seen_ids.iter().cloned().collect();
+        }
+        if !self.seen_set.insert(id.to_string()) {
             return false;
         }
         self.seen_ids.push(id.to_string());
         if self.seen_ids.len() > 50_000 {
             let drop = self.seen_ids.len() - 50_000;
-            self.seen_ids.drain(0..drop);
+            for evicted in self.seen_ids.drain(0..drop) {
+                self.seen_set.remove(&evicted);
+            }
         }
         true
     }
@@ -289,6 +307,48 @@ pub fn read_lines_from_offset(path: &Path, offset: u64) -> std::io::Result<(Vec<
         }
     }
     Ok((lines, current_offset))
+}
+
+/// Streaming line reader starting at a byte offset. Yields `(line, new_offset)`
+/// pairs without materializing the whole file in memory — callers keep only
+/// their aggregated state plus the final offset. Empty lines are skipped.
+pub struct OffsetLineReader {
+    reader: BufReader<File>,
+    offset: u64,
+    line: String,
+}
+
+impl OffsetLineReader {
+    pub fn new(path: &Path, offset: u64) -> std::io::Result<Self> {
+        let file = File::open(path)?;
+        let mut reader = BufReader::new(file);
+        reader.seek(SeekFrom::Start(offset))?;
+        Ok(Self {
+            reader,
+            offset,
+            line: String::new(),
+        })
+    }
+}
+
+impl Iterator for OffsetLineReader {
+    type Item = (String, u64);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            self.line.clear();
+            let bytes_read = match self.reader.read_line(&mut self.line) {
+                Ok(0) => return None,
+                Ok(n) => n,
+                Err(_) => return None,
+            };
+            self.offset += bytes_read as u64;
+            let trimmed = self.line.trim();
+            if !trimmed.is_empty() {
+                return Some((trimmed.to_string(), self.offset));
+            }
+        }
+    }
 }
 
 /// Aggregate records by (hour_start, source, model) key.
