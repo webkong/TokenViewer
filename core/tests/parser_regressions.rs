@@ -407,6 +407,50 @@ fn codex_incremental_sync_keeps_model_context() {
 }
 
 #[test]
+fn codex_fork_replay_is_skipped_across_incremental_sync() {
+    let home = temp_home();
+    let file = home.join(
+        ".codex/sessions/2026/08/11/rollout-2026-08-11T00-00-00-019f0000-0200-7000-8000-000000000000.jsonl",
+    );
+    let replay = concat!(
+        "{\"timestamp\":\"2026-08-11T00:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"session_id\":\"019f0000-0200-7000-8000-000000000000\",\"forked_from_id\":\"019f0000-0100-7000-8000-000000000000\",\"model_provider\":\"openai\",\"model\":\"gpt-test\"}}\n",
+        "{\"timestamp\":\"2026-08-11T00:00:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"019f0000-0101-7000-8000-000000000000\"}}\n",
+        "{\"timestamp\":\"2026-08-11T00:00:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":100,\"output_tokens\":20,\"cached_input_tokens\":80,\"cache_creation_input_tokens\":0,\"reasoning_output_tokens\":0}}}}"
+    );
+    write_text(&file, replay);
+
+    let (first_records, cursor_json) = codex::parse(&home, None).expect("fork replay parse");
+    assert!(
+        first_records.is_empty(),
+        "parent replay must not be emitted"
+    );
+    let cursor = FileCursor::from_json(Some(&cursor_json));
+    assert_eq!(cursor.codex_fork_replay_pending.len(), 1);
+
+    sleep(Duration::from_millis(1100));
+    write_text(
+        &file,
+        &format!(
+            "{}\n{}\n{}",
+            replay,
+            "{\"timestamp\":\"2026-08-11T00:01:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"019f0000-0201-7000-8000-000000000000\"}}",
+            "{\"timestamp\":\"2026-08-11T00:02:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":110,\"output_tokens\":25,\"cached_input_tokens\":88,\"cache_creation_input_tokens\":0,\"reasoning_output_tokens\":0}}}}"
+        ),
+    );
+
+    let (second_records, second_cursor) =
+        codex::parse(&home, Some(&cursor_json)).expect("new fork activity parse");
+    assert_eq!(second_records.len(), 1);
+    assert_eq!(second_records[0].input_tokens, 2);
+    assert_eq!(second_records[0].cached_input_tokens, 8);
+    assert_eq!(second_records[0].output_tokens, 5);
+    assert_eq!(second_records[0].total_tokens, 15);
+    assert!(FileCursor::from_json(Some(&second_cursor))
+        .codex_fork_replay_pending
+        .is_empty());
+}
+
+#[test]
 fn codex_isolated_home_copy_uses_rollout_identity_without_double_counting() {
     let home = temp_home();
     let default_home = home.join(".codex");
