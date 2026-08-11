@@ -117,6 +117,7 @@ struct SkillListView: View {
                 } else {
                     groups[key] = SkillListGroup(
                         id: key,
+                        linkID: containerName,
                         title: containerName,
                         skills: [skill],
                         isContainer: true
@@ -126,6 +127,7 @@ struct SkillListView: View {
                 let key = "skill::\(skill.sourceDir)"
                 groups[key] = SkillListGroup(
                     id: key,
+                    linkID: skill.id,
                     title: skill.manifest.name,
                     skills: [skill],
                     isContainer: false
@@ -149,6 +151,7 @@ struct SkillListView: View {
 
 private struct SkillListGroup: Identifiable {
     let id: String
+    let linkID: String
     let title: String
     var skills: [SkillEntry]
     let isContainer: Bool
@@ -159,43 +162,29 @@ private struct SkillDirectoryGroupView: View {
     @ObservedObject var viewModel: SkillManagerViewModel
     let horizontalPadding: CGFloat
     let onPreview: (SkillEntry) -> Void
-    @ObservedObject private var l10n = L10n.shared
-    @State private var isExpanded = true
+    @State private var isExpanded = false
 
     var body: some View {
         VStack(spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    isExpanded.toggle()
+            if let representative = group.skills.first {
+                SkillRowView(
+                    skill: representative,
+                    viewModel: viewModel,
+                    group: group,
+                    isGroupExpanded: isExpanded
+                ) {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        isExpanded.toggle()
+                    }
                 }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "folder.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.accentColor)
-                    Text(group.title)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Text(l10n.skillChildCount(group.skills.count))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                }
+                .padding(.vertical, 2)
                 .padding(.horizontal, horizontalPadding)
-                .padding(.vertical, 8)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
 
             if isExpanded {
                 VStack(spacing: 0) {
                     ForEach(Array(group.skills.enumerated()), id: \.element.id) { index, skill in
-                        SkillRowView(skill: skill, viewModel: viewModel) {
+                        SkillRowView(skill: skill, viewModel: viewModel, showsOperations: false) {
                             onPreview(skill)
                         }
                         .padding(.vertical, 2)
@@ -284,9 +273,12 @@ private struct SkillListHeader: View {
 
 // MARK: - Skill Row
 
-struct SkillRowView: View {
+private struct SkillRowView: View {
     let skill: SkillEntry
     @ObservedObject var viewModel: SkillManagerViewModel
+    var showsOperations = true
+    var group: SkillListGroup? = nil
+    var isGroupExpanded = true
     let onPreview: () -> Void
     @ObservedObject private var l10n = L10n.shared
 
@@ -296,15 +288,17 @@ struct SkillRowView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(1)
 
-            actionButtons
-                .padding(.leading, SkillListMetrics.columnInset)
-                .frame(width: SkillListMetrics.actionColumnWidth, alignment: .leading)
-                .overlay(alignment: .leading) { columnDivider }
-                .overlay(alignment: .trailing) { columnDivider }
+            if showsOperations {
+                actionButtons
+                    .padding(.leading, SkillListMetrics.columnInset)
+                    .frame(width: SkillListMetrics.actionColumnWidth, alignment: .leading)
+                    .overlay(alignment: .leading) { columnDivider }
+                    .overlay(alignment: .trailing) { columnDivider }
 
-            agentLinkTags
-                .padding(.leading, SkillListMetrics.columnInset)
-                .frame(width: SkillListMetrics.agentsColumnWidth, alignment: .leading)
+                agentLinkTags
+                    .padding(.leading, SkillListMetrics.columnInset)
+                    .frame(width: SkillListMetrics.agentsColumnWidth, alignment: .leading)
+            }
         }
         .padding(.vertical, 4)
         .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
@@ -318,6 +312,38 @@ struct SkillRowView: View {
     }
 
     private var skillInfo: some View {
+        Group {
+            if let group {
+                groupInfo(group)
+            } else {
+                individualSkillInfo
+            }
+        }
+    }
+
+    private func groupInfo(_ group: SkillListGroup) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "folder.fill")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.accentColor)
+            Text(group.title)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+            Text(l10n.skillChildCount(group.skills.count))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .rotationEffect(.degrees(isGroupExpanded ? 90 : 0))
+            Spacer()
+        }
+        .frame(maxHeight: .infinity, alignment: .center)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onPreview)
+    }
+
+    private var individualSkillInfo: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text(skill.manifest.name)
@@ -391,18 +417,18 @@ struct SkillRowView: View {
 
     private var actionButtons: some View {
         HStack(spacing: 4) {
-            if !viewModel.isInSourceRoot(skill), let sourceAgent = viewModel.sourceAgent(for: skill) {
+            if !operationIsInSourceRoot, let sourceAgent = operationSourceAgent {
                 let displayName = ProviderRegistry.shared.displayName(for: sourceAgent)
                 Button {
-                    if viewModel.isBuiltInSkill(skill) {
+                    if operationIsBuiltIn {
                         viewModel.builtInOrganizeAlert = BuiltInOrganizeAlert(
-                            skillID: skill.id,
+                            skillID: operationSkillID,
                             agentID: sourceAgent,
-                            skillName: skill.manifest.name,
+                            skillName: operationSkillName,
                             agentName: displayName
                         )
                     } else {
-                        viewModel.organize(skill: skill, agentID: sourceAgent)
+                        viewModel.organizeSkill(skillID: operationSkillID, agentID: sourceAgent)
                     }
                 } label: {
                     Image(systemName: "arrow.triangle.swap")
@@ -414,10 +440,10 @@ struct SkillRowView: View {
                 }
                 .buttonStyle(.plain)
                 .quickHelp(l10n.skillOrganizeTip(displayName))
-            } else if viewModel.isInSourceRoot(skill), let sourceAgent = viewModel.sourceAgent(for: skill) {
+            } else if operationIsInSourceRoot, let sourceAgent = operationSourceAgent {
                 let displayName = ProviderRegistry.shared.displayName(for: sourceAgent)
                 Button {
-                    viewModel.restore(skill: skill, agentID: sourceAgent)
+                    viewModel.restoreSkill(skillID: operationSkillID, agentID: sourceAgent)
                 } label: {
                     Image(systemName: "arrow.uturn.backward")
                         .font(.system(size: 11, weight: .semibold))
@@ -430,7 +456,7 @@ struct SkillRowView: View {
                 .quickHelp(l10n.skillRestoreTip(displayName))
             }
             Button(role: .destructive) {
-                viewModel.delete(skill: skill)
+                viewModel.deleteSkill(skillID: operationSkillID)
             } label: {
                 Image(systemName: "trash")
                     .font(.system(size: 11, weight: .semibold))
@@ -448,8 +474,8 @@ struct SkillRowView: View {
 
     private var agentLinkTags: some View {
         let agents = viewModel.visibleProviders
-        let activeAgentIDs = viewModel.skillAgentIDs(for: skill)
-        let linked = agents.filter { viewModel.isSkillLinked(skillID: skill.id, agentID: $0.source) }
+        let activeAgentIDs = operationAgentIDs
+        let linked = agents.filter { viewModel.isSkillLinked(skillID: operationSkillID, agentID: $0.source) }
         let active = agents.filter { activeAgentIDs.contains($0.source) && !linked.contains($0) }
         let inactive = agents.filter { !activeAgentIDs.contains($0.source) }
 
@@ -474,18 +500,18 @@ struct SkillRowView: View {
     private func agentLinkChip(agent: SkillProvider, isLinked: Bool, isSource: Bool) -> some View {
         Button {
             if isLinked {
-                viewModel.unlinkSkill(skillID: skill.id, agentID: agent.source)
-            } else if viewModel.requiresCompatibilityConfirmation(skillID: skill.id, agentID: agent.source) {
+                viewModel.unlinkSkill(skillID: operationSkillID, agentID: agent.source)
+            } else if group == nil && viewModel.requiresCompatibilityConfirmation(skillID: operationSkillID, agentID: agent.source) {
                 // Cross-agent link: the skill declares specific compatible agents
                 // and this one isn't among them. Surface a confirmation alert.
                 viewModel.compatibilityAlert = CompatibilityAlert(
-                    skillID: skill.id,
+                    skillID: operationSkillID,
                     agentID: agent.source,
-                    skillName: skill.manifest.name,
+                    skillName: operationSkillName,
                     agentName: agent.displayName
                 )
             } else {
-                viewModel.linkSkill(skillID: skill.id, agentID: agent.source)
+                viewModel.linkSkill(skillID: operationSkillID, agentID: agent.source)
             }
         } label: {
             let tint = ProviderRegistry.shared.brandColor(for: agent.source)
@@ -524,6 +550,34 @@ struct SkillRowView: View {
         if isLinked { return l10n.skillUnlinkTip(agent.displayName) }
         if isSource { return l10n.skillSourceLinkTip(agent.displayName) }
         return l10n.skillLinkTip(agent.displayName)
+    }
+
+    private var operationSkillID: String { group?.linkID ?? skill.id }
+
+    private var operationSkillName: String { group?.title ?? skill.manifest.name }
+
+    private var operationIsInSourceRoot: Bool {
+        group?.skills.allSatisfy(viewModel.isInSourceRoot) ?? viewModel.isInSourceRoot(skill)
+    }
+
+    private var operationIsBuiltIn: Bool {
+        group?.skills.contains(where: viewModel.isBuiltInSkill) ?? viewModel.isBuiltInSkill(skill)
+    }
+
+    private var operationSourceAgent: String? {
+        if let group {
+            return group.skills.lazy.compactMap(viewModel.sourceAgent).first
+        }
+        return viewModel.sourceAgent(for: skill)
+    }
+
+    private var operationAgentIDs: Set<String> {
+        if let group {
+            return group.skills.reduce(into: Set<String>()) { result, child in
+                result.formUnion(viewModel.skillAgentIDs(for: child))
+            }
+        }
+        return viewModel.skillAgentIDs(for: skill)
     }
 }
 

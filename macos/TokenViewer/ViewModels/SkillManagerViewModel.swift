@@ -328,7 +328,11 @@ final class SkillManagerViewModel: ObservableObject {
     }
 
     func delete(skill: SkillEntry) {
-        runSkillCommand(skillID: skill.id, successMessage: L10n.shared.toastDeleted, call: CoreBridge.shared.skillsDelete)
+        deleteSkill(skillID: skill.id)
+    }
+
+    func deleteSkill(skillID: String) {
+        runSkillCommand(skillID: skillID, successMessage: L10n.shared.toastDeleted, call: CoreBridge.shared.skillsDelete)
     }
 
     func organize(skill: SkillEntry, agentID: String? = nil) {
@@ -340,7 +344,11 @@ final class SkillManagerViewModel: ObservableObject {
     }
 
     func restore(skill: SkillEntry, agentID: String? = nil) {
-        runSkillCommand(skillID: skill.id, agentID: agentID, successMessage: L10n.shared.toastRestored, call: CoreBridge.shared.skillsRestore)
+        restoreSkill(skillID: skill.id, agentID: agentID)
+    }
+
+    func restoreSkill(skillID: String, agentID: String? = nil) {
+        runSkillCommand(skillID: skillID, agentID: agentID, successMessage: L10n.shared.toastRestored, call: CoreBridge.shared.skillsRestore)
     }
 
     func resetProvider(_ source: String) {

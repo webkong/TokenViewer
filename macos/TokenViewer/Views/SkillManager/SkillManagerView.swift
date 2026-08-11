@@ -17,7 +17,7 @@ struct SkillManagerView: View {
             agentFilterBar
 
             Group {
-                if viewModel.isLoading {
+                if viewModel.isLoading && viewModel.skills.isEmpty {
                     Spacer()
                     ProgressView()
                         .frame(maxWidth: .infinity)
