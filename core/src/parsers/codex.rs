@@ -1,7 +1,6 @@
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::ffi::OsString;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
@@ -24,28 +23,13 @@ pub fn parse_with_homes(
 ) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     let mut cursor = FileCursor::from_json(cursor_data);
     let mut all_records = Vec::new();
-    let shared_aliases = unambiguous_model_aliases(homes);
-    let mut session_bases: Vec<SessionBase> = homes
+    let mut session_bases: Vec<PathBuf> = homes
         .iter()
         .filter(|item| item.exists && item.has_sessions)
-        .map(|item| {
-            let home = item.path_buf();
-            let mut resolver = ModelResolver::from_home(&home);
-            resolver.add_fallbacks(&shared_aliases);
-            SessionBase {
-                path: home.join("sessions"),
-                resolver,
-            }
-        })
+        .map(|item| item.path_buf().join("sessions"))
         .collect();
     if session_bases.is_empty() {
-        let home = home_dir.join(".codex");
-        let mut resolver = ModelResolver::from_home(&home);
-        resolver.add_fallbacks(&shared_aliases);
-        session_bases.push(SessionBase {
-            path: home.join("sessions"),
-            resolver,
-        });
+        session_bases.push(home_dir.join(".codex/sessions"));
     }
     scan_codex_bases(&session_bases, &mut cursor, &mut all_records, "codex");
 
@@ -61,191 +45,8 @@ pub fn parse_codex_format(
     let base = home_dir.join(rel_dir);
     let mut cursor = FileCursor::from_json(cursor_data);
     let mut all_records = Vec::new();
-    scan_codex_bases(
-        &[SessionBase {
-            path: base,
-            resolver: ModelResolver::default(),
-        }],
-        &mut cursor,
-        &mut all_records,
-        source,
-    );
+    scan_codex_bases(&[base], &mut cursor, &mut all_records, source);
     Ok((aggregate_records(all_records), cursor.to_json()))
-}
-
-/// Return alias mappings that agree across all discovered Codex homes. These
-/// can safely relabel legacy aggregate rows that predate model resolution.
-pub fn unambiguous_model_aliases(homes: &[CodexHome]) -> HashMap<String, String> {
-    let mut targets: HashMap<String, HashSet<String>> = HashMap::new();
-    for home in homes.iter().filter(|item| item.exists) {
-        let resolver = ModelResolver::from_home(&home.path_buf());
-        for reported in resolver.aliases.keys() {
-            let resolved = resolver.resolve(reported);
-            targets
-                .entry(reported.clone())
-                .or_default()
-                .insert(resolved);
-        }
-    }
-    targets
-        .into_iter()
-        .filter_map(|(reported, resolved)| {
-            if resolved.len() == 1 {
-                resolved.into_iter().next().map(|value| (reported, value))
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-#[derive(Clone, Default)]
-struct ModelResolver {
-    /// Lower-cased reported model -> actual upstream model.
-    aliases: HashMap<String, String>,
-    conflicts: HashSet<String>,
-}
-
-impl ModelResolver {
-    fn from_home(home: &Path) -> Self {
-        let mut resolver = Self::default();
-        let Ok(entries) = fs::read_dir(home) else {
-            return resolver;
-        };
-        let mut catalogs: Vec<PathBuf> = entries
-            .flatten()
-            .filter_map(|entry| {
-                let file_type = entry.file_type().ok()?;
-                if !file_type.is_file() || file_type.is_symlink() {
-                    return None;
-                }
-                let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-                if name.ends_with("provider-model-catalog.json")
-                    || name.ends_with("model-alias-catalog.json")
-                    || name.ends_with("model-aliases.json")
-                {
-                    Some(entry.path())
-                } else {
-                    None
-                }
-            })
-            .collect();
-        catalogs.sort();
-        for catalog in catalogs {
-            resolver.load_catalog(&catalog);
-        }
-        resolver
-    }
-
-    fn load_catalog(&mut self, path: &Path) {
-        let Ok(data) = fs::read(path) else {
-            return;
-        };
-        let Ok(root) = serde_json::from_slice::<Value>(&data) else {
-            return;
-        };
-
-        for key in ["aliases", "model_aliases"] {
-            if let Some(aliases) = root.get(key).and_then(Value::as_object) {
-                for (reported, value) in aliases {
-                    let resolved = value
-                        .as_str()
-                        .or_else(|| resolved_model_from_entry(value, reported));
-                    if let Some(resolved) = resolved {
-                        self.insert(reported, resolved);
-                    }
-                }
-            }
-        }
-
-        if let Some(models) = root.get("models").and_then(Value::as_array) {
-            for entry in models {
-                let reported = ["slug", "alias", "reported_model", "id"]
-                    .into_iter()
-                    .find_map(|key| entry.get(key).and_then(Value::as_str));
-                if let Some(reported) = reported {
-                    if let Some(resolved) = resolved_model_from_entry(entry, reported) {
-                        self.insert(reported, resolved);
-                    }
-                }
-            }
-        }
-    }
-
-    fn insert(&mut self, reported: &str, resolved: &str) {
-        let reported = reported.trim();
-        let resolved = resolved.trim();
-        if reported.is_empty()
-            || reported.eq_ignore_ascii_case(resolved)
-            || !is_model_identifier(resolved)
-        {
-            return;
-        }
-        let key = reported.to_ascii_lowercase();
-        if self.conflicts.contains(&key) {
-            return;
-        }
-        if self
-            .aliases
-            .get(&key)
-            .is_some_and(|existing| !existing.eq_ignore_ascii_case(resolved))
-        {
-            self.aliases.remove(&key);
-            self.conflicts.insert(key);
-            return;
-        }
-        self.aliases.insert(key, resolved.to_string());
-    }
-
-    fn resolve(&self, reported: &str) -> String {
-        let mut value = reported.trim().to_string();
-        let mut visited = HashSet::new();
-        for _ in 0..8 {
-            let key = value.to_ascii_lowercase();
-            if !visited.insert(key.clone()) {
-                break;
-            }
-            let Some(next) = self.aliases.get(&key) else {
-                break;
-            };
-            value = next.clone();
-        }
-        value
-    }
-
-    fn add_fallbacks(&mut self, aliases: &HashMap<String, String>) {
-        for (reported, resolved) in aliases {
-            if !self.aliases.contains_key(reported) && !self.conflicts.contains(reported) {
-                self.aliases.insert(reported.clone(), resolved.clone());
-            }
-        }
-    }
-}
-
-fn resolved_model_from_entry<'a>(entry: &'a Value, reported: &str) -> Option<&'a str> {
-    [
-        "upstream_model",
-        "actual_model",
-        "resolved_model",
-        "model_id",
-        "display_name",
-        "description",
-    ]
-    .into_iter()
-    .filter_map(|key| entry.get(key).and_then(Value::as_str))
-    .find(|candidate| {
-        let candidate = candidate.trim();
-        !reported.eq_ignore_ascii_case(candidate) && is_model_identifier(candidate)
-    })
-}
-
-fn is_model_identifier(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 200
-        && value.chars().any(|ch| ch.is_ascii_alphanumeric())
-        && value
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | ':' | '/' | '@'))
 }
 
 fn model_from_value(value: &Value) -> Option<&str> {
@@ -264,63 +65,49 @@ fn model_from_value(value: &Value) -> Option<&str> {
 }
 
 fn provider_from_value(value: &Value) -> Option<&str> {
-    ["model_provider", "model_provider_id", "provider", "provider_id"]
-        .into_iter()
-        .find_map(|key| value.get(key).and_then(Value::as_str))
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-}
-
-#[derive(Clone)]
-struct SessionBase {
-    path: PathBuf,
-    resolver: ModelResolver,
-}
-
-#[derive(Clone)]
-struct RolloutCandidate {
-    path: PathBuf,
-    resolver: ModelResolver,
+    [
+        "model_provider",
+        "model_provider_id",
+        "provider",
+        "provider_id",
+    ]
+    .into_iter()
+    .find_map(|key| value.get(key).and_then(Value::as_str))
+    .map(str::trim)
+    .filter(|value| !value.is_empty())
 }
 
 /// Scan all known Codex session roots. Rollout filenames carry a globally
 /// unique session UUID, so copies and hard links from isolated host apps are
 /// grouped before parsing. The largest/newest copy wins.
 fn scan_codex_bases(
-    bases: &[SessionBase],
+    bases: &[PathBuf],
     cursor: &mut FileCursor,
     all_records: &mut Vec<UsageRecord>,
     source: &str,
 ) {
-    let mut rollouts: HashMap<OsString, RolloutCandidate> = HashMap::new();
+    let mut rollouts: HashMap<OsString, PathBuf> = HashMap::new();
     for base in bases {
-        if !base.path.exists() {
+        if !base.exists() {
             continue;
         }
-        let pattern = format!("{}/**/rollout-*.jsonl", base.path.display());
-        for file in cursor.glob_cached(&pattern, &base.path) {
+        let pattern = format!("{}/**/rollout-*.jsonl", base.display());
+        for file in cursor.glob_cached(&pattern, base) {
             let Some(name) = file.file_name().map(OsString::from) else {
                 continue;
             };
             match rollouts.get(&name) {
-                Some(existing) if file_rank(&existing.path) >= file_rank(&file) => {}
+                Some(existing) if file_rank(existing) >= file_rank(&file) => {}
                 _ => {
-                    rollouts.insert(
-                        name,
-                        RolloutCandidate {
-                            path: file,
-                            resolver: base.resolver.clone(),
-                        },
-                    );
+                    rollouts.insert(name, file);
                 }
             }
         }
     }
 
-    let mut files: Vec<(OsString, RolloutCandidate)> = rollouts.into_iter().collect();
+    let mut files: Vec<(OsString, PathBuf)> = rollouts.into_iter().collect();
     files.sort_by(|left, right| left.0.cmp(&right.0));
-    for (rollout_name, candidate) in files {
-        let file = candidate.path;
+    for (rollout_name, file) in files {
         let physical_key = file.to_string_lossy().to_string();
         let logical_key = format!("rollout:{}", rollout_name.to_string_lossy());
         migrate_legacy_rollout_cursor(cursor, &logical_key, &rollout_name);
@@ -409,8 +196,7 @@ fn scan_codex_bases(
                 if let Some(model) = model_from_value(payload) {
                     last_model = model.to_string();
                 }
-            } else if payload.get("type").and_then(Value::as_str)
-                == Some("thread_settings_applied")
+            } else if payload.get("type").and_then(Value::as_str) == Some("thread_settings_applied")
             {
                 if let Some(settings) = payload.get("thread_settings") {
                     if let Some(provider) = provider_from_value(settings) {
@@ -518,7 +304,7 @@ fn scan_codex_bases(
                 id: None,
                 hour_start,
                 source: source.to_string(),
-                model: candidate.resolver.resolve(&reported_model),
+                model: reported_model,
                 input_tokens: fi,
                 output_tokens: fo,
                 cached_input_tokens: fc_read,
