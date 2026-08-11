@@ -335,6 +335,8 @@ fn scan_codex_bases(
             continue;
         }
         let start_offset = offset;
+        let mut fork_replay_session_id =
+            cursor.codex_fork_replay_pending.get(&logical_key).cloned();
         let mut last_model = cursor
             .last_models
             .get(&logical_key)
@@ -372,6 +374,33 @@ fn scan_codex_bases(
 
             let event_type = v.get("type").and_then(|t| t.as_str()).unwrap_or("");
             let payload = v.get("payload").unwrap_or(&Value::Null);
+
+            if event_type == "session_meta"
+                && payload
+                    .get("forked_from_id")
+                    .and_then(Value::as_str)
+                    .is_some()
+            {
+                fork_replay_session_id = payload
+                    .get("session_id")
+                    .or_else(|| payload.get("id"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                if let Some(session_id) = &fork_replay_session_id {
+                    cursor
+                        .codex_fork_replay_pending
+                        .insert(logical_key.clone(), session_id.clone());
+                }
+            }
+
+            let skip_fork_replay = fork_replay_session_id.is_some();
+            if fork_replay_session_id
+                .as_deref()
+                .is_some_and(|session_id| starts_child_fork_turn(event_type, payload, session_id))
+            {
+                fork_replay_session_id = None;
+                cursor.codex_fork_replay_pending.remove(&logical_key);
+            }
 
             if event_type == "turn_context" || event_type == "session_meta" {
                 if let Some(provider) = provider_from_value(payload) {
@@ -462,7 +491,7 @@ fn scan_codex_bases(
             };
 
             let total = fi + fo + fc_read + fc_write + fr;
-            if total == 0 {
+            if total == 0 || skip_fork_replay {
                 continue;
             }
 
@@ -510,6 +539,22 @@ fn scan_codex_bases(
                 .insert(logical_key.clone(), last_provider);
         }
     }
+}
+
+/// Forked Codex rollouts begin with a rewritten copy of the parent history.
+/// UUIDv7 strings sort chronologically, so the first task/turn whose ID is at
+/// least the child session ID marks the start of genuinely new activity.
+fn starts_child_fork_turn(event_type: &str, payload: &Value, session_id: &str) -> bool {
+    if event_type != "turn_context"
+        && !(event_type == "event_msg"
+            && payload.get("type").and_then(Value::as_str) == Some("task_started"))
+    {
+        return false;
+    }
+    payload
+        .get("turn_id")
+        .and_then(Value::as_str)
+        .is_some_and(|turn_id| turn_id >= session_id)
 }
 
 fn file_rank(path: &Path) -> (u64, u64) {

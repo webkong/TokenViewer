@@ -133,6 +133,11 @@ pub struct FileCursor {
     /// metadata across incremental reads.
     #[serde(default)]
     pub last_providers: HashMap<String, String>,
+    /// Codex fork rollouts replay the parent session before the first new turn.
+    /// Maps rollout logical key -> child session UUID while that replay prefix
+    /// is still being consumed.
+    #[serde(default)]
+    pub codex_fork_replay_pending: HashMap<String, String>,
     /// Per-directory mtime stamp — skip re-glob if dir unchanged.
     #[serde(default)]
     pub dir_mtimes: HashMap<String, u64>,
