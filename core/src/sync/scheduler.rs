@@ -20,10 +20,6 @@ pub fn sync_all(db: &Database, home_dir: &Path) -> SyncResult {
     }
 
     let codex_homes = crate::codex_home::discover_with_database(db, home_dir, false);
-    let model_aliases = parsers::codex::unambiguous_model_aliases(&codex_homes);
-    if let Err(error) = db.remap_usage_models("codex", &model_aliases) {
-        errors.push(format!("codex: model alias migration failed: {error}"));
-    }
     let results = parsers::parse_all_with_codex_homes(home_dir, &cursors, &codex_homes);
 
     let mut providers_synced = 0u32;

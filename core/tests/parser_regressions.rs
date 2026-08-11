@@ -463,6 +463,8 @@ fn codex_isolated_home_copy_uses_rollout_identity_without_double_counting() {
         "{\"timestamp\":\"2026-08-05T00:01:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":10,\"output_tokens\":20,\"cached_input_tokens\":1,\"cache_creation_input_tokens\":2,\"reasoning_output_tokens\":3}}}}"
     );
     write_text(&original, first_content);
+    // A host-side catalog may rename a routed model, but usage attribution
+    // must preserve the model recorded in the rollout itself.
     write_text(
         &default_home.join("host-provider-model-catalog.json"),
         "{\"models\":[{\"slug\":\"gpt-test\",\"display_name\":\"deepseek-test\",\"description\":\"deepseek-test\"}]}",
@@ -470,7 +472,7 @@ fn codex_isolated_home_copy_uses_rollout_identity_without_double_counting() {
 
     let first_homes = vec![codex_home_info(&default_home)];
     let (first_records, cursor) = codex::parse_with_homes(&home, None, &first_homes).unwrap();
-    assert_eq!(first_records[0].model, "deepseek-test");
+    assert_eq!(first_records[0].model, "gpt-test");
     assert_eq!(
         first_records
             .iter()

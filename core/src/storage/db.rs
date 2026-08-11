@@ -133,48 +133,6 @@ impl Database {
         Ok(())
     }
 
-    /// Merge legacy aggregate rows from reported model aliases into their
-    /// resolved upstream model. Callers must only pass aliases that resolve
-    /// unambiguously across all active data homes.
-    pub fn remap_usage_models(
-        &self,
-        source: &str,
-        aliases: &std::collections::HashMap<String, String>,
-    ) -> SqlResult<usize> {
-        let tx = self.conn.unchecked_transaction()?;
-        let mut remapped = 0usize;
-        for (reported, resolved) in aliases {
-            if reported.eq_ignore_ascii_case(resolved) {
-                continue;
-            }
-            remapped += tx.execute(
-                "INSERT INTO usage (hour_start, source, model, input_tokens, output_tokens,
-                    cached_input_tokens, cache_creation_input_tokens, reasoning_output_tokens,
-                    total_tokens, conversation_count)
-                 SELECT hour_start, source, ?3, input_tokens, output_tokens,
-                    cached_input_tokens, cache_creation_input_tokens, reasoning_output_tokens,
-                    total_tokens, conversation_count
-                 FROM usage
-                 WHERE source = ?1 AND lower(model) = ?2
-                 ON CONFLICT(source, model, hour_start) DO UPDATE SET
-                    input_tokens = usage.input_tokens + excluded.input_tokens,
-                    output_tokens = usage.output_tokens + excluded.output_tokens,
-                    cached_input_tokens = usage.cached_input_tokens + excluded.cached_input_tokens,
-                    cache_creation_input_tokens = usage.cache_creation_input_tokens + excluded.cache_creation_input_tokens,
-                    reasoning_output_tokens = usage.reasoning_output_tokens + excluded.reasoning_output_tokens,
-                    total_tokens = usage.total_tokens + excluded.total_tokens,
-                    conversation_count = usage.conversation_count + excluded.conversation_count",
-                params![source, reported, resolved],
-            )?;
-            tx.execute(
-                "DELETE FROM usage WHERE source = ?1 AND lower(model) = ?2",
-                params![source, reported],
-            )?;
-        }
-        tx.commit()?;
-        Ok(remapped)
-    }
-
     pub fn query_summary(&self, from: &str, to: &str) -> SqlResult<UsageSummary> {
         let sql = format!(
             "SELECT
