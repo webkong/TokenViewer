@@ -3,7 +3,7 @@ import SwiftUI
 struct AboutView: View {
     @ObservedObject private var updater = UpdateChecker.shared
     @ObservedObject private var l10n = L10n.shared
-    @ObservedObject private var providerRegistry = ProviderRegistry.shared
+    @ObservedObject private var agentRegistry = AgentRegistry.shared
     @State private var autoDownloadVersion: String?
     @State private var showAgents = false
 
@@ -47,7 +47,7 @@ struct AboutView: View {
                                     Image(systemName: "rectangle.stack.fill")
                                         .font(.system(size: 11))
                                         .foregroundStyle(.secondary)
-                                    Text(l10n.aboutAgentCount(allProviders.count))
+                                    Text(l10n.aboutAgentCount(allAgents.count))
                                         .font(.system(size: 13))
                                 }
                                 Spacer()
@@ -74,7 +74,7 @@ struct AboutView: View {
                             // Limits agents
                             Text(l10n.aboutWithLimits).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
                             FlowLayout(itemSpacing: 6, rowSpacing: 6) {
-                                ForEach(allProviders.filter(\.hasLimits)) { p in
+                                ForEach(allAgents.filter(\.hasLimits)) { p in
                                     chip(p)
                                 }
                             }
@@ -82,7 +82,7 @@ struct AboutView: View {
                             // Other agents
                             Text(l10n.aboutWithoutLimits).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
                             FlowLayout(itemSpacing: 6, rowSpacing: 6) {
-                                ForEach(allProviders.filter { !$0.hasLimits }) { p in
+                                ForEach(allAgents.filter { !$0.hasLimits }) { p in
                                     chip(p)
                                 }
                             }
@@ -143,18 +143,18 @@ struct AboutView: View {
             updater.install(autoTriggered: true)
         }
         .onAppear {
-            providerRegistry.loadIfNeeded()
+            agentRegistry.loadIfNeeded()
         }
     }
 
-    private var allProviders: [SkillProvider] { providerRegistry.allProviders }
-    private var limitsCount: Int { allProviders.filter(\.hasLimits).count }
-    private var otherCount: Int { allProviders.filter { !$0.hasLimits }.count }
+    private var allAgents: [AgentConfig] { agentRegistry.allAgents }
+    private var limitsCount: Int { allAgents.filter(\.hasLimits).count }
+    private var otherCount: Int { allAgents.filter { !$0.hasLimits }.count }
 
-    private func chip(_ p: SkillProvider) -> some View {
+    private func chip(_ p: AgentConfig) -> some View {
         HStack(spacing: 5) {
-            ProviderIcon(source: p.source, size: 16)
-            Text(ProviderRegistry.shared.displayName(for: p.source))
+            AgentIcon(source: p.source, size: 16)
+            Text(AgentRegistry.shared.displayName(for: p.source))
                 .font(.system(size: 12))
                 .lineLimit(1)
         }

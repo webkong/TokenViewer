@@ -8,7 +8,7 @@ namespace TokenViewerWindows.Services;
 
 public static class LimitsService
 {
-    public static async Task<IReadOnlyList<ProviderLimit>> FetchAllAsync()
+    public static async Task<IReadOnlyList<AgentLimit>> FetchAllAsync()
     {
         var claude = FetchClaudeAsync();
         var codex = FetchCodexAsync();
@@ -20,13 +20,13 @@ public static class LimitsService
         return await Task.WhenAll(claude, codex, cursor, gemini, kiro, kimi, antigravity);
     }
 
-    private static async Task<ProviderLimit> FetchClaudeAsync()
+    private static async Task<AgentLimit> FetchClaudeAsync()
     {
         const string name = "claude";
         var token = ReadClaudeToken();
         if (string.IsNullOrWhiteSpace(token))
         {
-            return new ProviderLimit(name, null, false, null, []);
+            return new AgentLimit(name, null, false, null, []);
         }
 
         var req = new HttpRequestMessage(HttpMethod.Get, "https://api.anthropic.com/api/oauth/usage");
@@ -36,7 +36,7 @@ public static class LimitsService
         var json = await GetJsonAsync(req);
         if (json is null)
         {
-            return new ProviderLimit(name, "Claude", true, "Request failed", []);
+            return new AgentLimit(name, "Claude", true, "Request failed", []);
         }
 
         var windows = new List<LimitWindow>();
@@ -46,10 +46,10 @@ public static class LimitsService
             var util = ReadDouble(w, "utilization");
             windows.Add(new LimitWindow(label, util, ReadDate(w, "resets_at")));
         }
-        return new ProviderLimit(name, "Claude", true, null, windows);
+        return new AgentLimit(name, "Claude", true, null, windows);
     }
 
-    private static async Task<ProviderLimit> FetchCodexAsync()
+    private static async Task<AgentLimit> FetchCodexAsync()
     {
         const string name = "codex";
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -58,14 +58,14 @@ public static class LimitsService
             : Path.Combine(home, ".codex", "auth.json");
         if (!File.Exists(authPath))
         {
-            return new ProviderLimit(name, null, false, null, []);
+            return new AgentLimit(name, null, false, null, []);
         }
 
         var auth = ReadJsonFile(authPath);
         if (auth is null || !auth.TryGetValue("tokens", out var tokensObj) || tokensObj.ValueKind != JsonValueKind.Object ||
             !TryGetString(tokensObj, "access_token", out var accessToken) || string.IsNullOrWhiteSpace(accessToken))
         {
-            return new ProviderLimit(name, null, false, null, []);
+            return new AgentLimit(name, null, false, null, []);
         }
 
         var plan = PlanLabel(JwtClaim(accessToken, "chatgpt_plan_type"), "Codex");
@@ -81,7 +81,7 @@ public static class LimitsService
         var json = await GetJsonAsync(req);
         if (json is null || !TryGetJsonObject(json, "rate_limit", out var rl))
         {
-            return new ProviderLimit(name, plan, true, "Request failed", []);
+            return new AgentLimit(name, plan, true, "Request failed", []);
         }
 
         var windows = new List<LimitWindow>();
@@ -92,10 +92,10 @@ public static class LimitsService
             var label = secs >= 604800 ? "Weekly" : secs >= 18000 ? "5 Hour" : "Window";
             windows.Add(new LimitWindow(label, ReadDouble(w, "used_percent"), ReadDate(w, "reset_at")));
         }
-        return new ProviderLimit(name, plan, true, null, windows);
+        return new AgentLimit(name, plan, true, null, windows);
     }
 
-    private static async Task<ProviderLimit> FetchCursorAsync()
+    private static async Task<AgentLimit> FetchCursorAsync()
     {
         const string name = "cursor";
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -103,20 +103,20 @@ public static class LimitsService
         var cliCfg = Path.Combine(home, ".cursor", "cli-config.json");
         if (!File.Exists(stateDb))
         {
-            return new ProviderLimit(name, null, false, null, []);
+            return new AgentLimit(name, null, false, null, []);
         }
 
         var jwt = ReadSqliteValue(stateDb, "SELECT value FROM ItemTable WHERE key='cursorAuth/accessToken' LIMIT 1");
         if (string.IsNullOrWhiteSpace(jwt) || jwt.Length < 10)
         {
-            return new ProviderLimit(name, null, false, null, []);
+            return new AgentLimit(name, null, false, null, []);
         }
 
         var authId = ReadCursorAuthId(cliCfg);
         var userId = !string.IsNullOrWhiteSpace(authId) ? authId : JwtClaim(jwt, "sub");
         if (string.IsNullOrWhiteSpace(userId))
         {
-            return new ProviderLimit(name, null, false, "No userId", []);
+            return new AgentLimit(name, null, false, "No userId", []);
         }
 
         var req = new HttpRequestMessage(HttpMethod.Get, "https://cursor.com/api/usage-summary");
@@ -127,7 +127,7 @@ public static class LimitsService
         var json = await GetJsonAsync(req);
         if (json is null)
         {
-            return new ProviderLimit(name, null, true, "Request failed", []);
+            return new AgentLimit(name, null, true, "Request failed", []);
         }
 
         var membership = TryGetString(json, "membershipType", out var m) ? m : null;
@@ -146,10 +146,10 @@ public static class LimitsService
                 windows.Add(new LimitWindow("Plan", usedPercent.Value, billing));
             }
         }
-        return new ProviderLimit(name, plan, true, windows.Count == 0 ? "No usage data" : null, windows);
+        return new AgentLimit(name, plan, true, windows.Count == 0 ? "No usage data" : null, windows);
     }
 
-    private static async Task<ProviderLimit> FetchGeminiAsync()
+    private static async Task<AgentLimit> FetchGeminiAsync()
     {
         const string name = "gemini";
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -157,7 +157,7 @@ public static class LimitsService
         var creds = ReadJsonFile(credsPath);
         if (creds is null || !TryGetString(creds, "access_token", out var accessToken) || string.IsNullOrWhiteSpace(accessToken))
         {
-            return new ProviderLimit(name, null, false, null, []);
+            return new AgentLimit(name, null, false, null, []);
         }
 
         var req = new HttpRequestMessage(HttpMethod.Post, "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota");
@@ -166,7 +166,7 @@ public static class LimitsService
         var json = await GetJsonAsync(req);
         if (json is null || !TryGetArray(json, "buckets", out var buckets))
         {
-            return new ProviderLimit(name, null, true, "Request failed", []);
+            return new AgentLimit(name, null, true, "Request failed", []);
         }
 
         var windows = new List<LimitWindow>();
@@ -181,22 +181,22 @@ public static class LimitsService
         {
             windows.Add(new LimitWindow("Quota", (1.0 - lowest) * 100, resetAt));
         }
-        return new ProviderLimit(name, null, true, null, windows);
+        return new AgentLimit(name, null, true, null, windows);
     }
 
-    private static async Task<ProviderLimit> FetchKiroAsync()
+    private static async Task<AgentLimit> FetchKiroAsync()
     {
         const string name = "kiro";
         var outText = RunKiroUsage();
         if (string.IsNullOrWhiteSpace(outText))
         {
-            return new ProviderLimit(name, null, false, null, []);
+            return new AgentLimit(name, null, false, null, []);
         }
 
         var lower = outText.ToLowerInvariant();
         if (lower.Contains("not logged in") || lower.Contains("login required") || lower.Contains("kiro-cli login"))
         {
-            return new ProviderLimit(name, null, false, "Not logged in", []);
+            return new AgentLimit(name, null, false, "Not logged in", []);
         }
 
         var cleaned = Regex.Replace(outText, @"\x1B\[[0-9;]*[a-zA-Z]", "");
@@ -217,10 +217,10 @@ public static class LimitsService
             windows.Add(new LimitWindow("Credits", pct, KiroResetDate(cleaned)));
         }
 
-        return new ProviderLimit(name, plan, windows.Count > 0, windows.Count == 0 ? "No usage data" : null, windows);
+        return new AgentLimit(name, plan, windows.Count > 0, windows.Count == 0 ? "No usage data" : null, windows);
     }
 
-    private static async Task<ProviderLimit> FetchKimiAsync()
+    private static async Task<AgentLimit> FetchKimiAsync()
     {
         const string name = "kimi";
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -229,7 +229,7 @@ public static class LimitsService
         var creds = ReadJsonFile(credsPath);
         if (creds is null || !TryGetString(creds, "access_token", out var accessToken) || string.IsNullOrWhiteSpace(accessToken))
         {
-            return new ProviderLimit(name, null, false, null, []);
+            return new AgentLimit(name, null, false, null, []);
         }
 
         var req = new HttpRequestMessage(HttpMethod.Get, "https://api.kimi.com/coding/v1/usages");
@@ -238,7 +238,7 @@ public static class LimitsService
         var json = await GetJsonAsync(req);
         if (json is null)
         {
-            return new ProviderLimit(name, null, true, "Request failed", []);
+            return new AgentLimit(name, null, true, "Request failed", []);
         }
 
         var subType = TryGetString(json, "subType", out var st)
@@ -257,10 +257,10 @@ public static class LimitsService
                 windows.Add(new LimitWindow("Usage", used / limit * 100, ReadDate(usage, "resetTime") ?? ReadDate(usage, "reset_at")));
             }
         }
-        return new ProviderLimit(name, plan, true, windows.Count == 0 ? "No usage data" : null, windows);
+        return new AgentLimit(name, plan, true, windows.Count == 0 ? "No usage data" : null, windows);
     }
 
-    private static async Task<ProviderLimit> FetchAntigravityAsync()
+    private static async Task<AgentLimit> FetchAntigravityAsync()
     {
         const string name = "antigravity";
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -269,9 +269,9 @@ public static class LimitsService
             .Any(dir => Directory.Exists(Path.Combine(geminiDir, dir)));
         if (!hasAntigravity)
         {
-            return new ProviderLimit(name, null, false, null, []);
+            return new AgentLimit(name, null, false, null, []);
         }
-        return new ProviderLimit(name, null, true, "Uses Gemini quota", []);
+        return new AgentLimit(name, null, true, "Uses Gemini quota", []);
     }
 
     private static string? ReadClaudeToken()

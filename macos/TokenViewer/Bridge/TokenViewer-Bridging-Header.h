@@ -10,6 +10,7 @@ char* _Nullable tt_sync_all(CoreHandle* _Nullable handle);
 char* _Nullable tt_get_codex_homes(CoreHandle* _Nullable handle, int32_t force);
 char* _Nullable tt_set_codex_additional_homes(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_rebuild_all(CoreHandle* _Nullable handle);
+char* _Nullable tt_get_agent_status(CoreHandle* _Nullable handle);
 char* _Nullable tt_get_provider_status(CoreHandle* _Nullable handle);
 char* _Nullable tt_query_summary(CoreHandle* _Nullable handle, const char* _Nonnull from, const char* _Nonnull to);
 char* _Nullable tt_query_daily(CoreHandle* _Nullable handle, const char* _Nonnull from, const char* _Nonnull to);

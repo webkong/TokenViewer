@@ -1,8 +1,8 @@
 import Foundation
 
-/// Parses provider timestamps into absolute `Date` values.
-/// Provider payloads may use epoch seconds/milliseconds, ISO-8601, or UTC date-only strings.
-enum ProviderDateParser {
+/// Parses agent API timestamps into absolute `Date` values.
+/// Agent API payloads may use epoch seconds/milliseconds, ISO-8601, or UTC date-only strings.
+enum AgentDateParser {
     static func parse(_ value: Any?) -> Date? {
         if let number = numeric(value), number > 0 {
             let seconds = number > 1_000_000_000_000 ? number / 1000 : number

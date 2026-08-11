@@ -31,10 +31,10 @@ public sealed class CoreBridge : IDisposable
         return json is null ? null : JsonSerializer.Deserialize<UsageSummary>(json, _jsonOptions);
     }
 
-    public ProviderStatus[] GetProviderStatus()
+    public AgentStatus[] GetAgentStatus()
     {
-        var json = Call(tt_get_provider_status);
-        return json is null ? [] : JsonSerializer.Deserialize<ProviderStatus[]>(json, _jsonOptions) ?? [];
+        var json = Call(tt_get_agent_status);
+        return json is null ? [] : JsonSerializer.Deserialize<AgentStatus[]>(json, _jsonOptions) ?? [];
     }
 
     public string? SyncAll()
@@ -73,7 +73,7 @@ public sealed class CoreBridge : IDisposable
     private static extern IntPtr tt_query_summary(IntPtr handle, string from, string to);
 
     [DllImport("tokenviewer_core", CallingConvention = CallingConvention.Cdecl)]
-    private static extern IntPtr tt_get_provider_status(IntPtr handle);
+    private static extern IntPtr tt_get_agent_status(IntPtr handle);
 
     [DllImport("tokenviewer_core", CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr tt_sync_all(IntPtr handle);

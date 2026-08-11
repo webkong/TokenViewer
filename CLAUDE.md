@@ -84,6 +84,7 @@ Swift wraps these in `CoreBridge`; JSON is exchanged across the boundary and dec
 
 ## Data model & conventions
 
+- **Terminology**: an **Agent** is a tool that uses models (Claude Code, ChatGPT/Codex, OpenClaw, Cursor); a **Model Provider** is the model vendor (Anthropic, OpenAI, DeepSeek, Google); a **Model** is the concrete model ID. Use `Agent*` names for tool registries, limits, status, and UI. Reserve `Provider*` for model vendors or unrelated qualified concepts such as `GitProvider`. The persisted `usage.source` column and legacy settings keys retain their names for data compatibility, but their value is an Agent source ID.
 - **Storage**: table `usage(hour_start, source, model, input/output/cache/... , total_tokens, conversation_count)` aggregated into **30-min buckets**; `sync_cursors(source, cursor_data)` holds per-source `FileCursor` JSON.
 - **Timezone (critical)**: `hour_start` is stored in **UTC** (`...Z`). Day/hour grouping for charts & heatmap MUST convert to local time via `strftime('%Y-%m-%d', hour_start, 'localtime')` (see `db.rs`). Range bounds (from/to) are computed in Swift from the local calendar then formatted to UTC. Don't reintroduce `substr(hour_start,1,N)` for day/hour grouping — that buckets by UTC and misattributes local early-morning usage.
 - **Idempotent parsing**: `FileCursor` (utils.rs) tracks `offsets` (byte offset for append-only jsonl), `seen_ids` (dedup, capped 50k), `snapshots` (cumulative-total deltas), `mtimes`/`dir_mtimes`/`dir_files` (skip-unchanged + glob cache). Re-running a parser must never double-count. Use `file_changed()` to skip unchanged files, `mark_seen()` to dedup, `delta()` for cumulative sources.
@@ -118,15 +119,15 @@ Two groups result:
 
 > `all_parsers()` actually has 25 entries: the 11 parser-only + 12 canonical-with-parser + `everycode` (folded into the ChatGPT brand/icon, not listed separately) + `mimocode`. Keep the internal source ID, parser name, CLI paths, and logo key as `"codex"`; only the user-facing product name is ChatGPT.
 
-## Adding a new provider parser
+## Adding a new Agent parser
 1. Create `core/src/parsers/<name>.rs` with `pub fn parse(home_dir: &Path, cursor_data: Option<&str>) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>>`.
 2. Reuse `utils.rs` helpers; produce 30-min-bucketed `UsageRecord`s with `source = "<name>"`.
 3. Register in `parsers/mod.rs`: `pub mod <name>;` + add to `all_parsers()`.
 4. Add pricing in `core/src/pricing/` if cost is needed.
-5. Add a logo `macos/TokenViewer/Resources/brand-logos/<name>.svg` and map it in `Views/ProviderIcon.swift`.
+5. Add a logo `macos/TokenViewer/Resources/brand-logos/<name>.svg`; Agent logos are resolved by `AgentRegistry`, while model-vendor logos are resolved by `ModelProviderRegistry` and rendered through `Views/BrandIcons.swift`.
 6. `cargo test` + `bash run.sh`.
 
-Reference (read-only) implementation of all providers lives in the sibling project `../TokenTracker/` (JS) — consult `src/lib/rollout.js` & `usage-limits.js` for source paths/formats.
+Reference (read-only) implementation of all Agents lives in the sibling project `../TokenTracker/` (JS) — consult `src/lib/rollout.js` & `usage-limits.js` for source paths/formats.
 
 ## Code style
 - Read existing code before writing; reuse helpers; keep changes minimal and scoped to the request.

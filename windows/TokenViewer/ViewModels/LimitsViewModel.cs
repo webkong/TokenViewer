@@ -17,12 +17,12 @@ public sealed class LimitsViewModel : ObservableObject
     public LimitsViewModel(Dispatcher dispatcher)
     {
         _dispatcher = dispatcher;
-        Providers = new ObservableCollection<ProviderLimit>();
+        Agents = new ObservableCollection<AgentLimit>();
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(10) };
         _timer.Tick += async (_, _) => await RefreshAsync();
     }
 
-    public ObservableCollection<ProviderLimit> Providers { get; }
+    public ObservableCollection<AgentLimit> Agents { get; }
 
     public bool IsLoading
     {
@@ -52,10 +52,10 @@ public sealed class LimitsViewModel : ObservableObject
             var limits = await LimitsService.FetchAllAsync();
             _dispatcher.Invoke(() =>
             {
-                Providers.Clear();
+                Agents.Clear();
                 foreach (var limit in limits.OrderByDescending(p => p.Configured).ThenBy(p => p.Name))
                 {
-                    Providers.Add(limit);
+                    Agents.Add(limit);
                 }
                 Status = "Ready";
             });

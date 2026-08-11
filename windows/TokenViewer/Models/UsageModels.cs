@@ -12,7 +12,7 @@ public sealed record UsageSummary(
     [property: JsonPropertyName("conversation_count")] uint ConversationCount,
     [property: JsonPropertyName("active_days")] uint ActiveDays);
 
-public sealed record ProviderStatus(
+public sealed record AgentStatus(
     [property: JsonPropertyName("source")] string Source,
     [property: JsonPropertyName("record_count")] long RecordCount,
     [property: JsonPropertyName("installed")] bool Installed,

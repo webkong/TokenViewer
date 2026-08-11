@@ -69,11 +69,11 @@ pub extern "C" fn tt_init(db_path: *const c_char) -> *mut CoreHandle {
                 .unwrap_or(default_source_root.clone());
             let source_root = env_source_root
                 .as_deref()
-                .and_then(|raw| crate::skills::provider_config::expand_path(raw).ok())
+                .and_then(|raw| crate::skills::agent_config::expand_path(raw).ok())
                 .or_else(|| {
                     persisted_source_root_raw
                         .as_deref()
-                        .and_then(|raw| crate::skills::provider_config::expand_path(raw).ok())
+                        .and_then(|raw| crate::skills::agent_config::expand_path(raw).ok())
                 })
                 .or_else(|| {
                     persisted_config
@@ -112,7 +112,7 @@ pub extern "C" fn tt_init(db_path: *const c_char) -> *mut CoreHandle {
     }
 }
 
-/// Sync all providers. Returns JSON: {"providers_synced": N, "records_added": N, "errors": [...]}
+/// Sync all agents. `providers_synced` remains as a compatibility alias.
 ///
 /// # Safety
 /// `handle` must be a valid pointer returned by `tt_init`, or null (returns null).
@@ -124,7 +124,8 @@ pub extern "C" fn tt_sync_all(handle: *mut CoreHandle) -> *mut c_char {
     };
     let result = sync::sync_all(&handle.db, &handle.home_dir);
     let json = serde_json::json!({
-        "providers_synced": result.providers_synced,
+        "agents_synced": result.agents_synced,
+        "providers_synced": result.agents_synced,
         "records_added": result.records_added,
         "errors": result.errors,
     });
@@ -187,6 +188,7 @@ pub extern "C" fn tt_rebuild_all(handle: *mut CoreHandle) -> *mut c_char {
 
     if let Err(e) = handle.db.clear_processed_data() {
         return to_json_cstring(&serde_json::json!({
+            "agents_synced": 0,
             "providers_synced": 0,
             "records_added": 0,
             "errors": [format!("reset failed: {}", e)],
@@ -195,19 +197,20 @@ pub extern "C" fn tt_rebuild_all(handle: *mut CoreHandle) -> *mut c_char {
 
     let result = sync::sync_all(&handle.db, &handle.home_dir);
     let json = serde_json::json!({
-        "providers_synced": result.providers_synced,
+        "agents_synced": result.agents_synced,
+        "providers_synced": result.agents_synced,
         "records_added": result.records_added,
         "errors": result.errors,
     });
     to_json_cstring(&json)
 }
 
-/// Get provider status. Returns JSON array of provider info.
+/// Get agent status. Returns JSON array of agent info.
 ///
 /// # Safety
 /// `handle` must be a valid pointer returned by `tt_init`, or null (returns null).
 #[no_mangle]
-pub extern "C" fn tt_get_provider_status(handle: *mut CoreHandle) -> *mut c_char {
+pub extern "C" fn tt_get_agent_status(handle: *mut CoreHandle) -> *mut c_char {
     let handle = match unsafe { handle.as_ref() } {
         Some(h) => h,
         None => return std::ptr::null_mut(),
@@ -230,6 +233,12 @@ pub extern "C" fn tt_get_provider_status(handle: *mut CoreHandle) -> *mut c_char
         .collect();
 
     to_json_cstring(&statuses)
+}
+
+/// Compatibility alias for clients built before agent terminology was adopted.
+#[no_mangle]
+pub extern "C" fn tt_get_provider_status(handle: *mut CoreHandle) -> *mut c_char {
+    tt_get_agent_status(handle)
 }
 
 /// Query usage summary for a date range. Returns JSON string (caller must free with tt_free_string).
@@ -477,7 +486,7 @@ fn scan_skills_for_agents(
         let Some(agent) = handle.skills.registry.find(agent_id) else {
             continue;
         };
-        let path = match crate::skills::provider_config::expand_path(&agent.skills_path) {
+        let path = match crate::skills::agent_config::expand_path(&agent.skills_path) {
             Ok(path) => path,
             Err(_) => continue,
         };
@@ -621,7 +630,7 @@ pub extern "C" fn tt_skills_list_agents(handle: *mut CoreHandle) -> *mut c_char 
     };
     let mut agents = handle.skills.registry.all();
     let install_status: std::collections::HashMap<String, bool> =
-        crate::skills::provider_config::detect_installed_agents_cached(
+        crate::skills::agent_config::detect_installed_agents_cached(
             &handle.skills.config_dir,
             &agents,
             false,
@@ -951,7 +960,7 @@ pub extern "C" fn tt_skills_unlink(handle: *mut CoreHandle, json: *const c_char)
     }
 }
 
-/// Set a provider skills override. Takes JSON: {"source":"...", "skills_path":"..." (optional), "link_type":"Directory"|"SingleFile"|"Overlay" (optional)}
+/// Set an agent skills override. Takes JSON: {"source":"...", "skills_path":"..." (optional), "link_type":"Directory"|"SingleFile"|"Overlay" (optional)}
 /// Returns SkillCommandResult: {"ok":true/false, "error":"..."}
 ///
 /// # Safety
@@ -971,13 +980,13 @@ pub extern "C" fn tt_skills_add_custom_agent(
     }
 
     #[derive(serde::Deserialize)]
-    struct ProviderOverrideReq {
+    struct AgentOverrideReq {
         source: String,
         skills_path: Option<String>,
         link_type: Option<String>,
     }
 
-    let req: ProviderOverrideReq = match unsafe { from_cstring_json(json) } {
+    let req: AgentOverrideReq = match unsafe { from_cstring_json(json) } {
         Ok(r) => r,
         Err(e) => return to_json_cstring(&serde_json::json!({ "error": e })),
     };
@@ -999,7 +1008,7 @@ pub extern "C" fn tt_skills_add_custom_agent(
     }
 }
 
-/// Reset a provider skills config to defaults. Takes JSON: {"source":"..."}
+/// Reset an agent skills config to defaults. Takes JSON: {"source":"..."}
 /// Returns SkillCommandResult: {"ok":true/false, "error":"..."}
 ///
 /// # Safety
@@ -1297,7 +1306,7 @@ pub extern "C" fn tt_skills_set_git_config(
                 "Source root cannot be empty",
             ));
         }
-        let path = match crate::skills::provider_config::expand_path(root) {
+        let path = match crate::skills::agent_config::expand_path(root) {
             Ok(path) => path,
             Err(e) => return to_json_cstring(&crate::skills::models::SkillCommandResult::error(e)),
         };
@@ -1432,11 +1441,11 @@ pub extern "C" fn tt_skills_detect_installed(handle: *mut CoreHandle) -> *mut c_
         Some(h) => h,
         None => return std::ptr::null_mut(),
     };
-    let providers = handle.skills.registry.all();
+    let agents = handle.skills.registry.all();
     let results: Vec<(String, bool)> =
-        crate::skills::provider_config::detect_installed_agents_cached(
+        crate::skills::agent_config::detect_installed_agents_cached(
             &handle.skills.config_dir,
-            &providers,
+            &agents,
             false,
         );
     let map: std::collections::HashMap<String, bool> = results.into_iter().collect();

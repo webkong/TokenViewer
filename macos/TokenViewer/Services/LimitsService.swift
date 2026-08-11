@@ -9,7 +9,7 @@ struct LimitWindow: Identifiable, Codable {
     let resetAt: Date?
 }
 
-struct ProviderLimit: Identifiable, Codable {
+struct AgentLimit: Identifiable, Codable {
     var id: String { name }
     let name: String          // "claude", "codex", ...
     let planLabel: String?
@@ -21,7 +21,7 @@ struct ProviderLimit: Identifiable, Codable {
     let windows: [LimitWindow]
 }
 
-extension ProviderLimit {
+extension AgentLimit {
     var hasLimitDisplay: Bool {
         !windows.isEmpty || subscriptionExpiresAt != nil || subscriptionResetAt != nil || quotaResetAt != nil
     }
@@ -35,19 +35,19 @@ extension ProviderLimit {
 
 // MARK: - Service
 
-/// Fetches live rate-limit / quota info per provider. Network + Keychain + process
+/// Fetches live rate-limit / quota info per agent. Network + Keychain + process
 /// based — runs entirely client-side using the user's own local credentials.
 enum LimitsService {
-    static func fetchAll() async -> [ProviderLimit] {
-        let sources = await MainActor.run { ProviderRegistry.shared.limitSources }
-        return await withTaskGroup(of: (String, ProviderLimit).self) { group in
+    static func fetchAll() async -> [AgentLimit] {
+        let sources = await MainActor.run { AgentRegistry.shared.limitSources }
+        return await withTaskGroup(of: (String, AgentLimit).self) { group in
             for source in sources {
                 group.addTask {
                     (source, await fetch(source: source))
                 }
             }
 
-            var results: [String: ProviderLimit] = [:]
+            var results: [String: AgentLimit] = [:]
             for await (source, limit) in group {
                 results[source] = limit
             }
@@ -55,7 +55,7 @@ enum LimitsService {
         }
     }
 
-    private static func fetch(source: String) async -> ProviderLimit {
+    private static func fetch(source: String) async -> AgentLimit {
         switch source {
         case "claude": return await fetchClaude()
         case "codex": return await fetchCodex()
@@ -73,37 +73,37 @@ enum LimitsService {
         case "workbuddy": return await fetchWorkBuddy()
         case "zcode": return await fetchZcode()
         default:
-            return ProviderLimit(name: source, planLabel: nil, configured: false, error: "Unsupported limits provider", windows: [])
+            return AgentLimit(name: source, planLabel: nil, configured: false, error: "Unsupported limits agent", windows: [])
         }
     }
 
     // MARK: Claude (Keychain → Anthropic OAuth usage API)
 
-    static func fetchClaude() async -> ProviderLimit {
+    static func fetchClaude() async -> AgentLimit {
         let name = "claude"
         guard let token = claudeAccessToken() else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
         var req = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         guard let json = await getJSON(req) else {
-            return ProviderLimit(name: name, planLabel: planLabel(claudeSubscription(), "Claude"), configured: true, error: "Request failed", windows: [])
+            return AgentLimit(name: name, planLabel: planLabel(claudeSubscription(), "Claude"), configured: true, error: "Request failed", windows: [])
         }
         var windows: [LimitWindow] = []
         for (key, label) in [("five_hour", "5 Hour"), ("seven_day", "7 Day"), ("seven_day_opus", "7 Day (Opus)")] {
             if let w = json[key] as? [String: Any] {
                 let util = (w["utilization"] as? Double) ?? Double(w["utilization"] as? Int ?? 0)
-                windows.append(LimitWindow(label: label, usedPercent: util, resetAt: ProviderDateParser.parse(w["resets_at"])))
+                windows.append(LimitWindow(label: label, usedPercent: util, resetAt: AgentDateParser.parse(w["resets_at"])))
             }
         }
-        return ProviderLimit(name: name, planLabel: planLabel(claudeSubscription(), "Claude"), configured: true, error: nil, windows: windows)
+        return AgentLimit(name: name, planLabel: planLabel(claudeSubscription(), "Claude"), configured: true, error: nil, windows: windows)
     }
 
     // MARK: Codex (auth.json → ChatGPT wham API, with refresh)
 
-    static func fetchCodex() async -> ProviderLimit {
+    static func fetchCodex() async -> AgentLimit {
         let name = "codex"
         let discoveredHomes = CoreBridge.shared.getCodexHomes()
         let authPaths = discoveredHomes
@@ -121,7 +121,7 @@ enum LimitsService {
             return (tokens, accessToken)
         }.first
         guard let (tokens, accessToken) = resolvedAuth else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
         let idToken = tokens["id_token"] as? String
         let tokenPlan = jwtClaim(accessToken, "chatgpt_plan_type") ?? idToken.flatMap { jwtClaim($0, "chatgpt_plan_type") }
@@ -143,12 +143,12 @@ enum LimitsService {
         if let acc = accountId { req.setValue(acc, forHTTPHeaderField: "ChatGPT-Account-Id") }
 
         guard let json = await getJSON(req), json["rate_limit"] is [String: Any] else {
-            return ProviderLimit(name: name, planLabel: plan, configured: true, error: "Request failed", subscriptionExpiresAt: subscriptionExpiresAt, windows: [])
+            return AgentLimit(name: name, planLabel: plan, configured: true, error: "Request failed", subscriptionExpiresAt: subscriptionExpiresAt, windows: [])
         }
         let windows = codexLimitWindows(from: json)
         let resolvedPlan = codexPlanLabel(json["plan_type"] as? String) ?? plan
         let resolvedSubscriptionExpiresAt = resolvedPlan == "Business" ? nil : subscriptionExpiresAt
-        return ProviderLimit(name: name, planLabel: resolvedPlan, configured: true, error: nil, subscriptionExpiresAt: resolvedSubscriptionExpiresAt, windows: windows)
+        return AgentLimit(name: name, planLabel: resolvedPlan, configured: true, error: nil, subscriptionExpiresAt: resolvedSubscriptionExpiresAt, windows: windows)
     }
 
     static func codexLimitWindows(from json: [String: Any]) -> [LimitWindow] {
@@ -273,7 +273,7 @@ enum LimitsService {
     }
 
     private static func codexResetDate(_ window: [String: Any]) -> Date? {
-        ProviderDateParser.parse(window["reset_at"] ?? window["resets_at"] ?? window["resetsAt"] ?? window["resetAt"])
+        AgentDateParser.parse(window["reset_at"] ?? window["resets_at"] ?? window["resetsAt"] ?? window["resetAt"])
     }
 
     private static func codexWindowLabel(for kind: CodexRateWindowKind?, fallback: String) -> String {
@@ -301,10 +301,10 @@ enum LimitsService {
 
     // MARK: Copilot (apps.json → GitHub API)
 
-    static func fetchCopilot() async -> ProviderLimit {
+    static func fetchCopilot() async -> AgentLimit {
         let name = "copilot"
         guard let token = copilotToken() else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
         var req = URLRequest(url: URL(string: "https://api.github.com/copilot_internal/user")!)
         req.setValue("token \(token)", forHTTPHeaderField: "Authorization")
@@ -315,10 +315,10 @@ enum LimitsService {
         req.setValue("2025-04-01", forHTTPHeaderField: "X-Github-Api-Version")
 
         guard let json = await getJSON(req) else {
-            return ProviderLimit(name: name, planLabel: nil, configured: true, error: "Request failed", windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: true, error: "Request failed", windows: [])
         }
         let plan = planLabel(json["copilot_plan"] as? String, "Copilot")
-        let reset = ProviderDateParser.parse(json["quota_reset_date"])
+        let reset = AgentDateParser.parse(json["quota_reset_date"])
         var windows: [LimitWindow] = []
         if let snaps = json["quota_snapshots"] as? [String: Any] {
             for (key, label) in [("premium_interactions", "Premium"), ("chat", "Chat")] {
@@ -331,19 +331,19 @@ enum LimitsService {
                 windows.append(LimitWindow(label: label, usedPercent: used, resetAt: reset))
             }
         }
-        return ProviderLimit(name: name, planLabel: plan, configured: true, error: nil, quotaResetAt: reset, windows: windows)
+        return AgentLimit(name: name, planLabel: plan, configured: true, error: nil, quotaResetAt: reset, windows: windows)
     }
 
     // MARK: Kiro (kiro-cli /usage)
 
-    static func fetchKiro() async -> ProviderLimit {
+    static func fetchKiro() async -> AgentLimit {
         let name = "kiro"
         guard let out = runKiroUsage() else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
         let lower = out.lowercased()
         if lower.contains("not logged in") || lower.contains("login required") || lower.contains("kiro-cli login") {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: "Not logged in", windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: "Not logged in", windows: [])
         }
         // Strip ANSI escape codes (ESC [ ... m) before parsing
         let esc = "\u{1B}"
@@ -359,12 +359,12 @@ enum LimitsService {
         } else if let pct = firstMatch(clean, #"█+\s*(\d+)%"#).flatMap({ Double($0) }) {
             windows.append(LimitWindow(label: "Credits", usedPercent: pct, resetAt: resetAt))
         }
-        return ProviderLimit(name: name, planLabel: plan, configured: !windows.isEmpty, error: windows.isEmpty ? "No usage data" : nil, quotaResetAt: resetAt, windows: windows)
+        return AgentLimit(name: name, planLabel: plan, configured: !windows.isEmpty, error: windows.isEmpty ? "No usage data" : nil, quotaResetAt: resetAt, windows: windows)
     }
 
     // MARK: Cursor (state.vscdb SQLite → cursor.com/api/usage-summary)
 
-    static func fetchCursor() async -> ProviderLimit {
+    static func fetchCursor() async -> AgentLimit {
         let name = "cursor"
         #if os(macOS)
         let stateDb = "\(NSHomeDirectory())/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
@@ -374,11 +374,11 @@ enum LimitsService {
         let cliCfg  = "\(NSHomeDirectory())/.cursor/cli-config.json"
         #endif
         guard FileManager.default.fileExists(atPath: stateDb) else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
         guard let jwt = readSqliteValue(stateDb, sql: "SELECT value FROM ItemTable WHERE key='cursorAuth/accessToken' LIMIT 1"),
               jwt.count > 10 else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
         let userId: String
         if let cfg = readJSON(cliCfg), let authId = (cfg["authInfo"] as? [String: Any])?["authId"] as? String, !authId.isEmpty {
@@ -387,7 +387,7 @@ enum LimitsService {
             userId = jwtClaim(jwt, "sub") ?? ""
         }
         guard !userId.isEmpty else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: "No userId", windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: "No userId", windows: [])
         }
         let cookie = "WorkosCursorSessionToken=\(userId)%3A%3A\(jwt)"
         var req = URLRequest(url: URL(string: "https://cursor.com/api/usage-summary")!)
@@ -396,7 +396,7 @@ enum LimitsService {
         req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
         req.setValue("https://www.cursor.com/settings", forHTTPHeaderField: "Referer")
         guard let json = await getJSON(req) else {
-            return ProviderLimit(name: name, planLabel: nil, configured: true, error: "Request failed", windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: true, error: "Request failed", windows: [])
         }
         let membership = json["membershipType"] as? String
         let plan = planLabel(membership, "Cursor")
@@ -409,18 +409,18 @@ enum LimitsService {
             pct = used / lim * 100
         }
         var windows: [LimitWindow] = []
-        if let p = pct { windows.append(LimitWindow(label: "Plan", usedPercent: p, resetAt: ProviderDateParser.parse(billing))) }
-        let resetAt = ProviderDateParser.parse(billing)
-        return ProviderLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, quotaResetAt: resetAt, windows: windows)
+        if let p = pct { windows.append(LimitWindow(label: "Plan", usedPercent: p, resetAt: AgentDateParser.parse(billing))) }
+        let resetAt = AgentDateParser.parse(billing)
+        return AgentLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, quotaResetAt: resetAt, windows: windows)
     }
 
     // MARK: Gemini (oauth_creds.json → cloudcode-pa.googleapis.com)
 
-    static func fetchGemini() async -> ProviderLimit {
+    static func fetchGemini() async -> AgentLimit {
         let name = "gemini"
         let credsPath = "\(NSHomeDirectory())/.gemini/oauth_creds.json"
         guard let creds = readJSON(credsPath), let accessToken = creds["access_token"] as? String, !accessToken.isEmpty else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
         var req = URLRequest(url: URL(string: "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota")!)
         req.httpMethod = "POST"
@@ -429,33 +429,33 @@ enum LimitsService {
         req.httpBody = try? JSONSerialization.data(withJSONObject: [:])
         guard let json = await getJSON(req),
               let buckets = json["buckets"] as? [[String: Any]] else {
-            return ProviderLimit(name: name, planLabel: nil, configured: true, error: "Request failed", windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: true, error: "Request failed", windows: [])
         }
         var lowestFrac: Double = 1.0
         var resetAt: Date? = nil
         for bucket in buckets {
             if let frac = bucket["remainingFraction"] as? Double { lowestFrac = min(lowestFrac, frac) }
-            if resetAt == nil { resetAt = ProviderDateParser.parse(bucket["resetTime"]) }
+            if resetAt == nil { resetAt = AgentDateParser.parse(bucket["resetTime"]) }
         }
         let used = (1.0 - lowestFrac) * 100
         let windows = buckets.isEmpty ? [] : [LimitWindow(label: "Quota", usedPercent: used, resetAt: resetAt)]
-        return ProviderLimit(name: name, planLabel: nil, configured: true, error: nil, quotaResetAt: resetAt, windows: windows)
+        return AgentLimit(name: name, planLabel: nil, configured: true, error: nil, quotaResetAt: resetAt, windows: windows)
     }
 
     // MARK: Kimi (~/.kimi/credentials/kimi-code.json → api.kimi.com)
 
-    static func fetchKimi() async -> ProviderLimit {
+    static func fetchKimi() async -> AgentLimit {
         let name = "kimi"
         let kimiHome = ProcessInfo.processInfo.environment["KIMI_HOME"] ?? "\(NSHomeDirectory())/.kimi"
         let credsPath = "\(kimiHome)/credentials/kimi-code.json"
         guard let creds = readJSON(credsPath), let accessToken = creds["access_token"] as? String, !accessToken.isEmpty else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
         var req = URLRequest(url: URL(string: "https://api.kimi.com/coding/v1/usages")!)
         req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         guard let json = await getJSON(req) else {
-            return ProviderLimit(name: name, planLabel: nil, configured: true, error: "Request failed", windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: true, error: "Request failed", windows: [])
         }
         var windows: [LimitWindow] = []
         // Plan: body.subType or body.user.membership.level
@@ -466,14 +466,14 @@ enum LimitsService {
             let limit = numeric(usage["limit"]) ?? 0
             let used = numeric(usage["used"]) ?? 0
             let pct = limit > 0 ? used / limit * 100 : 0
-            windows.append(LimitWindow(label: "Usage", usedPercent: pct, resetAt: ProviderDateParser.parse(usage["resetTime"] ?? usage["reset_at"])))
+            windows.append(LimitWindow(label: "Usage", usedPercent: pct, resetAt: AgentDateParser.parse(usage["resetTime"] ?? usage["reset_at"])))
         }
-        return ProviderLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
+        return AgentLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
     }
 
     // MARK: Antigravity (Gemini IDE extension — check install via data dir)
 
-    static func fetchAntigravity() async -> ProviderLimit {
+    static func fetchAntigravity() async -> AgentLimit {
         let name = "antigravity"
         // Antigravity writes to ~/.gemini/antigravity* directories
         let geminiDir = "\(NSHomeDirectory())/.gemini"
@@ -481,18 +481,18 @@ enum LimitsService {
             FileManager.default.fileExists(atPath: "\(geminiDir)/\($0)")
         }
         guard hasAntigravity else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
         // Antigravity quota is shared with Gemini — no separate API available
-        return ProviderLimit(name: name, planLabel: nil, configured: true, error: "Uses Gemini quota", windows: [])
+        return AgentLimit(name: name, planLabel: nil, configured: true, error: "Uses Gemini quota", windows: [])
     }
 
     // MARK: Zed / Trae (cockpit-tools account cache)
 
-    static func fetchZed() async -> ProviderLimit {
+    static func fetchZed() async -> AgentLimit {
         let name = "zed"
-        guard let account = readCockpitAccount(provider: name) else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        guard let account = readCockpitAccount(agent: name) else {
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
         let expiry = nestedDate(account, paths: [
             ["billing_period_end_at"],
@@ -512,13 +512,13 @@ enum LimitsService {
             ["public_account", "subscription_raw", "subscription", "name"],
             ["public_account", "subscription_raw", "name"],
         ]), "Zed")
-        return ProviderLimit(name: name, planLabel: plan, configured: true, error: expiry == nil ? "No subscription data" : nil, subscriptionExpiresAt: expiry, windows: [])
+        return AgentLimit(name: name, planLabel: plan, configured: true, error: expiry == nil ? "No subscription data" : nil, subscriptionExpiresAt: expiry, windows: [])
     }
 
-    static func fetchTrae() async -> ProviderLimit {
+    static func fetchTrae() async -> AgentLimit {
         let name = "trae"
-        guard let account = readCockpitAccount(provider: name) else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        guard let account = readCockpitAccount(agent: name) else {
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
         let resetAt = nestedDate(account, paths: [
             ["plan_reset_at"],
@@ -539,13 +539,13 @@ enum LimitsService {
             ["trae_entitlement_raw", "data", "plan_type"],
             ["public_account", "trae_entitlement_raw", "plan_type"],
         ]), "Trae")
-        return ProviderLimit(name: name, planLabel: plan, configured: true, error: resetAt == nil ? "No subscription data" : nil, subscriptionResetAt: resetAt, windows: [])
+        return AgentLimit(name: name, planLabel: plan, configured: true, error: resetAt == nil ? "No subscription data" : nil, subscriptionResetAt: resetAt, windows: [])
     }
 
-    static func fetchWindsurf() async -> ProviderLimit {
+    static func fetchWindsurf() async -> AgentLimit {
         let name = "windsurf"
-        guard let account = readCockpitAccount(provider: name) else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        guard let account = readCockpitAccount(agent: name) else {
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
         let resetAt = nestedDate(account, paths: [
             ["copilot_quota_reset_date"],
@@ -561,13 +561,13 @@ enum LimitsService {
             ["windsurf_user_status", "plan"],
         ]), "Windsurf")
         let windows = copilotStyleWindows(from: account, resetAt: resetAt)
-        return ProviderLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, quotaResetAt: resetAt, windows: windows)
+        return AgentLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, quotaResetAt: resetAt, windows: windows)
     }
 
-    static func fetchQoder() async -> ProviderLimit {
+    static func fetchQoder() async -> AgentLimit {
         let name = "qoder"
-        guard let account = readCockpitAccount(provider: name) else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        guard let account = readCockpitAccount(agent: name) else {
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
         let plan = planLabel(nestedString(account, paths: [
             ["plan_type"],
@@ -583,49 +583,49 @@ enum LimitsService {
                   let total = numeric(nestedValue(account, ["credits_total"])), total > 0 {
             windows.append(LimitWindow(label: "Credits", usedPercent: min(max(used / total * 100, 0), 100), resetAt: nil))
         }
-        return ProviderLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
+        return AgentLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
     }
 
-    static func fetchCodebuddy() async -> ProviderLimit {
+    static func fetchCodebuddy() async -> AgentLimit {
         let name = "codebuddy"
-        let cached = readCockpitAccount(provider: name)
+        let cached = readCockpitAccount(agent: name)
         guard let auth = readCodebuddyAuth() else {
             guard let cached else {
-                return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+                return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
             }
-            return workbuddyLimit(from: cached, configured: true, providerName: name, displayPrefix: "CodeBuddy")
+            return workbuddyLimit(from: cached, configured: true, agentName: name, displayPrefix: "CodeBuddy")
         }
 
         if let refreshed = await refreshWorkBuddyAccount(from: auth) {
-            writeCockpitAccountSnapshot(provider: name, account: refreshed)
-            return workbuddyLimit(from: refreshed, configured: true, providerName: name, displayPrefix: "CodeBuddy")
+            writeCockpitAccountSnapshot(agent: name, account: refreshed)
+            return workbuddyLimit(from: refreshed, configured: true, agentName: name, displayPrefix: "CodeBuddy")
         }
 
         if let cached {
-            return workbuddyLimit(from: cached, configured: true, providerName: name, displayPrefix: "CodeBuddy")
+            return workbuddyLimit(from: cached, configured: true, agentName: name, displayPrefix: "CodeBuddy")
         }
-        return ProviderLimit(name: name, planLabel: "CodeBuddy", configured: true, error: "Request failed", windows: [])
+        return AgentLimit(name: name, planLabel: "CodeBuddy", configured: true, error: "Request failed", windows: [])
     }
 
-    static func fetchWorkBuddy() async -> ProviderLimit {
+    static func fetchWorkBuddy() async -> AgentLimit {
         let name = "workbuddy"
-        let cached = readCockpitAccount(provider: name)
+        let cached = readCockpitAccount(agent: name)
         guard let auth = readWorkBuddyAuth() else {
             guard let cached else {
-                return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+                return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
             }
             return workbuddyLimit(from: cached, configured: true)
         }
 
         if let refreshed = await refreshWorkBuddyAccount(from: auth) {
-            writeCockpitAccountSnapshot(provider: name, account: refreshed)
+            writeCockpitAccountSnapshot(agent: name, account: refreshed)
             return workbuddyLimit(from: refreshed, configured: true)
         }
 
         if let cached {
             return workbuddyLimit(from: cached, configured: true)
         }
-        return ProviderLimit(name: name, planLabel: "WorkBuddy", configured: true, error: "Request failed", windows: [])
+        return AgentLimit(name: name, planLabel: "WorkBuddy", configured: true, error: "Request failed", windows: [])
     }
 
     // MARK: ZCode (智谱 / Z.ai coding agent — local config detection)
@@ -644,18 +644,18 @@ enum LimitsService {
     /// usedPercent = used/total, resetAt = period_end). When the plan has
     /// expired or no balances are returned, the card falls back to showing the
     /// plan name without progress bars.
-    static func fetchZcode() async -> ProviderLimit {
+    static func fetchZcode() async -> AgentLimit {
         let name = "zcode"
         let home = NSHomeDirectory()
         let zcodeDir = "\(home)/.zcode"
         guard FileManager.default.fileExists(atPath: zcodeDir) else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
 
         // Read the active provider's JWT apiKey from config.json.
         guard let cfg = readJSON("\(zcodeDir)/v2/config.json"),
               let providers = cfg["provider"] as? [String: Any] else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
 
         let bestProvider = providers
@@ -667,7 +667,7 @@ enum LimitsService {
             .first
 
         guard let (providerId, providerObj) = bestProvider else {
-            return ProviderLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }
 
         let plan = zcodePlanLabel(for: providerId, fallback: providerObj["name"] as? String)
@@ -677,7 +677,7 @@ enum LimitsService {
         guard let options = providerObj["options"] as? [String: Any],
               let token = options["apiKey"] as? String,
               !token.isEmpty else {
-            return ProviderLimit(name: name, planLabel: plan, configured: configured, error: configured ? "No API key" : nil, windows: [])
+            return AgentLimit(name: name, planLabel: plan, configured: configured, error: configured ? "No API key" : nil, windows: [])
         }
 
         // Query billing/balance.
@@ -686,7 +686,7 @@ enum LimitsService {
         req.setValue("application/json", forHTTPHeaderField: "Accept")
 
         guard let json = await getJSON(req) else {
-            return ProviderLimit(name: name, planLabel: plan, configured: true, error: "Request failed", windows: [])
+            return AgentLimit(name: name, planLabel: plan, configured: true, error: "Request failed", windows: [])
         }
 
         // Response: { code: 0, data: { balances: [...] } }
@@ -701,17 +701,17 @@ enum LimitsService {
             let used = numeric(b["used_units"]) ?? 0
             let total = numeric(b["total_units"]) ?? 0
             let pct = total > 0 ? (used / total * 100) : 0
-            let resetAt = ProviderDateParser.parse(b["period_end"])
+            let resetAt = AgentDateParser.parse(b["period_end"])
             windows.append(LimitWindow(label: label, usedPercent: pct, resetAt: resetAt))
         }
 
         // If no balances returned (plan expired / not entitled), still show the
         // card with plan label so the user knows ZCode is installed.
         if windows.isEmpty {
-            return ProviderLimit(name: name, planLabel: plan, configured: true, error: "No active quota", windows: [])
+            return AgentLimit(name: name, planLabel: plan, configured: true, error: "No active quota", windows: [])
         }
 
-        return ProviderLimit(name: name, planLabel: plan, configured: true, error: nil, windows: windows)
+        return AgentLimit(name: name, planLabel: plan, configured: true, error: nil, windows: windows)
     }
 
     private static func zcodeProviderScore(_ id: String, _ obj: [String: Any]) -> Int {
@@ -814,7 +814,7 @@ enum LimitsService {
         guard let url = comps.url else { return nil }
         let req = codexSubscriptionRequest(url: url, accessToken: accessToken, accountId: nil, targetPath: "/backend-api/subscriptions")
         guard let json = await getJSON(req) else { return nil }
-        return ProviderDateParser.parse(json["active_until"] ?? json["expires_at"])
+        return AgentDateParser.parse(json["active_until"] ?? json["expires_at"])
     }
 
     private static func codexSubscriptionRequest(url: URL, accessToken: String, accountId: String?, targetPath: String) -> URLRequest {
@@ -840,7 +840,7 @@ enum LimitsService {
         let account = (selected["account"] as? [String: Any]) ?? selected
         let entitlement = selected["entitlement"] as? [String: Any]
         let accountId = firstString(account, keys: ["account_id", "id", "chatgpt_account_id", "workspace_id"])
-        let expiresAt = ProviderDateParser.parse(entitlement?["expires_at"] ?? account["expires_at"])
+        let expiresAt = AgentDateParser.parse(entitlement?["expires_at"] ?? account["expires_at"])
         return (accountId, expiresAt)
     }
 
@@ -913,10 +913,10 @@ enum LimitsService {
         return nil
     }
 
-    private static func readCockpitAccount(provider: String) -> [String: Any]? {
+    private static func readCockpitAccount(agent: String) -> [String: Any]? {
         let base = "\(NSHomeDirectory())/.antigravity_cockpit"
-        let indexPath = "\(base)/\(provider)_accounts.json"
-        let accountsDir = "\(base)/\(provider)_accounts"
+        let indexPath = "\(base)/\(agent)_accounts.json"
+        let accountsDir = "\(base)/\(agent)_accounts"
         if let index = readJSON(indexPath),
            let id = cockpitAccountId(index) {
             if let detail = readJSON("\(accountsDir)/\(id).json") {
@@ -1094,16 +1094,16 @@ enum LimitsService {
             "PageSize": 100,
             "ProductCode": "p_tcaca",
             "Status": [0, 3],
-            "PackageEndTimeRangeBegin": ProviderDateParser.localString(from: now, format: "yyyy-MM-dd HH:mm:ss"),
-            "PackageEndTimeRangeEnd": ProviderDateParser.localString(from: end, format: "yyyy-MM-dd HH:mm:ss"),
+            "PackageEndTimeRangeBegin": AgentDateParser.localString(from: now, format: "yyyy-MM-dd HH:mm:ss"),
+            "PackageEndTimeRangeEnd": AgentDateParser.localString(from: end, format: "yyyy-MM-dd HH:mm:ss"),
         ]
     }
 
-    private static func writeCockpitAccountSnapshot(provider: String, account: [String: Any]) {
+    private static func writeCockpitAccountSnapshot(agent: String, account: [String: Any]) {
         guard let accountId = firstString(account, keys: ["id"]) else { return }
         let base = "\(NSHomeDirectory())/.antigravity_cockpit"
-        let accountsDir = "\(base)/\(provider)_accounts"
-        let indexPath = "\(base)/\(provider)_accounts.json"
+        let accountsDir = "\(base)/\(agent)_accounts"
+        let indexPath = "\(base)/\(agent)_accounts.json"
         let detailPath = "\(accountsDir)/\(accountId).json"
         let summary: [String: Any] = [
             "id": accountId,
@@ -1134,8 +1134,8 @@ enum LimitsService {
         return cleaned.isEmpty ? "local" : cleaned
     }
 
-    private static func workbuddyLimit(from account: [String: Any], configured: Bool, providerName: String = "workbuddy", displayPrefix: String = "WorkBuddy") -> ProviderLimit {
-        let name = providerName
+    private static func workbuddyLimit(from account: [String: Any], configured: Bool, agentName: String = "workbuddy", displayPrefix: String = "WorkBuddy") -> AgentLimit {
+        let name = agentName
         let plan = planLabel(nestedString(account, paths: [
             ["payment_type"],
             ["plan_type"],
@@ -1143,7 +1143,7 @@ enum LimitsService {
             ["quota_raw", "payment", "data"],
         ]), displayPrefix)
         let windows = workbuddyWindows(from: account)
-        return ProviderLimit(
+        return AgentLimit(
             name: name,
             planLabel: plan,
             configured: configured,
@@ -1170,13 +1170,16 @@ enum LimitsService {
             var resetAt: Date? = nil
 
             for item in accounts {
-                if let status = item["Status"] as? Int, status != 0 && status != 3 { continue }
+                // Only count active (Status == 0) packages. Status 3 means the
+                // package is exhausted; including it inflates "used" with
+                // consumption from past cycles.
+                if let status = item["Status"] as? Int, status != 0 { continue }
                 let itemTotal = numeric(item["CycleCapacitySizePrecise"] ?? item["CycleCapacitySize"] ?? item["CapacitySizePrecise"] ?? item["CapacitySize"]) ?? 0
                 let itemRemain = numeric(item["CycleCapacityRemainPrecise"] ?? item["CycleCapacityRemain"] ?? item["CapacityRemainPrecise"] ?? item["CapacityRemain"]) ?? 0
                 guard itemTotal > 0 else { continue }
                 total += itemTotal
                 used += max(itemTotal - itemRemain, 0)
-                let candidate = ProviderDateParser.parse(item["CycleEndTime"] ?? item["ExpiredTime"] ?? item["DeductionEndTime"])
+                let candidate = AgentDateParser.parse(item["CycleEndTime"] ?? item["ExpiredTime"] ?? item["DeductionEndTime"])
                 if let candidate {
                     resetAt = nearestFutureDate(current: resetAt, candidate: candidate)
                 }
@@ -1214,7 +1217,7 @@ enum LimitsService {
 
     private static func nestedDate(_ object: Any?, paths: [[String]]) -> Date? {
         for path in paths {
-            if let date = ProviderDateParser.parse(nestedValue(object, path)) {
+            if let date = AgentDateParser.parse(nestedValue(object, path)) {
                 return date
             }
         }
@@ -1269,7 +1272,7 @@ enum LimitsService {
     }
 
     private static func jwtClaimDate(_ token: String, _ claim: String) -> Date? {
-        ProviderDateParser.parse(jwtClaimValue(token, claim))
+        AgentDateParser.parse(jwtClaimValue(token, claim))
     }
 
     private static func jwtClaimValue(_ token: String, _ claim: String) -> Any? {
@@ -1362,21 +1365,21 @@ enum LimitsService {
     private static func kiroResetDate(_ out: String) -> Date? {
         for key in ["resetAt", "resetTime", "resetOn", "nextDateReset"] {
             if let raw = firstMatch(out, #""\#(key)"\s*:\s*"([^"]+)""#),
-               let date = ProviderDateParser.parse(raw) {
+               let date = AgentDateParser.parse(raw) {
                 return date
             }
             if let raw = firstMatch(out, #""\#(key)"\s*:\s*(\d+(?:\.\d+)?)"#),
-               let date = ProviderDateParser.parse(raw) {
+               let date = AgentDateParser.parse(raw) {
                 return date
             }
         }
 
         // "resets on 2026-07-01" (ISO) or "resets on 07/01" (MM/DD)
         if let iso = firstMatch(out, #"resets on (\d{4}-\d{2}-\d{2})"#) {
-            return ProviderDateParser.parse(iso)
+            return AgentDateParser.parse(iso)
         }
         guard let md = firstMatch(out, #"resets on (\d{2}/\d{2})"#) else { return nil }
-        return ProviderDateParser.nextUTCMonthDay(md)
+        return AgentDateParser.nextUTCMonthDay(md)
     }
 }
 

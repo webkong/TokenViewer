@@ -22,13 +22,13 @@ public sealed class MainViewModel : ObservableObject
     {
         _core = core;
         _dispatcher = dispatcher;
-        Providers = new ObservableCollection<ProviderStatus>();
+        Agents = new ObservableCollection<AgentStatus>();
         SyncCommand = new AsyncRelayCommand(SyncAsync, () => !IsLoading);
         _syncTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };
         _syncTimer.Tick += async (_, _) => await SyncAsync();
     }
 
-    public ObservableCollection<ProviderStatus> Providers { get; }
+    public ObservableCollection<AgentStatus> Agents { get; }
 
     public bool IsLoading
     {
@@ -97,15 +97,15 @@ public sealed class MainViewModel : ObservableObject
         var to = tomorrowStart.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss'Z'", CultureInfo.InvariantCulture);
 
         var summary = _core.GetSummary(from, to);
-        var providers = _core.GetProviderStatus();
+        var agents = _core.GetAgentStatus();
 
         _dispatcher.Invoke(() =>
         {
             Summary = summary;
-            Providers.Clear();
-            foreach (var provider in providers.OrderByDescending(p => p.Installed).ThenBy(p => p.Source))
+            Agents.Clear();
+            foreach (var agent in agents.OrderByDescending(p => p.Installed).ThenBy(p => p.Source))
             {
-                Providers.Add(provider);
+                Agents.Add(agent);
             }
             RaisePropertyChanged(nameof(SummaryTokens));
             RaisePropertyChanged(nameof(SummaryCost));

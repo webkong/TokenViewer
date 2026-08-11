@@ -80,7 +80,7 @@ pub fn all_parser_sources() -> Vec<&'static str> {
         .collect()
 }
 
-/// Parse all providers in parallel. `cursors` maps source name -> cursor JSON string.
+/// Parse all agents in parallel. `cursors` maps source name -> cursor JSON string.
 pub fn parse_all(home_dir: &Path, cursors: &HashMap<String, String>) -> Vec<ParseResult> {
     let codex_homes = crate::codex_home::discover_codex_homes(home_dir, &[], &[], false);
     parse_all_with_codex_homes(home_dir, cursors, &codex_homes)

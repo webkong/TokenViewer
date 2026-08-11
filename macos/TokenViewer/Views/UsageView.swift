@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Brand color constant only — display names and provider colors come from
-/// `ProviderRegistry.shared`.
+/// Brand color constant only — display names and agent colors come from
+/// `AgentRegistry.shared`.
 enum TVColor {
     static let brand = Color(red: 0.02, green: 0.59, blue: 0.41) // #059669 emerald
 }
@@ -71,10 +71,10 @@ struct UsageView: View {
                             HeatmapView(points: viewModel.heatmap, availableWidth: geo.size.width - 72)
                         }
 
-                        // Composition: providers + models side-by-side when wide
+                        // Composition: agents + models side-by-side when wide
                         if !viewModel.modelBreakdown.isEmpty {
                             pair(wide,
-                                 ProviderBreakdownView(models: viewModel.modelBreakdown),
+                                 AgentBreakdownView(models: viewModel.modelBreakdown),
                                  ModelBreakdownView(models: viewModel.modelBreakdown))
                         }
 
@@ -347,7 +347,7 @@ private struct ModelBreakdownView: View {
             ForEach(merged.prefix(8)) { entry in
                 VStack(spacing: 5) {
                     HStack(spacing: 8) {
-                        ProviderIcon(source: entry.source, modelName: entry.model, size: 14)
+                        ModelProviderIcon(model: entry.model, fallbackAgentSource: entry.source, size: 14)
                         Text(entry.model).font(.system(size: 13, weight: .medium)).lineLimit(1)
                         Spacer()
                         Text(tvFormatCost(entry.total_cost_usd))
@@ -359,7 +359,7 @@ private struct ModelBreakdownView: View {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             Capsule().fill(.quaternary).frame(height: 5)
-                            Capsule().fill(ProviderRegistry.shared.brandColor(for: entry.source))
+                            Capsule().fill(AgentRegistry.shared.brandColor(for: entry.source))
                                 .frame(width: max(2, geo.size.width * entry.percentage / 100.0), height: 5)
                         }
                     }
@@ -440,9 +440,9 @@ private struct TokenTypeBar: View {
     }
 }
 
-// MARK: - Provider breakdown
+// MARK: - Agent breakdown
 
-private struct ProviderBreakdownView: View {
+private struct AgentBreakdownView: View {
     let models: [ModelEntry]
     @ObservedObject private var l10n = L10n.shared
 
@@ -461,12 +461,12 @@ private struct ProviderBreakdownView: View {
     var body: some View {
         let total = max(rows.reduce(0) { $0 + $1.tokens }, 1)
         VStack(alignment: .leading, spacing: 12) {
-            Text(l10n.usageProviders).font(.system(size: 15, weight: .semibold))
+            Text(l10n.usageAgents).font(.system(size: 15, weight: .semibold))
             ForEach(rows) { row in
                 VStack(spacing: 5) {
                     HStack(spacing: 8) {
-                        ProviderIcon(source: row.id, size: 14)
-                        Text(ProviderRegistry.shared.displayName(for: row.id)).font(.system(size: 13, weight: .medium))
+                        AgentIcon(source: row.id, size: 14)
+                        Text(AgentRegistry.shared.displayName(for: row.id)).font(.system(size: 13, weight: .medium))
                         Spacer()
                         Text(tvFormatCost(row.cost))
                             .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
@@ -477,7 +477,7 @@ private struct ProviderBreakdownView: View {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             Capsule().fill(.quaternary).frame(height: 5)
-                            Capsule().fill(ProviderRegistry.shared.brandColor(for: row.id))
+                            Capsule().fill(AgentRegistry.shared.brandColor(for: row.id))
                                 .frame(width: max(2, geo.size.width * CGFloat(row.tokens) / CGFloat(total)), height: 5)
                         }
                     }
@@ -706,5 +706,4 @@ private struct DailyTableView: View {
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: align)
     }
 }
-
 

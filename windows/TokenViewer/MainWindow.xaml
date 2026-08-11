@@ -68,8 +68,8 @@
               </Border>
               <Border Style="{StaticResource Card}" Margin="0,0,12,0">
                 <StackPanel>
-                  <TextBlock Text="Providers" Foreground="{StaticResource MutedText}" />
-                  <TextBlock Text="{Binding Main.Providers.Count}" FontSize="28" FontWeight="SemiBold" />
+                  <TextBlock Text="Agents" Foreground="{StaticResource MutedText}" />
+                  <TextBlock Text="{Binding Main.Agents.Count}" FontSize="28" FontWeight="SemiBold" />
                 </StackPanel>
               </Border>
               <Border Style="{StaticResource Card}">
@@ -96,7 +96,7 @@
               <Border Style="{StaticResource Card}" Grid.Column="1">
                 <StackPanel>
                   <TextBlock Text="Data Sources" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12" />
-                  <ItemsControl ItemsSource="{Binding Main.Providers}">
+                  <ItemsControl ItemsSource="{Binding Main.Agents}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
                         <Grid Margin="0,0,0,10">
@@ -120,15 +120,15 @@
         </ScrollViewer>
       </TabItem>
 
-      <TabItem Header="Providers">
+      <TabItem Header="Agents">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="0,16,0,0">
             <Border Style="{StaticResource Card}" Margin="0,0,0,14">
               <StackPanel>
-                <TextBlock Text="Provider Status" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12" />
-                <TextBlock Text="This page mirrors the macOS limits view layout. Windows now fetches live quota cards where the provider exposes them, and falls back to install/status data when it cannot." Foreground="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,14" />
+                <TextBlock Text="Agent Status" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12" />
+                <TextBlock Text="This page mirrors the macOS limits view layout. Windows now fetches live quota cards where the agent exposes them, and falls back to install/status data when it cannot." Foreground="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,14" />
                 <TextBlock Text="{Binding Limits.Status}" Foreground="{StaticResource MutedText}" FontSize="11" Margin="0,0,0,12" />
-                <ItemsControl ItemsSource="{Binding Limits.Providers}">
+                <ItemsControl ItemsSource="{Binding Limits.Agents}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
                       <Border BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,0,0,1" Padding="0,10,0,10">

@@ -81,7 +81,7 @@ final class AppSyncCoordinatorTests: XCTestCase {
 
         let finalForcedCallCount = await probe.callCount()
         XCTAssertEqual(finalForcedCallCount, 2)
-        XCTAssertEqual(viewModel.providers.first?.windows.first?.usedPercent, 2)
+        XCTAssertEqual(viewModel.agents.first?.windows.first?.usedPercent, 2)
         XCTAssertEqual(toastCount, 1)
     }
 
@@ -107,7 +107,7 @@ final class AppSyncCoordinatorTests: XCTestCase {
 
         let finalNonForcedCallCount = await probe.callCount()
         XCTAssertEqual(finalNonForcedCallCount, 1)
-        XCTAssertEqual(viewModel.providers.first?.windows.first?.usedPercent, 1)
+        XCTAssertEqual(viewModel.agents.first?.windows.first?.usedPercent, 1)
     }
 
     private func waitUntil(
@@ -132,7 +132,7 @@ private actor LimitsFetchProbe {
         self.onFirstStarted = onFirstStarted
     }
 
-    func fetch() async -> [ProviderLimit] {
+    func fetch() async -> [AgentLimit] {
         calls += 1
         let currentCall = calls
         if currentCall == 1 {
@@ -144,7 +144,7 @@ private actor LimitsFetchProbe {
             }
         }
         return [
-            ProviderLimit(
+            AgentLimit(
                 name: "codex",
                 planLabel: nil,
                 configured: true,

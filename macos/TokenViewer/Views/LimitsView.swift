@@ -13,20 +13,20 @@ struct LimitsView: View {
                     // The Limits page always shows every agent that supports quota
                     // tracking, regardless of the menu-bar popover visibility toggle
                     // (Settings > Menu Bar), which only affects the popover cards.
-                    let providerBySource = Dictionary(uniqueKeysWithValues: viewModel.providers.map { ($0.name, $0) })
-                    let allProviders = LimitsVisibilityStore.allSources
+                    let agentBySource = Dictionary(uniqueKeysWithValues: viewModel.agents.map { ($0.name, $0) })
+                    let allAgents = LimitsVisibilityStore.allSources
                         .map { source in
-                            providerBySource[source] ?? ProviderLimit(name: source, planLabel: nil, configured: false, error: nil, windows: [])
+                            agentBySource[source] ?? AgentLimit(name: source, planLabel: nil, configured: false, error: nil, windows: [])
                         }
-                    let activeProviders = allProviders.filter { $0.configured && $0.hasLimitDisplay }
-                    let inactiveProviders = allProviders.filter { !$0.configured || !$0.hasLimitDisplay }
-                    if allProviders.isEmpty {
+                    let activeAgents = allAgents.filter { $0.configured && $0.hasLimitDisplay }
+                    let inactiveAgents = allAgents.filter { !$0.configured || !$0.hasLimitDisplay }
+                    if allAgents.isEmpty {
                         emptyState
                     } else {
-                        twoColumnSection(providers: activeProviders, cardWidth: cardW)
-                        if !inactiveProviders.isEmpty {
+                        twoColumnSection(agents: activeAgents, cardWidth: cardW)
+                        if !inactiveAgents.isEmpty {
                             Divider().padding(.vertical, 2)
-                            twoColumnSection(providers: inactiveProviders, cardWidth: cardW)
+                            twoColumnSection(agents: inactiveAgents, cardWidth: cardW)
                         }
                     }
                 }
@@ -38,13 +38,13 @@ struct LimitsView: View {
         }
     }
 
-    private func twoColumnSection(providers: [ProviderLimit], cardWidth: CGFloat) -> some View {
-        ForEach(Array(stride(from: 0, to: providers.count, by: 2)), id: \.self) { i in
+    private func twoColumnSection(agents: [AgentLimit], cardWidth: CGFloat) -> some View {
+        ForEach(Array(stride(from: 0, to: agents.count, by: 2)), id: \.self) { i in
             HStack(alignment: .top, spacing: 12) {
-                ProviderLimitCard(provider: providers[i])
+                AgentLimitCard(agent: agents[i])
                     .frame(width: cardWidth)
-                if i + 1 < providers.count {
-                    ProviderLimitCard(provider: providers[i + 1])
+                if i + 1 < agents.count {
+                    AgentLimitCard(agent: agents[i + 1])
                         .frame(width: cardWidth)
                 }
             }
@@ -90,53 +90,53 @@ struct LimitsView: View {
     }
 }
 
-private struct ProviderLimitCard: View {
-    let provider: ProviderLimit
+private struct AgentLimitCard: View {
+    let agent: AgentLimit
     @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                ProviderIcon(source: provider.name, size: 16)
-                Text(ProviderRegistry.shared.displayName(for: provider.name)).font(.system(size: 15, weight: .semibold))
-                if let plan = provider.planLabel {
+                AgentIcon(source: agent.name, size: 16)
+                Text(AgentRegistry.shared.displayName(for: agent.name)).font(.system(size: 15, weight: .semibold))
+                if let plan = agent.planLabel {
                     Text(plan)
                         .font(.system(size: 10, weight: .medium))
                         .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Capsule().fill(ProviderRegistry.shared.brandColor(for: provider.name).opacity(0.15)))
-                        .foregroundStyle(ProviderRegistry.shared.brandColor(for: provider.name))
+                        .background(Capsule().fill(AgentRegistry.shared.brandColor(for: agent.name).opacity(0.15)))
+                        .foregroundStyle(AgentRegistry.shared.brandColor(for: agent.name))
                 }
                 Spacer()
-                if let expiry = provider.subscriptionExpiresAt {
-                    ProviderDateBadge(kind: .expires, date: expiry, tint: ProviderRegistry.shared.brandColor(for: provider.name))
-                } else if let reset = provider.subscriptionResetAt {
-                    ProviderDateBadge(kind: .subscriptionReset, date: reset, tint: ProviderRegistry.shared.brandColor(for: provider.name))
-                } else if let reset = provider.quotaResetAt {
-                    ProviderDateBadge(kind: .quotaReset, date: reset, tint: ProviderRegistry.shared.brandColor(for: provider.name))
+                if let expiry = agent.subscriptionExpiresAt {
+                    AgentDateBadge(kind: .expires, date: expiry, tint: AgentRegistry.shared.brandColor(for: agent.name))
+                } else if let reset = agent.subscriptionResetAt {
+                    AgentDateBadge(kind: .subscriptionReset, date: reset, tint: AgentRegistry.shared.brandColor(for: agent.name))
+                } else if let reset = agent.quotaResetAt {
+                    AgentDateBadge(kind: .quotaReset, date: reset, tint: AgentRegistry.shared.brandColor(for: agent.name))
                 }
-                if !provider.configured {
+                if !agent.configured {
                     Text(l10n.notConfigured).font(.system(size: 11)).foregroundStyle(.tertiary)
-                } else if let err = provider.error {
+                } else if let err = agent.error {
                     Text(err).font(.system(size: 11)).foregroundStyle(.orange)
-                } else if provider.windows.isEmpty {
+                } else if agent.windows.isEmpty {
                     Text(l10n.noUsageData).font(.system(size: 11)).foregroundStyle(.tertiary)
                 }
             }
 
-            if provider.configured && !provider.windows.isEmpty {
-                ForEach(provider.windows) { window in
-                    LimitWindowRow(window: window, tint: ProviderRegistry.shared.brandColor(for: provider.name))
+            if agent.configured && !agent.windows.isEmpty {
+                ForEach(agent.windows) { window in
+                    LimitWindowRow(window: window, tint: AgentRegistry.shared.brandColor(for: agent.name))
                 }
             }
         }
         .padding(16)
-        .frame(minHeight: provider.configured && provider.hasLimitDisplay ? kLimitCardMinHeight : 0, alignment: .top)
+        .frame(minHeight: agent.configured && agent.hasLimitDisplay ? kLimitCardMinHeight : 0, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color(nsColor: .controlBackgroundColor))
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 0.5))
         )
-        .opacity(provider.configured && provider.hasLimitDisplay ? 1 : 0.55)
+        .opacity(agent.configured && agent.hasLimitDisplay ? 1 : 0.55)
     }
 }
 
@@ -182,8 +182,8 @@ private struct LimitWindowRow: View {
     }
 }
 
-private struct ProviderDateBadge: View {
-    let kind: ProviderCountdownKind
+private struct AgentDateBadge: View {
+    let kind: AgentCountdownKind
     let date: Date
     let tint: Color
     @ObservedObject private var l10n = L10n.shared
@@ -214,7 +214,7 @@ private struct ResetInlineText: View {
     }
 }
 
-enum ProviderCountdownKind {
+enum AgentCountdownKind {
     case expires
     case subscriptionReset
     case quotaReset

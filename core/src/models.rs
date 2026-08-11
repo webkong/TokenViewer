@@ -70,9 +70,9 @@ pub struct HeatmapPoint {
     pub level: u8, // 0-4
 }
 
-/// Provider 状态
+/// Agent 状态
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProviderStatus {
+pub struct AgentStatus {
     pub source: String,
     pub installed: bool,
     pub last_sync: Option<String>,

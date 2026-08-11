@@ -21,7 +21,7 @@ struct SettingsView: View {
     @ObservedObject private var currency = CurrencyStore.shared
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var viewModel = UsageViewModel.shared
-    @ObservedObject private var providerRegistry = ProviderRegistry.shared
+    @ObservedObject private var agentRegistry = AgentRegistry.shared
 
     private let dataDir: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -74,8 +74,8 @@ struct SettingsView: View {
             if #available(macOS 13.0, *) {
                 launchAtLogin = SMAppService.mainApp.status == .enabled
             }
-            providerRegistry.loadIfNeeded()
-            providerRegistry.refreshInstallStatus()
+            agentRegistry.loadIfNeeded()
+            agentRegistry.refreshInstallStatus()
             refreshCodexHomes(force: false)
         }
     }
@@ -306,14 +306,14 @@ struct SettingsView: View {
             Text(l10n.limitsVisibilityDesc)
                 .font(.system(size: 11, weight: .medium))
             FlowLayout(itemSpacing: 6, rowSpacing: 6) {
-                ForEach(providerRegistry.sortedLimitProviders) { provider in
+                ForEach(agentRegistry.sortedLimitAgents) { agent in
                     agentChip(
-                        source: provider.source,
-                        label: ProviderRegistry.shared.displayName(for: provider.source),
-                        isSelected: visible.contains(provider.source),
-                        isInstalled: provider.isInstalled
+                        source: agent.source,
+                        label: AgentRegistry.shared.displayName(for: agent.source),
+                        isSelected: visible.contains(agent.source),
+                        isInstalled: agent.isInstalled
                     ) {
-                        toggleLimitsVisibility(provider.source)
+                        toggleLimitsVisibility(agent.source)
                     }
                 }
             }
@@ -485,7 +485,7 @@ struct SettingsView: View {
         StatusBarController.shared.setMenuBarIconVisible(true)
         NSApp.setActivationPolicy(.accessory)
         limitsVisibleSources = LimitsVisibilityStore.defaultsValue
-        enabledProvidersJSON = ProviderRegistry.defaultSkillSourcesJSON
+        enabledAgentsJSON = AgentRegistry.defaultAgentSourcesJSON
 
         theme.theme = AppTheme.system.rawValue
         l10n.language = .system
@@ -531,7 +531,7 @@ struct SettingsView: View {
         .buttonStyle(.plain).disabled(isLocked).opacity(isLocked ? 0.82 : 1.0)
     }
 
-    // Shared chip style for agent/provider selection with icon
+    // Shared chip style for agent/agent selection with icon
     private func agentChip(source: String? = nil, label: String, isSelected: Bool, isInstalled: Bool = true, action: @escaping () -> Void) -> some View {
         let fillColor = isSelected ? Color.green.opacity(0.16) : Color(nsColor: .controlBackgroundColor)
         let borderColor: Color = isSelected ? Color.green.opacity(0.35) : Color.secondary.opacity(0.15)
@@ -541,7 +541,7 @@ struct SettingsView: View {
         return Button(action: action) {
             HStack(spacing: 5) {
                 if let s = source {
-                    ProviderIcon(source: s, size: 14)
+                    AgentIcon(source: s, size: 14)
                         .opacity(opacity)
                 }
                 Text(label)
@@ -569,21 +569,21 @@ struct SettingsView: View {
     @State private var skillsSourceRoot: String = ""
     /// Last value loaded from/saved to the backend, used as "old path" for the move prompt on save.
     @State private var lastSavedSkillsSourceRoot: String = ""
-    @AppStorage("skillsEnabledProviders") private var enabledProvidersJSON: String = ProviderRegistry.defaultSkillSourcesJSON
+    @AppStorage("skillsEnabledProviders") private var enabledAgentsJSON: String = AgentRegistry.defaultAgentSourcesJSON
     @State private var pendingSkillsMoveOldPath: String? = nil
     @State private var pendingSkillsMoveNewPath: String = ""
     @State private var pendingSkillsOverwriteOldPath: String? = nil
     @State private var pendingSkillsOverwriteNewPath: String = ""
 
-    private var enabledProviders: Set<String> {
-        guard let data = enabledProvidersJSON.data(using: .utf8),
+    private var enabledAgents: Set<String> {
+        guard let data = enabledAgentsJSON.data(using: .utf8),
               let arr = try? JSONDecoder().decode([String].self, from: data)
-        else { return Set(ProviderRegistry.defaultSkillSources) }
+        else { return Set(AgentRegistry.defaultAgentSources) }
         return Set(arr)
     }
 
-    private func toggleProvider(_ source: String) {
-        var set = enabledProviders
+    private func toggleAgent(_ source: String) {
+        var set = enabledAgents
         if set.contains(source) {
             set.remove(source)
         } else {
@@ -591,7 +591,7 @@ struct SettingsView: View {
         }
         guard let data = try? JSONEncoder().encode(Array(set)),
               let json = String(data: data, encoding: .utf8) else { return }
-        enabledProvidersJSON = json
+        enabledAgentsJSON = json
     }
 
     private var skillsSection: some View {
@@ -634,18 +634,18 @@ struct SettingsView: View {
                 Text(l10n.skillAgentParticipationDesc)
                     .font(.system(size: 10)).foregroundStyle(.secondary)
 
-                if providerRegistry.skillProviders.isEmpty {
+                if agentRegistry.skillAgents.isEmpty {
                     Text(l10n.loading).font(.system(size: 11)).foregroundStyle(.secondary)
                 } else {
                     FlowLayout(itemSpacing: 6, rowSpacing: 6) {
-                        ForEach(providerRegistry.sortedSkillProviders) { p in
+                        ForEach(agentRegistry.sortedSkillAgents) { p in
                             agentChip(
                                 source: p.source,
-                                label: ProviderRegistry.shared.displayName(for: p.source),
-                                isSelected: enabledProviders.contains(p.source),
+                                label: AgentRegistry.shared.displayName(for: p.source),
+                                isSelected: enabledAgents.contains(p.source),
                                 isInstalled: p.isInstalled
                             ) {
-                                toggleProvider(p.source)
+                                toggleAgent(p.source)
                             }
                         }
                     }
@@ -654,8 +654,8 @@ struct SettingsView: View {
         }
         .onAppear {
             loadSkillsConfig()
-            providerRegistry.loadIfNeeded()
-            providerRegistry.refreshInstallStatus()
+            agentRegistry.loadIfNeeded()
+            agentRegistry.refreshInstallStatus()
         }
         .alert(
             l10n.skillsMovePromptTitle,
@@ -765,7 +765,7 @@ struct SettingsView: View {
         }
 
         lastSavedSkillsSourceRoot = path
-        providerRegistry.reload()
+        agentRegistry.reload()
         if relinkExistingSkills, !relinkSkillsToMovedRoot(sourceRoot: path) {
             SkillManagerViewModel.shared.refresh()
             ToastCenter.shared.error(l10n.skillsMoveRelinkFailed)
@@ -777,9 +777,9 @@ struct SettingsView: View {
 
     private func relinkSkillsToMovedRoot(sourceRoot: String) -> Bool {
         var succeeded = true
-        for provider in providerRegistry.skillProviders {
-            for skillID in provider.linkedSkills {
-                let payload = ["skill_id": skillID, "agent_id": provider.source]
+        for agent in agentRegistry.skillAgents {
+            for skillID in agent.linkedSkills {
+                let payload = ["skill_id": skillID, "agent_id": agent.source]
                 if let data = try? JSONEncoder().encode(payload),
                    let resultData = CoreBridge.shared.skillsLink(data),
                    let result = try? JSONDecoder().decode(SkillOperationResult.self, from: resultData),
@@ -789,9 +789,9 @@ struct SettingsView: View {
 
                 // Only surface an error when the final directory link still does not
                 // point at the moved source root.
-                if provider.linkType != "Directory"
+                if agent.linkType != "Directory"
                     || !directoryLinkIsCurrent(
-                        provider: provider,
+                        agent: agent,
                         skillID: skillID,
                         sourceRoot: sourceRoot
                     ) {
@@ -803,12 +803,12 @@ struct SettingsView: View {
     }
 
     private func directoryLinkIsCurrent(
-        provider: SkillProvider,
+        agent: AgentConfig,
         skillID: String,
         sourceRoot: String
     ) -> Bool {
         let linkPath = URL(
-            fileURLWithPath: standardizedSkillsPath(provider.skillsPath),
+            fileURLWithPath: standardizedSkillsPath(agent.skillsPath),
             isDirectory: true
         ).appendingPathComponent(skillID)
         guard let rawDestination = try? FileManager.default.destinationOfSymbolicLink(atPath: linkPath.path) else {
@@ -875,18 +875,18 @@ struct SettingsView: View {
         }
     }
 
-    private func decodeEnabledProviders() -> Set<String> {
-        guard let data = enabledProvidersJSON.data(using: .utf8),
+    private func decodeEnabledAgents() -> Set<String> {
+        guard let data = enabledAgentsJSON.data(using: .utf8),
               let arr = try? JSONDecoder().decode([String].self, from: data)
-        else { return Set(ProviderRegistry.defaultSkillSources) }
+        else { return Set(AgentRegistry.defaultAgentSources) }
         return Set(arr)
     }
 
-    private func encodeEnabledProviders(_ providers: Set<String>) {
-        guard let data = try? JSONEncoder().encode(Array(providers)),
+    private func encodeEnabledAgents(_ agents: Set<String>) {
+        guard let data = try? JSONEncoder().encode(Array(agents)),
               let json = String(data: data, encoding: .utf8)
         else { return }
-        enabledProvidersJSON = json
+        enabledAgentsJSON = json
     }
 }
 
@@ -970,10 +970,10 @@ struct SettingsCard<Content: View>: View {
         }
     }
 
-    // MARK: - Provider Skills Row
+    // MARK: - Agent Skills Row
 
-    fileprivate struct ProviderSkillsRow: View {
-        let provider: SkillProvider
+    fileprivate struct AgentSkillsRow: View {
+        let agent: AgentConfig
         let onSave: (String, String?, String?) -> Void
         let onReset: (String) -> Void
 
@@ -984,8 +984,8 @@ struct SettingsCard<Content: View>: View {
         var body: some View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
-                    ProviderIcon(source: provider.source, size: 16)
-                    Text(ProviderRegistry.shared.displayName(for: provider.source))
+                    AgentIcon(source: agent.source, size: 16)
+                    Text(AgentRegistry.shared.displayName(for: agent.source))
                         .font(.system(size: 12, weight: .medium))
                         .frame(width: 100, alignment: .leading)
                     Spacer()
@@ -993,10 +993,10 @@ struct SettingsCard<Content: View>: View {
 
                 HStack(spacing: 8) {
                     Text(l10n.skillPathLabel).font(.caption2).foregroundStyle(.secondary).frame(width: 30, alignment: .leading)
-                    TextField(provider.skillsPath, text: $skillsPath)
+                    TextField(agent.skillsPath, text: $skillsPath)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 11))
-                        .disabled(provider.hasParser == false && skillsPath.isEmpty)
+                        .disabled(agent.hasParser == false && skillsPath.isEmpty)
                 }
 
                 HStack(spacing: 8) {
@@ -1014,20 +1014,20 @@ struct SettingsCard<Content: View>: View {
 
                     Button(l10n.reset) {
                         AppFocus.clear()
-                        skillsPath = provider.skillsPath
+                        skillsPath = agent.skillsPath
                         linkType = "Directory"
-                        onReset(provider.source)
+                        onReset(agent.source)
                     }
                     .controlSize(.small)
                     .font(.system(size: 10))
-                    .disabled(skillsPath == provider.skillsPath && linkType == "Directory")
+                    .disabled(skillsPath == agent.skillsPath && linkType == "Directory")
 
                     Button(l10n.save) {
                         AppFocus.clear()
                         let path = skillsPath.trimmingCharacters(in: .whitespaces)
-                        let pathVal: String? = path.isEmpty || path == provider.skillsPath ? nil : path
+                        let pathVal: String? = path.isEmpty || path == agent.skillsPath ? nil : path
                         let ltVal: String? = linkType == "Directory" ? nil : linkType
-                        onSave(provider.source, pathVal, ltVal)
+                        onSave(agent.source, pathVal, ltVal)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
@@ -1035,8 +1035,8 @@ struct SettingsCard<Content: View>: View {
                 }
             }
             .onAppear {
-                skillsPath = provider.skillsPath
-                linkType = provider.linkType
+                skillsPath = agent.skillsPath
+                linkType = agent.linkType
             }
         }
     }

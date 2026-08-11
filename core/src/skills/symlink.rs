@@ -3,7 +3,7 @@ use std::os::unix::fs as unix_fs;
 use std::path::{Path, PathBuf};
 
 use crate::skills::models::LinkType;
-use crate::skills::provider_config::{expand_path, ProviderSkillsConfig};
+use crate::skills::agent_config::{expand_path, AgentConfig};
 use crate::skills::scanner::Scanner;
 
 pub struct SymlinkManager {
@@ -18,7 +18,7 @@ impl SymlinkManager {
     /// Create a symlink for a specific skill to a specific agent.
     pub fn create_skill_link(
         &self,
-        agent: &ProviderSkillsConfig,
+        agent: &AgentConfig,
         skill_id: &str,
     ) -> Result<(), String> {
         let source = self.source_root.join(skill_id);
@@ -41,7 +41,7 @@ impl SymlinkManager {
     /// Remove a symlink for a specific skill from a specific agent.
     pub fn remove_skill_link(
         &self,
-        agent: &ProviderSkillsConfig,
+        agent: &AgentConfig,
         skill_id: &str,
     ) -> Result<(), String> {
         let target_base = expand_path(&agent.skills_path)?;
@@ -84,15 +84,15 @@ impl SymlinkManager {
         }
     }
 
-    /// Rebuild a SingleFile provider from the skills that remain linked to it.
+    /// Rebuild a SingleFile agent from the skills that remain linked to it.
     pub fn rebuild_single_file(
         &self,
-        agent: &ProviderSkillsConfig,
+        agent: &AgentConfig,
         skill_ids: &[String],
     ) -> Result<(), String> {
         if agent.link_type != LinkType::SingleFile {
             return Err(format!(
-                "Provider {} is not a SingleFile provider",
+                "Agent {} is not a SingleFile agent",
                 agent.source
             ));
         }
@@ -119,7 +119,7 @@ impl SymlinkManager {
     }
 
     /// Remove all symlinks for an agent (all linked skills).
-    pub fn remove_all_links(&self, agent: &ProviderSkillsConfig) -> Result<(), String> {
+    pub fn remove_all_links(&self, agent: &AgentConfig) -> Result<(), String> {
         let skill_ids: Vec<String> = agent.linked_skills.clone();
         for skill_id in &skill_ids {
             // Ignore individual errors during bulk removal
@@ -282,10 +282,10 @@ impl SymlinkManager {
     /// Resolve the on-disk directory for `skill_id` under `agent`'s skills root.
     /// Tries the direct `skills_path/skill_id` join first (fast path), then falls
     /// back to scanning the agent's skills tree for a nested match (e.g. Codex's
-    /// `.system/<skill>` layout). Generic across all agents/providers.
+    /// `.system/<skill>` layout). Generic across all agents.
     pub fn resolve_agent_skill_dir(
         &self,
-        agent: &ProviderSkillsConfig,
+        agent: &AgentConfig,
         skill_id: &str,
         scanner: &Scanner,
     ) -> Result<PathBuf, String> {
@@ -312,7 +312,7 @@ impl SymlinkManager {
     /// Organize a single skill: move from agent directory to source_root, create symlink at original location.
     pub fn organize_skill(
         &self,
-        agent: &ProviderSkillsConfig,
+        agent: &AgentConfig,
         skill_id: &str,
     ) -> Result<(), String> {
         let target_base = expand_path(&agent.skills_path)?;
@@ -324,7 +324,7 @@ impl SymlinkManager {
     /// `resolve_agent_skill_dir` (so nested layouts like `.system/<skill>` work).
     pub fn organize_skill_resolved(
         &self,
-        agent: &ProviderSkillsConfig,
+        agent: &AgentConfig,
         skill_id: &str,
         scanner: &Scanner,
     ) -> Result<(), String> {
@@ -390,7 +390,7 @@ impl SymlinkManager {
     /// Organize all skills from all agents: move real directories to source_root, leave symlinks.
     pub fn organize_all(
         &self,
-        agents: &[ProviderSkillsConfig],
+        agents: &[AgentConfig],
         scanner: &Scanner,
     ) -> Result<Vec<(String, String)>, String> {
         let mut organized = Vec::new();
@@ -439,7 +439,7 @@ impl SymlinkManager {
     pub fn restore_skill(
         &self,
         skill_id: &str,
-        source_agent: &ProviderSkillsConfig,
+        source_agent: &AgentConfig,
         other_linked_agents: &[String],
     ) -> Result<(), String> {
         let source_dir = self.source_root.join(skill_id);
@@ -474,7 +474,7 @@ impl SymlinkManager {
             if agent_id == &source_agent.source {
                 continue;
             }
-            // We need to find the agent's skills path, but we don't have the full ProviderSkillsConfig here.
+            // We need to find the agent's skills path, but we don't have the full AgentConfig here.
             // Instead, we'll handle this in the FFI layer which has access to the registry.
         }
 
@@ -525,7 +525,7 @@ mod tests {
 
         let manager = SymlinkManager::new(source_root.clone());
 
-        let agent = ProviderSkillsConfig::custom(
+        let agent = AgentConfig::custom(
             "test-agent",
             "Test Agent",
             &target_base.to_string_lossy(),
@@ -554,7 +554,7 @@ mod tests {
 
         let manager = SymlinkManager::new(source_root);
 
-        let agent = ProviderSkillsConfig::custom(
+        let agent = AgentConfig::custom(
             "test-agent",
             "Test Agent",
             &target_base.to_string_lossy(),
@@ -587,7 +587,7 @@ mod tests {
 
         let manager = SymlinkManager::new(source_root);
 
-        let agent = ProviderSkillsConfig::custom(
+        let agent = AgentConfig::custom(
             "single-file-agent",
             "Single File Agent",
             &target_file.to_string_lossy(),
@@ -621,7 +621,7 @@ mod tests {
 
         let manager = SymlinkManager::new(source_root);
 
-        let agent = ProviderSkillsConfig::custom(
+        let agent = AgentConfig::custom(
             "test-agent",
             "Test Agent",
             &target_base.to_string_lossy(),
@@ -704,7 +704,7 @@ mod tests {
         let manager = SymlinkManager::new(source_root.clone());
         let scanner = Scanner::new(source_root.clone());
 
-        let agent = ProviderSkillsConfig::custom(
+        let agent = AgentConfig::custom(
             "some-agent",
             "Some Agent",
             &agent_root.to_string_lossy(),

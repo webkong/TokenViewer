@@ -37,6 +37,7 @@
 		4EE77F9D15A1838AC196D7A2 /* ohmypi.svg in Resources */ = {isa = PBXBuildFile; fileRef = B2D51BE93B1EE1608134CC02 /* ohmypi.svg */; };
 		54328D0C7AEBA1BF8C0238E0 /* SkillGitSyncSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 068F9C35A6FFB2F33320C210 /* SkillGitSyncSheet.swift */; };
 		553E165F7889BCE2D0568430 /* PopoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 734F7DE6DCDA5B2405BD8F14 /* PopoverView.swift */; };
+		5607201FFF391589961EC67C /* hy3.svg in Resources */ = {isa = PBXBuildFile; fileRef = 2685F9FC2F2082DA113D927C /* hy3.svg */; };
 		563509D89AB9BF876DD5F6CE /* hermes.svg in Resources */ = {isa = PBXBuildFile; fileRef = B92F1EDF8973582C61B3DC55 /* hermes.svg */; };
 		591F15C6E853CC4623779432 /* CoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78CE8EAD3B139DBEB8EB4B5A /* CoreBridge.swift */; };
 		59C9CF298FD67A2731CDD576 /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C5F726D4BF938374A9F8B /* MainWindowView.swift */; };
@@ -48,10 +49,10 @@
 		6BC748D99DEB01A3415D7FB9 /* goose.svg in Resources */ = {isa = PBXBuildFile; fileRef = F57FB649662214DFA95C4247 /* goose.svg */; };
 		6BC9B4670E5D8ABACC2F9070 /* rovo.svg in Resources */ = {isa = PBXBuildFile; fileRef = E969A0F51397BE3B619E5261 /* rovo.svg */; };
 		702B25562F0C184BA1BAAD79 /* deepseek.svg in Resources */ = {isa = PBXBuildFile; fileRef = 4D00CFDFBC25C922B0FCA60B /* deepseek.svg */; };
+		747882F92841C6D419EDBF63 /* chatgpt.svg in Resources */ = {isa = PBXBuildFile; fileRef = 1715F8A7F9DCB981DFA8559E /* chatgpt.svg */; };
 		74D160C3E7AAB7E3DE85B0C9 /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = C54A6C43A31CA1B59412B121 /* Preferences.swift */; };
 		7C48F3EEBCAADE26A81AC8D8 /* TrendChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF2E2E86DDB42752338CA381 /* TrendChartView.swift */; };
 		7CC98500D0A36354C791DE82 /* hunyuan.svg in Resources */ = {isa = PBXBuildFile; fileRef = 0056A95FF834D6CB57B41330 /* hunyuan.svg */; };
-		7F679758E5115B64D4ADC95D /* ProviderIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DCD82F79AAD3F077EAA8A17 /* ProviderIcon.swift */; };
 		83FD6B4060B963A4C71AAA23 /* mimo.svg in Resources */ = {isa = PBXBuildFile; fileRef = BE7D8F9F057BCE3475B92B5D /* mimo.svg */; };
 		85F86A1B6739B28431A0AEE7 /* AppSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C824BA0CFB5B1E3F7AF26937 /* AppSyncCoordinator.swift */; };
 		868CC0E9639E89B5B0D2C3E1 /* codex.svg in Resources */ = {isa = PBXBuildFile; fileRef = 88494BAD929D52E39664A618 /* codex.svg */; };
@@ -65,7 +66,7 @@
 		9A3A50E12AB74DDB66E402B3 /* AppTime.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF9BA1FA08ED1D640C099AEB /* AppTime.swift */; };
 		9BD8C56533C053E2CF209B14 /* SkillListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 304CCD886055A0B97FD0ED18 /* SkillListView.swift */; };
 		9BE43E01D45203498107669F /* perplexity.svg in Resources */ = {isa = PBXBuildFile; fileRef = A0D1853042F0DA1BB8979D53 /* perplexity.svg */; };
-		A6516BB4730DFD98588882AE /* ProviderRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE09FEBA97E285D0B2311698 /* ProviderRegistry.swift */; };
+		A04BA67DA7E9F51F9DCAD36F /* AgentRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60471D3FF4AD89FABBDBD8E1 /* AgentRegistry.swift */; };
 		A9EC0A799C64FF8F236AFBEE /* aider.svg in Resources */ = {isa = PBXBuildFile; fileRef = 440C5D55636EB0B620818EC9 /* aider.svg */; };
 		AC2D83CF6C4BFF0B194E2AC9 /* wenxin.svg in Resources */ = {isa = PBXBuildFile; fileRef = 45FEF0D38A2ECDC7BAFCB8CB /* wenxin.svg */; };
 		B43B91210F29322F053A9F0B /* droid.svg in Resources */ = {isa = PBXBuildFile; fileRef = E67DB0868DF0281C2ACF07B3 /* droid.svg */; };
@@ -77,6 +78,7 @@
 		BF4CFB246707A8EF0A4D565B /* UsageViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A9C474022E1CC5E92244F6A /* UsageViewModel.swift */; };
 		BF993EEABEC5C0ADBDF20A13 /* pi.svg in Resources */ = {isa = PBXBuildFile; fileRef = 323E56F0838675DD196DFE98 /* pi.svg */; };
 		C410EC5A0E53CD4A11C75B0C /* LimitsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60B4862C0D6C9FD2ED147837 /* LimitsView.swift */; };
+		C676883A96BEAB0302A4D6C7 /* AgentDateParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 247C00A9E9466505570E156D /* AgentDateParser.swift */; };
 		C9BFDB1C206AF7EEF99C44DE /* antigravity.svg in Resources */ = {isa = PBXBuildFile; fileRef = E979605B67613F9CBB276006 /* antigravity.svg */; };
 		CF8F6CEEE192EC5243D9F5FE /* llama.svg in Resources */ = {isa = PBXBuildFile; fileRef = 0495AEF0E7BB906AC8EACB8E /* llama.svg */; };
 		D4229158D4ABEAF416E9B0D4 /* kimi.svg in Resources */ = {isa = PBXBuildFile; fileRef = F13B30FF8F49D9B8D59A4CEA /* kimi.svg */; };
@@ -85,7 +87,6 @@
 		D7259DB34E937DF03535BE06 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F69660CE5393741209A39863 /* UpdateChecker.swift */; };
 		DB040F629C2D879AFA19F7B7 /* openclaude-logo.png in Resources */ = {isa = PBXBuildFile; fileRef = 41A388947A7C1446C4AFA0AD /* openclaude-logo.png */; };
 		DC768A9ABEBD114D9E0FA787 /* codebuddy.svg in Resources */ = {isa = PBXBuildFile; fileRef = 93435E21A3AF9517E145BB82 /* codebuddy.svg */; };
-		DEB3F02108050A47D6455E7D /* ProviderDateParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EAB46CA603C1B6F3FF93BE9 /* ProviderDateParser.swift */; };
 		E08D272B90BC745AF97BE8FC /* ante.svg in Resources */ = {isa = PBXBuildFile; fileRef = CF896CE6605A3A00727CFDD3 /* ante.svg */; };
 		E20F9C43E395A4E96EBB4A2F /* cohere.svg in Resources */ = {isa = PBXBuildFile; fileRef = DFDA06D1E745AB5198CC550D /* cohere.svg */; };
 		E2157A36CA184475536923C0 /* claude-code.svg in Resources */ = {isa = PBXBuildFile; fileRef = 2CDA4DFDC1A93996F495C246 /* claude-code.svg */; };
@@ -93,6 +94,8 @@
 		E4D0603CFA32F013B5F36C9A /* SkillInstallSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D317307913528075C835081 /* SkillInstallSheet.swift */; };
 		ED3B7F19A37D4A28CEDA8622 /* AppLogo.svg in Resources */ = {isa = PBXBuildFile; fileRef = 84BE470DCBCD6A12C98E60D6 /* AppLogo.svg */; };
 		ED6A77C8F551950A111B7C3A /* KeychainManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0F91FA57420FB58729B647 /* KeychainManager.swift */; };
+		EF6E2600F39385227BF8EA03 /* ModelProviderRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EA10E5AF44220515CDD3FC6 /* ModelProviderRegistry.swift */; };
+		F4A7168AD5B80AE2E6478734 /* BrandIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = D860D4987AD0256C24C975EE /* BrandIcons.swift */; };
 		F6209AB5E7CA5F0A3C1A4AF3 /* roocode.svg in Resources */ = {isa = PBXBuildFile; fileRef = 2DCF181483E1101EDA79E26A /* roocode.svg */; };
 		F68C7E360D4621D052429EFB /* LimitsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95B0617E9C570C731BB0961A /* LimitsViewModel.swift */; };
 		F82C683EBDC37477E8A45228 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21D91FBC31BF8A6F1CBFA202 /* AboutView.swift */; };
@@ -117,11 +120,13 @@
 		0495AEF0E7BB906AC8EACB8E /* llama.svg */ = {isa = PBXFileReference; path = llama.svg; sourceTree = "<group>"; };
 		068F9C35A6FFB2F33320C210 /* SkillGitSyncSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillGitSyncSheet.swift; sourceTree = "<group>"; };
 		0F9CAADCE87E6ADB31C02E50 /* SkillManagerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillManagerViewModel.swift; sourceTree = "<group>"; };
+		1715F8A7F9DCB981DFA8559E /* chatgpt.svg */ = {isa = PBXFileReference; path = chatgpt.svg; sourceTree = "<group>"; };
 		1B98E866BA953AC0243EF6B6 /* SkillPreviewCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillPreviewCache.swift; sourceTree = "<group>"; };
-		1DCD82F79AAD3F077EAA8A17 /* ProviderIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderIcon.swift; sourceTree = "<group>"; };
-		1EAB46CA603C1B6F3FF93BE9 /* ProviderDateParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderDateParser.swift; sourceTree = "<group>"; };
+		1EA10E5AF44220515CDD3FC6 /* ModelProviderRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelProviderRegistry.swift; sourceTree = "<group>"; };
 		21D91FBC31BF8A6F1CBFA202 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		247C00A9E9466505570E156D /* AgentDateParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDateParser.swift; sourceTree = "<group>"; };
 		2626E2AB89FE668F6F21014F /* aug.svg */ = {isa = PBXFileReference; path = aug.svg; sourceTree = "<group>"; };
+		2685F9FC2F2082DA113D927C /* hy3.svg */ = {isa = PBXFileReference; path = hy3.svg; sourceTree = "<group>"; };
 		2C90AD96A9C63E427F4ECEF9 /* crush.svg */ = {isa = PBXFileReference; path = crush.svg; sourceTree = "<group>"; };
 		2CDA4DFDC1A93996F495C246 /* claude-code.svg */ = {isa = PBXFileReference; path = "claude-code.svg"; sourceTree = "<group>"; };
 		2DCF181483E1101EDA79E26A /* roocode.svg */ = {isa = PBXFileReference; path = roocode.svg; sourceTree = "<group>"; };
@@ -141,6 +146,7 @@
 		5085801F155A829C95375778 /* kilo.svg */ = {isa = PBXFileReference; path = kilo.svg; sourceTree = "<group>"; };
 		59A2E3357CCDB083777BF426 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		5A9C474022E1CC5E92244F6A /* UsageViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageViewModel.swift; sourceTree = "<group>"; };
+		60471D3FF4AD89FABBDBD8E1 /* AgentRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRegistry.swift; sourceTree = "<group>"; };
 		60B4862C0D6C9FD2ED147837 /* LimitsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitsView.swift; sourceTree = "<group>"; };
 		6A906229DAA2A84C50D56938 /* continue.svg */ = {isa = PBXFileReference; path = continue.svg; sourceTree = "<group>"; };
 		6DC1D012B29037EB42DA1429 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
@@ -187,6 +193,7 @@
 		CF896CE6605A3A00727CFDD3 /* ante.svg */ = {isa = PBXFileReference; path = ante.svg; sourceTree = "<group>"; };
 		D08471CAEA98F500892168FA /* CoreBridge+Skills.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CoreBridge+Skills.swift"; sourceTree = "<group>"; };
 		D4FE6EC826BF3B2F1F94086F /* windsurf.svg */ = {isa = PBXFileReference; path = windsurf.svg; sourceTree = "<group>"; };
+		D860D4987AD0256C24C975EE /* BrandIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandIcons.swift; sourceTree = "<group>"; };
 		D9E69FCF0E721C554A2CA895 /* TokenViewer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TokenViewer.entitlements; sourceTree = "<group>"; };
 		DADE04DCA30B3557F5F2776F /* TokenViewerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TokenViewerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DF2E2E86DDB42752338CA381 /* TrendChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendChartView.swift; sourceTree = "<group>"; };
@@ -199,7 +206,6 @@
 		E9F2DD464AF49DBA8E6A6E86 /* gemini.svg */ = {isa = PBXFileReference; path = gemini.svg; sourceTree = "<group>"; };
 		EAF3B123EFABA02429D4FED2 /* yi.svg */ = {isa = PBXFileReference; path = yi.svg; sourceTree = "<group>"; };
 		EBE72CF07CC99195B52D4715 /* LimitsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitsService.swift; sourceTree = "<group>"; };
-		EE09FEBA97E285D0B2311698 /* ProviderRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderRegistry.swift; sourceTree = "<group>"; };
 		EE91DBFAE4E2670D53307DE2 /* qoder.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = qoder.png; sourceTree = "<group>"; };
 		F13B30FF8F49D9B8D59A4CEA /* kimi.svg */ = {isa = PBXFileReference; path = kimi.svg; sourceTree = "<group>"; };
 		F1DDAFB4FBCF9DDDF0B9B8A3 /* MenuBarIcon.svg */ = {isa = PBXFileReference; path = MenuBarIcon.svg; sourceTree = "<group>"; };
@@ -257,10 +263,10 @@
 			isa = PBXGroup;
 			children = (
 				21D91FBC31BF8A6F1CBFA202 /* AboutView.swift */,
+				D860D4987AD0256C24C975EE /* BrandIcons.swift */,
 				60B4862C0D6C9FD2ED147837 /* LimitsView.swift */,
 				A11C5F726D4BF938374A9F8B /* MainWindowView.swift */,
 				734F7DE6DCDA5B2405BD8F14 /* PopoverView.swift */,
-				1DCD82F79AAD3F077EAA8A17 /* ProviderIcon.swift */,
 				9D34312DA52FC1C4E17FA45B /* QuickHelpModifier.swift */,
 				FFC3E2ED727D536445673A50 /* SettingsView.swift */,
 				4129E968EF3C5D9FD95437C6 /* StatusBarController.swift */,
@@ -314,15 +320,16 @@
 		C10F72C19D30816C7BAB3DA3 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				247C00A9E9466505570E156D /* AgentDateParser.swift */,
+				60471D3FF4AD89FABBDBD8E1 /* AgentRegistry.swift */,
 				C824BA0CFB5B1E3F7AF26937 /* AppSyncCoordinator.swift */,
 				AF9BA1FA08ED1D640C099AEB /* AppTime.swift */,
 				3A0F91FA57420FB58729B647 /* KeychainManager.swift */,
 				EBE72CF07CC99195B52D4715 /* LimitsService.swift */,
 				39EB5D762689CD00096F0785 /* LimitsVisibilityStore.swift */,
 				034652C5EE019A959887EFA2 /* Localization.swift */,
+				1EA10E5AF44220515CDD3FC6 /* ModelProviderRegistry.swift */,
 				C54A6C43A31CA1B59412B121 /* Preferences.swift */,
-				1EAB46CA603C1B6F3FF93BE9 /* ProviderDateParser.swift */,
-				EE09FEBA97E285D0B2311698 /* ProviderRegistry.swift */,
 				1B98E866BA953AC0243EF6B6 /* SkillPreviewCache.swift */,
 				F69660CE5393741209A39863 /* UpdateChecker.swift */,
 			);
@@ -348,6 +355,7 @@
 				E979605B67613F9CBB276006 /* antigravity.svg */,
 				2626E2AB89FE668F6F21014F /* aug.svg */,
 				BC5D99C7B2DEA0AB39C5C4A8 /* autohand.svg */,
+				1715F8A7F9DCB981DFA8559E /* chatgpt.svg */,
 				2CDA4DFDC1A93996F495C246 /* claude-code.svg */,
 				78939B0AD0C6C5326F124418 /* cline.svg */,
 				93435E21A3AF9517E145BB82 /* codebuddy.svg */,
@@ -368,6 +376,7 @@
 				A9F3FB73CDED44D7115FB025 /* grok.svg */,
 				B92F1EDF8973582C61B3DC55 /* hermes.svg */,
 				0056A95FF834D6CB57B41330 /* hunyuan.svg */,
+				2685F9FC2F2082DA113D927C /* hy3.svg */,
 				5085801F155A829C95375778 /* kilo.svg */,
 				F13B30FF8F49D9B8D59A4CEA /* kimi.svg */,
 				72789F911185C411E70F2D10 /* kiro.svg */,
@@ -496,6 +505,7 @@
 				C9BFDB1C206AF7EEF99C44DE /* antigravity.svg in Resources */,
 				12C8B7DA13305A7A1240532F /* aug.svg in Resources */,
 				12B566AD46B9BA091FB15546 /* autohand.svg in Resources */,
+				747882F92841C6D419EDBF63 /* chatgpt.svg in Resources */,
 				E2157A36CA184475536923C0 /* claude-code.svg in Resources */,
 				B4A238F2E201B26D767D94B6 /* cline.svg in Resources */,
 				DC768A9ABEBD114D9E0FA787 /* codebuddy.svg in Resources */,
@@ -516,6 +526,7 @@
 				FD93F43BB910DAAD2E8571B3 /* grok.svg in Resources */,
 				563509D89AB9BF876DD5F6CE /* hermes.svg in Resources */,
 				7CC98500D0A36354C791DE82 /* hunyuan.svg in Resources */,
+				5607201FFF391589961EC67C /* hy3.svg in Resources */,
 				347A46B387C70D49DC91DAA1 /* kilo.svg in Resources */,
 				D4229158D4ABEAF416E9B0D4 /* kimi.svg in Resources */,
 				67FF0F9ECDC8086E43011BA7 /* kiro.svg in Resources */,
@@ -585,8 +596,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				F82C683EBDC37477E8A45228 /* AboutView.swift in Sources */,
+				C676883A96BEAB0302A4D6C7 /* AgentDateParser.swift in Sources */,
+				A04BA67DA7E9F51F9DCAD36F /* AgentRegistry.swift in Sources */,
 				85F86A1B6739B28431A0AEE7 /* AppSyncCoordinator.swift in Sources */,
 				9A3A50E12AB74DDB66E402B3 /* AppTime.swift in Sources */,
+				F4A7168AD5B80AE2E6478734 /* BrandIcons.swift in Sources */,
 				2BF82B63BC86BEA6EA2E7C05 /* CoreBridge+Skills.swift in Sources */,
 				591F15C6E853CC4623779432 /* CoreBridge.swift in Sources */,
 				ED6A77C8F551950A111B7C3A /* KeychainManager.swift in Sources */,
@@ -596,11 +610,9 @@
 				3F3AA6C6B6C882FEEC1628A5 /* LimitsVisibilityStore.swift in Sources */,
 				88038E2FBCB342196F263BFA /* Localization.swift in Sources */,
 				59C9CF298FD67A2731CDD576 /* MainWindowView.swift in Sources */,
+				EF6E2600F39385227BF8EA03 /* ModelProviderRegistry.swift in Sources */,
 				553E165F7889BCE2D0568430 /* PopoverView.swift in Sources */,
 				74D160C3E7AAB7E3DE85B0C9 /* Preferences.swift in Sources */,
-				DEB3F02108050A47D6455E7D /* ProviderDateParser.swift in Sources */,
-				7F679758E5115B64D4ADC95D /* ProviderIcon.swift in Sources */,
-				A6516BB4730DFD98588882AE /* ProviderRegistry.swift in Sources */,
 				1645D94A3E61F9D783358C2D /* QuickHelpModifier.swift in Sources */,
 				689B564C83CA31718ADFEA3B /* SettingsView.swift in Sources */,
 				54328D0C7AEBA1BF8C0238E0 /* SkillGitSyncSheet.swift in Sources */,
@@ -716,7 +728,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 21200;
+				CURRENT_PROJECT_VERSION = 21700;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -735,7 +747,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.12;
+				MARKETING_VERSION = 0.2.17;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -815,7 +827,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 21200;
+				CURRENT_PROJECT_VERSION = 21700;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -828,7 +840,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.12;
+				MARKETING_VERSION = 0.2.17;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

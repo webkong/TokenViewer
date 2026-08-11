@@ -20,9 +20,9 @@ struct Expectation {
 }
 
 #[test]
-fn provider_parser_matrix_matches_reference_shapes() {
+fn agent_parser_matrix_matches_reference_shapes() {
     let home = temp_home();
-    seed_provider_fixtures(&home);
+    seed_agent_fixtures(&home);
 
     let cursors = HashMap::new();
     let results = parse_all(&home, &cursors);
@@ -209,8 +209,8 @@ fn provider_parser_matrix_matches_reference_shapes() {
         (
             "workbuddy",
             Expectation {
-                model: "workbuddy-quota",
-                total_tokens: 400,
+                model: "workbuddy-1",
+                total_tokens: 49,
                 conversation_count: 1,
             },
         ),
@@ -235,7 +235,7 @@ fn provider_parser_matrix_matches_reference_shapes() {
     assert_eq!(
         by_source.len(),
         cases.len(),
-        "expected one result per registered provider"
+        "expected one result per registered agent"
     );
 
     for (source, expected) in cases {
@@ -741,43 +741,40 @@ fn kiro_v3_and_legacy_cli_format_do_not_conflict() {
 }
 
 #[test]
-fn workbuddy_parser_falls_back_to_quota_snapshot() {
+fn workbuddy_parser_reads_project_jsonl_not_quota_snapshot() {
     let home = temp_home();
+    // Real usage lives in ~/.workbuddy/projects/**/*.jsonl (CodeBuddy format).
     write_text(
-        &home.join(".antigravity_cockpit/workbuddy_accounts.json"),
-        r#"{"version":"1.0","accounts":[{"id":"workbuddy_quota_only","email":"wb@example.com","last_used":1735690200}]}"#,
-    );
-    write_text(
-        &home.join(".antigravity_cockpit/workbuddy_accounts/workbuddy_quota_only.json"),
-        r#"{
-  "id": "workbuddy_quota_only",
-  "email": "wb@example.com",
-  "quota_raw": {
-    "userResource": {
-      "data": {
-        "Response": {
-          "Data": {
-            "Accounts": [
-              {
-                "PackageCode": "TCACA_code_002_AkiJS3ZHF5",
-                "Status": 0,
-                "CycleCapacitySizePrecise": "500",
-                "CycleCapacityRemainPrecise": "125"
-              }
-            ]
-          }
-        }
-      }
-    }
-  },
-  "usage_updated_at": 1735690200
-}"#,
+        &home.join(".workbuddy/projects/project-a/session.jsonl"),
+        r#"{"type":"message","role":"assistant","uuid":"wb-1","providerData":{"model":"workbuddy-1","rawUsage":{"prompt_tokens":30,"completion_tokens":12,"prompt_tokens_details":{"cached_tokens":3},"completion_tokens_details":{"reasoning_tokens":2},"cache_read_input_tokens":1,"cache_creation_input_tokens":5}},"timestamp":1735690080000}"#,
     );
 
     let (records, _) = workbuddy::parse(&home, None).expect("workbuddy parse");
     assert_eq!(records.len(), 1);
-    assert_eq!(records[0].model, "workbuddy-quota");
-    assert_eq!(records[0].total_tokens, 375);
+    assert_eq!(records[0].model, "workbuddy-1");
+    assert_eq!(records[0].input_tokens, 27);
+    assert_eq!(records[0].output_tokens, 12);
+    assert_eq!(records[0].cached_input_tokens, 3);
+    assert_eq!(records[0].cache_creation_input_tokens, 5);
+    assert_eq!(records[0].reasoning_output_tokens, 2);
+    assert_eq!(records[0].total_tokens, 49);
+
+    // A quota snapshot alone (no jsonl logs) must NOT be reported as tokens.
+    let quota_home = temp_home();
+    write_text(
+        &quota_home.join(".antigravity_cockpit/workbuddy_accounts.json"),
+        r#"{"version":"1.0","accounts":[{"id":"workbuddy_quota_only","email":"wb@example.com","last_used":1735690200}]}"#,
+    );
+    write_text(
+        &quota_home.join(".antigravity_cockpit/workbuddy_accounts/workbuddy_quota_only.json"),
+        r#"{"id":"workbuddy_quota_only","usage_raw":{"data":{"Response":{"Data":{"Accounts":[{"Status":0,"CycleCapacitySizePrecise":"500","CycleCapacityRemainPrecise":"125"}]}}}},"usage_updated_at":1735690200}"#,
+    );
+
+    let (records, _) = workbuddy::parse(&quota_home, None).expect("workbuddy parse");
+    assert!(
+        records.is_empty(),
+        "quota credits must not be recorded as token usage"
+    );
 }
 
 #[test]
@@ -841,11 +838,12 @@ fn workbuddy_sync_reuses_saved_cursor() {
         .expect("aggregate usage");
     let workbuddy = rows
         .iter()
-        .find(|r| r.source == "workbuddy" && r.model == "workbuddy-quota")
+        .find(|r| r.source == "workbuddy" && r.model == "workbuddy-1")
         .expect("workbuddy aggregate");
 
-    assert_eq!(workbuddy.total_tokens, 400);
-    assert_eq!(workbuddy.input_tokens, 400);
+    assert_eq!(workbuddy.total_tokens, 49);
+    assert_eq!(workbuddy.input_tokens, 27);
+    assert_eq!(workbuddy.output_tokens, 12);
     assert_eq!(workbuddy.conversation_count, 1);
 }
 
@@ -866,7 +864,7 @@ fn temp_home() -> PathBuf {
     dir
 }
 
-fn seed_provider_fixtures(home: &Path) {
+fn seed_agent_fixtures(home: &Path) {
     write_text(
         &home.join(platform_path(
             "Library/Application Support/Cursor/User/globalStorage/cursorDiskModel/usage.json",
@@ -1028,37 +1026,8 @@ fn seed_provider_fixtures(home: &Path) {
 
 fn seed_workbuddy_fixture(home: &Path) {
     write_text(
-        &home.join(".antigravity_cockpit/workbuddy_accounts.json"),
-        r#"{"version":"1.0","accounts":[{"id":"workbuddy_fixture","email":"wb@example.com","last_used":1735690200}]}"#,
-    );
-
-    write_text(
-        &home.join(".antigravity_cockpit/workbuddy_accounts/workbuddy_fixture.json"),
-        r#"{
-  "id": "workbuddy_fixture",
-  "email": "wb@example.com",
-  "payment_type": "pro",
-  "usage_updated_at": 1735690200,
-  "usage_raw": {
-    "data": {
-      "Response": {
-        "Data": {
-          "Accounts": [
-            {
-              "PackageCode": "TCACA_code_002_AkiJS3ZHF5",
-              "PackageName": "Pro Monthly",
-              "Status": 0,
-              "CycleStartTime": "2025-12-01 00:00:00",
-              "CycleEndTime": "2026-01-31 00:00:00",
-              "CycleCapacitySizePrecise": "1000",
-              "CycleCapacityRemainPrecise": "600"
-            }
-          ]
-        }
-      }
-    }
-  }
-}"#,
+        &home.join(".workbuddy/projects/project-a/session.jsonl"),
+        r#"{"type":"message","role":"assistant","uuid":"wb-1","providerData":{"model":"workbuddy-1","rawUsage":{"prompt_tokens":30,"completion_tokens":12,"prompt_tokens_details":{"cached_tokens":3},"completion_tokens_details":{"reasoning_tokens":2},"cache_read_input_tokens":1,"cache_creation_input_tokens":5}},"timestamp":1735690080000}"#,
     );
 }
 

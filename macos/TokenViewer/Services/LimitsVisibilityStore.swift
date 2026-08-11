@@ -1,14 +1,14 @@
 import Foundation
 
-/// Visibility toggles for provider limit cards in the menu bar popover.
-/// Sources are loaded dynamically from the Rust core's `has_limits` provider list,
+/// Visibility toggles for agent limit cards in the menu bar popover.
+/// Sources are loaded dynamically from the Rust core's `has_limits` agent list,
 /// keeping the limits panel in sync with the unified agent registry.
 @MainActor
 enum LimitsVisibilityStore {
-    /// All provider sources that have subscription/quota tracking (`has_limits: true`).
-    /// Loaded from the Rust core through `ProviderRegistry`.
+    /// All agent sources that have subscription/quota tracking (`has_limits: true`).
+    /// Loaded from the Rust core through `AgentRegistry`.
     static var allSources: [String] {
-        ProviderRegistry.shared.limitSources
+        AgentRegistry.shared.limitSources
     }
 
     /// Sources shown by default in the menu-bar popover: the core agents
@@ -22,7 +22,7 @@ enum LimitsVisibilityStore {
     /// status hasn't been detected yet (e.g. very first read before
     /// `refreshInstallStatus()` completes), so nothing is hidden prematurely.
     static var defaultsValue: String {
-        let registry = ProviderRegistry.shared
+        let registry = AgentRegistry.shared
         let detected = allSources.filter { source in
             alwaysOnSources.contains(source) || registry.isInstalled(for: source)
         }
@@ -38,9 +38,9 @@ enum LimitsVisibilityStore {
 
     // MARK: - Load
 
-    /// Eagerly load the provider registry before dependent views render.
+    /// Eagerly load the agent registry before dependent views render.
     static func load() {
-        ProviderRegistry.shared.loadIfNeeded()
+        AgentRegistry.shared.loadIfNeeded()
     }
 
     // MARK: - Helpers
@@ -58,6 +58,6 @@ enum LimitsVisibilityStore {
     }
 
     static func displayName(for source: String) -> String {
-        ProviderRegistry.shared.displayName(for: source)
+        AgentRegistry.shared.displayName(for: source)
     }
 }

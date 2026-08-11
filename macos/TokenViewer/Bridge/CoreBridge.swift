@@ -77,8 +77,8 @@ final class CoreBridge: @unchecked Sendable {
         call { tt_rebuild_all($0) }
     }
 
-    func getProviderStatus() -> Data? {
-        call { tt_get_provider_status($0) }
+    func getAgentStatus() -> Data? {
+        call { tt_get_agent_status($0) }
     }
 
     func querySummary(from: String, to: String) -> Data? {

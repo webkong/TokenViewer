@@ -156,7 +156,7 @@ struct PreparedSkillPreview: Sendable {
     let primaryContent: SkillFileLoadResult
 }
 
-struct SkillProvider: Codable, Identifiable, Hashable {
+struct AgentConfig: Codable, Identifiable, Hashable {
     let source: String
     var id: String { source }
     let displayName: String

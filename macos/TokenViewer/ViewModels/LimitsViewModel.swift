@@ -4,18 +4,18 @@ import Foundation
 final class LimitsViewModel: ObservableObject {
     static let shared = LimitsViewModel()
 
-    @Published var providers: [ProviderLimit] = []
+    @Published var agents: [AgentLimit] = []
     @Published var isLoading = false
     @Published var lastFetched: Date?
 
-    private let fetchAll: () async -> [ProviderLimit]
+    private let fetchAll: () async -> [AgentLimit]
     private let onRefreshCompleted: @MainActor () -> Void
     private let cacheKey: String
     private var timer: Timer?
     private var refreshAgainAfterCurrentFetch = false
 
     init(
-        fetchAll: @escaping () async -> [ProviderLimit] = { await LimitsService.fetchAll() },
+        fetchAll: @escaping () async -> [AgentLimit] = { await LimitsService.fetchAll() },
         onRefreshCompleted: @escaping @MainActor () -> Void = {
             ToastCenter.shared.success(L10n.shared.toastRefreshed)
         },
@@ -61,7 +61,7 @@ final class LimitsViewModel: ObservableObject {
             let result = await self.fetchAll()
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                self.providers = result.sorted { $0.configured && !$1.configured }
+                self.agents = result.sorted { $0.configured && !$1.configured }
                 self.lastFetched = Date()
                 self.isLoading = false
                 self.saveCache()
@@ -76,14 +76,14 @@ final class LimitsViewModel: ObservableObject {
     }
 
     private func saveCache() {
-        if let data = try? JSONEncoder().encode(providers) {
+        if let data = try? JSONEncoder().encode(agents) {
             UserDefaults.standard.set(data, forKey: cacheKey)
         }
     }
 
     private func loadCache() {
         guard let data = UserDefaults.standard.data(forKey: cacheKey),
-              let decoded = try? JSONDecoder().decode([ProviderLimit].self, from: data) else { return }
-        providers = decoded
+              let decoded = try? JSONDecoder().decode([AgentLimit].self, from: data) else { return }
+        agents = decoded
     }
 }

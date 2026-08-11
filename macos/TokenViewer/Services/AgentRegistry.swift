@@ -1,32 +1,32 @@
 import Foundation
 import SwiftUI
 
-/// Single source of truth for provider/agent display metadata.
+/// Single source of truth for coding-agent display metadata.
 ///
 /// Loaded from the Rust `tt_skills_list_agents()` FFI which returns the canonical
-/// provider config including display names, brand colors, logo filenames, and
+/// agent config including display names, brand colors, logo filenames, and
 /// install status. This replaces the hardcoded `TVColor.sourceDisplayName()`,
-/// `TVColor.provider()`, and `ProviderIcon.logoMap` lookups.
+/// legacy hardcoded display and logo lookups.
 ///
 /// Falls back to generic formatting when the Rust data isn't available yet
 /// (early launch or first load).
 @MainActor
-final class ProviderRegistry: ObservableObject {
-    static let shared = ProviderRegistry()
-    static let defaultSkillSources = ["claude", "codex", "opencode"]
-    static let defaultSkillSourcesJSON = "[\"claude\",\"codex\",\"opencode\"]"
+final class AgentRegistry: ObservableObject {
+    static let shared = AgentRegistry()
+    static let defaultAgentSources = ["claude", "codex", "opencode"]
+    static let defaultAgentSourcesJSON = "[\"claude\",\"codex\",\"opencode\"]"
 
-    @Published private(set) var allProviders: [SkillProvider] = []
+    @Published private(set) var allAgents: [AgentConfig] = []
     /// True once `refreshInstallStatus()` has completed at least one detection pass.
     private(set) var hasDetectedInstalls = false
 
-    private var providers: [String: SkillProvider] = [:]
+    private var agents: [String: AgentConfig] = [:]
     private var installStatus: [String: Bool] = [:]
     private var loaded = false
 
     private init() {}
 
-    /// Load provider data from the Rust core via `skillsListAgents()`.
+    /// Load agent data from the Rust core via `skillsListAgents()`.
     /// Idempotent after success; failed attempts remain retryable.
     func loadIfNeeded() {
         guard !loaded else { return }
@@ -39,86 +39,86 @@ final class ProviderRegistry: ObservableObject {
         loadIfNeeded()
     }
 
-    /// Canonical list of providers that support subscription/quota tracking.
+    /// Canonical list of agents that support subscription/quota tracking.
     var limitSources: [String] {
-        loadedProviders.filter(\.hasLimits).map(\.source)
+        loadedAgents.filter(\.hasLimits).map(\.source)
     }
 
-    /// Canonical list of providers available to the skills manager.
-    var skillProviders: [SkillProvider] {
-        loadedProviders
+    /// Canonical list of agents available to the skills manager.
+    var skillAgents: [AgentConfig] {
+        loadedAgents
     }
 
-    /// Installed providers first, then display-name sorted.
-    var sortedProviders: [SkillProvider] {
-        sortInstalledFirst(loadedProviders)
+    /// Installed agents first, then display-name sorted.
+    var sortedAgents: [AgentConfig] {
+        sortInstalledFirst(loadedAgents)
     }
 
-    /// Skills-capable providers sorted for Settings.
-    var sortedSkillProviders: [SkillProvider] {
-        sortInstalledFirst(skillProviders)
+    /// Skills-capable agents sorted for Settings.
+    var sortedSkillAgents: [AgentConfig] {
+        sortInstalledFirst(skillAgents)
     }
 
-    /// Limits-capable providers sorted for Settings.
-    var sortedLimitProviders: [SkillProvider] {
-        sortInstalledFirst(loadedProviders.filter(\.hasLimits))
+    /// Limits-capable agents sorted for Settings.
+    var sortedLimitAgents: [AgentConfig] {
+        sortInstalledFirst(loadedAgents.filter(\.hasLimits))
     }
 
     // MARK: - Lookups
 
-    /// Display name for a provider source, e.g. "claude" → "Claude Code".
+    /// Display name for an agent source, e.g. "claude" → "Claude Code".
     func displayName(for source: String) -> String {
         loadIfNeeded()
         let key = source.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if let provider = providers[key], !provider.displayName.isEmpty {
-            return provider.displayName
+        if let agent = agents[key], !agent.displayName.isEmpty {
+            return agent.displayName
         }
         // Fallback for aliases
         let resolved = resolveAlias(key)
-        if resolved != key, let provider = providers[resolved], !provider.displayName.isEmpty {
-            return provider.displayName
+        if resolved != key, let agent = agents[resolved], !agent.displayName.isEmpty {
+            return agent.displayName
         }
         return Self.prettySourceName(resolved)
     }
 
-    /// Brand color hex string, e.g. "#d97757", for a provider source.
+    /// Brand color hex string, e.g. "#d97757", for an agent source.
     func brandColorHex(for source: String) -> String {
         loadIfNeeded()
         let key = source.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if let provider = providers[key], !provider.brandColor.isEmpty {
-            return provider.brandColor
+        if let agent = agents[key], !agent.brandColor.isEmpty {
+            return agent.brandColor
         }
         let resolved = resolveAlias(key)
-        if resolved != key, let provider = providers[resolved], !provider.brandColor.isEmpty {
-            return provider.brandColor
+        if resolved != key, let agent = agents[resolved], !agent.brandColor.isEmpty {
+            return agent.brandColor
         }
         return "#059669"
     }
 
-    /// SwiftUI `Color` for a provider source.
+    /// SwiftUI `Color` for an agent source.
     func brandColor(for source: String) -> Color {
         Color(hex: brandColorHex(for: source))
     }
 
-    /// Logo filename (without extension) for a provider source, e.g. "claude-code".
+    /// Logo filename (without extension) for an agent source, e.g. "claude-code".
     func logoFile(for source: String) -> String {
         loadIfNeeded()
         let key = source.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if let provider = providers[key], !provider.logoFile.isEmpty {
-            return provider.logoFile
+        if let agent = agents[key], !agent.logoFile.isEmpty {
+            return agent.logoFile
         }
         let resolved = resolveAlias(key)
-        if resolved != key, let provider = providers[resolved], !provider.logoFile.isEmpty {
-            return provider.logoFile
+        if resolved != key, let agent = agents[resolved], !agent.logoFile.isEmpty {
+            return agent.logoFile
         }
         return resolved
     }
 
-    /// Install status for a provider source.
+    /// Install status for an agent source.
     func isInstalled(for source: String) -> Bool {
         loadIfNeeded()
         let key = source.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if let provider = providers[key] { return provider.isInstalled }
+        if let agent = agents[key] { return agent.isInstalled }
         return false
     }
 
@@ -146,36 +146,36 @@ final class ProviderRegistry: ObservableObject {
         guard let data = CoreBridge.shared.skillsListAgents() else { return false }
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
-        guard let decoded = try? decoder.decode([SkillProvider].self, from: data) else { return false }
-        allProviders = decoded.map { provider in
-            var updated = provider
-            if let isInstalled = installStatus[provider.source] {
+        guard let decoded = try? decoder.decode([AgentConfig].self, from: data) else { return false }
+        allAgents = decoded.map { agent in
+            var updated = agent
+            if let isInstalled = installStatus[agent.source] {
                 updated.isInstalled = isInstalled
             }
             return updated
         }
-        providers = Dictionary(uniqueKeysWithValues: allProviders.map { ($0.source, $0) })
+        agents = Dictionary(uniqueKeysWithValues: allAgents.map { ($0.source, $0) })
         return true
     }
 
-    private var loadedProviders: [SkillProvider] {
+    private var loadedAgents: [AgentConfig] {
         loadIfNeeded()
-        return allProviders
+        return allAgents
     }
 
     private func applyInstallStatus(_ installMap: [String: Bool]) {
         guard !installMap.isEmpty else { return }
-        allProviders = allProviders.map { provider in
-            var updated = provider
-            if let isInstalled = installMap[provider.source] {
+        allAgents = allAgents.map { agent in
+            var updated = agent
+            if let isInstalled = installMap[agent.source] {
                 updated.isInstalled = isInstalled
             }
             return updated
         }
-        providers = Dictionary(uniqueKeysWithValues: allProviders.map { ($0.source, $0) })
+        agents = Dictionary(uniqueKeysWithValues: allAgents.map { ($0.source, $0) })
     }
 
-    private func sortInstalledFirst(_ items: [SkillProvider]) -> [SkillProvider] {
+    private func sortInstalledFirst(_ items: [AgentConfig]) -> [AgentConfig] {
         items.sorted { lhs, rhs in
             if lhs.isInstalled != rhs.isInstalled {
                 return lhs.isInstalled && !rhs.isInstalled
@@ -186,7 +186,7 @@ final class ProviderRegistry: ObservableObject {
 
     // MARK: - Alias Resolution
 
-    /// Resolve known source aliases to canonical keys used in the provider registry.
+    /// Resolve known source aliases to canonical keys used in the agent registry.
     private func resolveAlias(_ source: String) -> String {
         switch source {
         case "claude-code": return "claude"
@@ -216,7 +216,7 @@ final class ProviderRegistry: ObservableObject {
 
 // MARK: - Color hex extension
 
-private extension Color {
+extension Color {
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
         var int: UInt64 = 0

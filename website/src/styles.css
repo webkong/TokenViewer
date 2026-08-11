@@ -1050,19 +1050,19 @@ a {
   height: calc(var(--h) * 44px);
 }
 
-/* ─── Providers Section ──────────────────────────────────────────────────── */
-.providers-section {
+/* ─── Agents Section ────────────────────────────────────────────────────── */
+.agents-section {
   max-width: 860px; margin: 0 auto; padding: 80px 24px;
   text-align: center;
 }
-.providers-copy { margin-bottom: 32px; }
-.providers-copy svg { color: #059669; margin-bottom: 12px; }
-.providers-copy h2 { font-size: clamp(1.5rem, 3vw, 2rem); margin: 0 0 10px; }
-.providers-copy p { opacity: 0.65; max-width: 540px; margin: 0 auto; }
-.providers-grid {
+.agents-copy { margin-bottom: 32px; }
+.agents-copy svg { color: #059669; margin-bottom: 12px; }
+.agents-copy h2 { font-size: clamp(1.5rem, 3vw, 2rem); margin: 0 0 10px; }
+.agents-copy p { opacity: 0.65; max-width: 540px; margin: 0 auto; }
+.agents-grid {
   display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
 }
-.provider-chip {
+.agent-chip {
   padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
   background: color-mix(in srgb, #059669 10%, transparent);
   border: 1px solid color-mix(in srgb, #059669 25%, transparent);

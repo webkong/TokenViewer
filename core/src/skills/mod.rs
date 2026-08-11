@@ -1,7 +1,7 @@
 pub mod git_engine;
 pub mod install;
 pub mod models;
-pub mod provider_config;
+pub mod agent_config;
 pub mod scanner;
 pub mod storage;
 pub mod symlink;
@@ -14,12 +14,12 @@ use crate::storage::Database;
 use self::git_engine::GitEngine;
 use self::install::SkillInstaller;
 use self::models::{SkillInstallRequest, SkillInstallResponse};
-use self::provider_config::ProviderSkillsRegistry;
+use self::agent_config::AgentRegistry;
 use self::scanner::Scanner;
 use self::symlink::SymlinkManager;
 
 pub struct SkillsCore {
-    pub registry: ProviderSkillsRegistry,
+    pub registry: AgentRegistry,
     pub scanner: Scanner,
     pub symlink: SymlinkManager,
     pub git: Option<GitEngine>,
@@ -57,7 +57,7 @@ mod tests {
         skills_path: PathBuf,
         config_dir: PathBuf,
     ) -> SkillsCore {
-        let mut registry = ProviderSkillsRegistry::new(&config_dir).unwrap();
+        let mut registry = AgentRegistry::new(&config_dir).unwrap();
         registry
             .set_override(
                 agent_id,
@@ -255,7 +255,7 @@ impl SkillsCore {
 
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
         let config_dir = home.join(".agents");
-        let registry = ProviderSkillsRegistry::new(&config_dir).map_err(|e| e.to_string())?;
+        let registry = AgentRegistry::new(&config_dir).map_err(|e| e.to_string())?;
         let scanner = Scanner::new(source_root.clone());
         let symlink = SymlinkManager::new(source_root.clone());
         let git = GitEngine::open(&source_root).ok();
@@ -358,7 +358,7 @@ impl SkillsCore {
         }
 
         // A missing source directory can be transient (for example during migration or when the
-        // library lives on a temporarily unavailable volume). Keep provider associations and
+        // library lives on a temporarily unavailable volume). Keep agent associations and
         // generated SingleFile content intact; only install records whose recorded destination is
         // definitely absent are safe to prune here.
         for agent in self.registry.all() {
@@ -366,7 +366,7 @@ impl SkillsCore {
                 let source = self.source_root.join(skill_id);
                 if !source.exists() {
                     eprintln!(
-                        "Preserved linked Skill metadata for missing source {} (provider {})",
+                        "Preserved linked Skill metadata for missing source {} (agent {})",
                         source.display(),
                         agent.source
                     );

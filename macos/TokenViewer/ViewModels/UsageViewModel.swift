@@ -72,12 +72,12 @@ func mergedByModel(_ entries: [ModelEntry]) -> [ModelEntry] {
 }
 
 struct SyncResult: Codable {
-    let providers_synced: Int
+    let agents_synced: Int
     let records_added: Int
     let errors: [String]
 }
 
-struct ProviderStatus: Codable, Identifiable {
+struct AgentStatus: Codable, Identifiable {
     var id: String { source }
     let source: String
     let record_count: Int64
