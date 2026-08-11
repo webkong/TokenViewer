@@ -33,8 +33,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.register(defaults: ["syncFrequencyMinutes": 10])
         // Initialize Rust core early to create database
         _ = CoreBridge.shared
-        ProviderRegistry.shared.loadIfNeeded()
-        ProviderRegistry.shared.refreshInstallStatus()
+        AgentRegistry.shared.loadIfNeeded()
+        AgentRegistry.shared.refreshInstallStatus()
         LimitsVisibilityStore.load()
         seedLimitsVisibilityDefaultAfterDetection()
         rebuildIfVersionChanged()
@@ -68,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let key = "limitsVisibleSources"
         guard UserDefaults.standard.string(forKey: key) == nil else { return }
         Task { @MainActor in
-            while !ProviderRegistry.shared.hasDetectedInstalls {
+            while !AgentRegistry.shared.hasDetectedInstalls {
                 try? await Task.sleep(nanoseconds: 100_000_000)
             }
             guard UserDefaults.standard.string(forKey: key) == nil else { return }

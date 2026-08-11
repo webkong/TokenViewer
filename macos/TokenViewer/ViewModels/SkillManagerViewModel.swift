@@ -25,7 +25,7 @@ final class SkillManagerViewModel: ObservableObject {
     static let globalFilter = "global"
 
     @Published private(set) var skills: [SkillEntry] = []
-    @Published private(set) var providers: [SkillProvider] = []
+    @Published private(set) var agents: [AgentConfig] = []
     @Published var selectedFilter: String = SkillManagerViewModel.allFilter
     /// Drives the cross-agent compatibility alert in the skill list.
     @Published var compatibilityAlert: CompatibilityAlert?
@@ -35,10 +35,10 @@ final class SkillManagerViewModel: ObservableObject {
     /// are hidden unless explicitly shown. Reduces clutter from built-ins.
     @Published var showBuiltInSkills: Bool = false
 
-    /// Providers enabled in Settings.
-    var visibleProviders: [SkillProvider] {
-        let enabled = enabledProviderSet
-        return providers
+    /// Agents enabled in Settings.
+    var visibleAgents: [AgentConfig] {
+        let enabled = enabledAgentSet
+        return agents
             .filter { enabled.contains($0.source) }
             .sorted { lhs, rhs in
                 if lhs.isInstalled != rhs.isInstalled {
@@ -48,11 +48,11 @@ final class SkillManagerViewModel: ObservableObject {
             }
     }
 
-    private var enabledProviderSet: Set<String> {
+    private var enabledAgentSet: Set<String> {
         guard let raw = UserDefaults.standard.string(forKey: "skillsEnabledProviders"),
               let data = raw.data(using: .utf8),
               let arr = try? JSONDecoder().decode([String].self, from: data)
-        else { return Set(ProviderRegistry.defaultSkillSources) }
+        else { return Set(AgentRegistry.defaultAgentSources) }
         return Set(arr)
     }
     @Published var searchText: String = ""
@@ -85,14 +85,14 @@ final class SkillManagerViewModel: ObservableObject {
     func refresh(showToast: Bool = false) {
         isLoading = true
         errorMessage = nil
-        let enabled = enabledProviderSet
-        ProviderRegistry.shared.reload()
-        let providers = ProviderRegistry.shared.skillProviders
+        let enabled = enabledAgentSet
+        AgentRegistry.shared.reload()
+        let agents = AgentRegistry.shared.skillAgents
 
         Task.detached {
             let decoder = JSONDecoder()
             decoder.keyDecodingStrategy = .convertFromSnakeCase
-            let agentIDs = providers
+            let agentIDs = agents
                 .map(\.source)
                 .filter { enabled.contains($0) }
             let payload = try? JSONEncoder().encode(["agent_ids": agentIDs])
@@ -104,7 +104,7 @@ final class SkillManagerViewModel: ObservableObject {
             await MainActor.run {
                 self.isLoading = false
                 self.skills = skills
-                self.providers = providers
+                self.agents = agents
                 if showToast {
                     ToastCenter.shared.success(L10n.shared.toastRefreshed)
                 }
@@ -220,7 +220,7 @@ final class SkillManagerViewModel: ObservableObject {
     func ensureValidFilter() {
         guard selectedFilter != Self.allFilter,
               selectedFilter != Self.globalFilter else { return }
-        if !visibleProviders.contains(where: { $0.source == selectedFilter }) {
+        if !visibleAgents.contains(where: { $0.source == selectedFilter }) {
             selectedFilter = Self.allFilter
         }
     }
@@ -231,7 +231,7 @@ final class SkillManagerViewModel: ObservableObject {
 
     /// Check if a skill is linked (via symlink) to a given agent.
     func isSkillLinked(skillID: String, agentID: String) -> Bool {
-        providers.first(where: { $0.source == agentID })?.linkedSkills.contains(skillID) == true
+        agents.first(where: { $0.source == agentID })?.linkedSkills.contains(skillID) == true
     }
 
     /// True when linking `agentID` for `skillID` should trigger a compatibility
@@ -248,13 +248,13 @@ final class SkillManagerViewModel: ObservableObject {
     func skillAgentIDs(for skill: SkillEntry) -> Set<String> {
         var agentIDs = Set(skill.agentIds)
 
-        for provider in providers where provider.linkedSkills.contains(skill.id) {
-            agentIDs.insert(provider.source)
+        for agent in agents where agent.linkedSkills.contains(skill.id) {
+            agentIDs.insert(agent.source)
         }
 
         let sourceDir = standardizedPath(skill.sourceDir)
-        for provider in providers where sourceDir.hasPrefix(standardizedPath(provider.skillsPath) + "/") {
-            agentIDs.insert(provider.source)
+        for agent in agents where sourceDir.hasPrefix(standardizedPath(agent.skillsPath) + "/") {
+            agentIDs.insert(agent.source)
         }
 
         return agentIDs
@@ -266,25 +266,25 @@ final class SkillManagerViewModel: ObservableObject {
             return scanned
         }
         let sourceDir = standardizedPath(skill.sourceDir)
-        if let physicalSource = providers.first(where: { provider in
-            sourceDir.hasPrefix(standardizedPath(provider.skillsPath) + "/")
+        if let physicalSource = agents.first(where: { agent in
+            sourceDir.hasPrefix(standardizedPath(agent.skillsPath) + "/")
         })?.source {
             return physicalSource
         }
-        return providers.first(where: { $0.linkedSkills.contains(skill.id) })?.source
+        return agents.first(where: { $0.linkedSkills.contains(skill.id) })?.source
     }
 
     func sourceAgent(for skillID: String) -> String? {
         guard let skill = skills.first(where: { $0.id == skillID }) else {
-            return providers.first(where: { $0.linkedSkills.contains(skillID) })?.source
+            return agents.first(where: { $0.linkedSkills.contains(skillID) })?.source
         }
         return sourceAgent(for: skill)
     }
 
     func isInSourceRoot(_ skill: SkillEntry) -> Bool {
         let sourceDir = standardizedPath(skill.sourceDir)
-        return !providers.contains { provider in
-            sourceDir.hasPrefix(standardizedPath(provider.skillsPath) + "/")
+        return !agents.contains { agent in
+            sourceDir.hasPrefix(standardizedPath(agent.skillsPath) + "/")
         }
     }
 
@@ -294,7 +294,7 @@ final class SkillManagerViewModel: ObservableObject {
 
     private func isCodexSystemSkill(_ skill: SkillEntry) -> Bool {
         guard skillAgentIDs(for: skill).contains("codex"),
-              let codex = providers.first(where: { $0.source == "codex" }) else {
+              let codex = agents.first(where: { $0.source == "codex" }) else {
             return false
         }
 
@@ -351,7 +351,7 @@ final class SkillManagerViewModel: ObservableObject {
         runSkillCommand(skillID: skillID, agentID: agentID, successMessage: L10n.shared.toastRestored, call: CoreBridge.shared.skillsRestore)
     }
 
-    func resetProvider(_ source: String) {
+    func resetAgent(_ source: String) {
         Task.detached {
             let payload = try? JSONEncoder().encode(["source": source])
             let resultData = payload.flatMap(CoreBridge.shared.skillsRemoveCustomAgent)
@@ -360,11 +360,11 @@ final class SkillManagerViewModel: ObservableObject {
                 if let resultData,
                    let result = try? JSONDecoder().decode(SkillOperationResult.self, from: resultData),
                    result.ok {
-                    ProviderRegistry.shared.reload()
+                    AgentRegistry.shared.reload()
                     self.refresh()
                     ToastCenter.shared.success(L10n.shared.toastReset)
                 } else {
-                    self.errorMessage = "Failed to reset provider"
+                    self.errorMessage = "Failed to reset agent"
                     ToastCenter.shared.error(L10n.shared.toastSaveFailed)
                 }
             }
@@ -379,11 +379,11 @@ final class SkillManagerViewModel: ObservableObject {
                 if let resultData,
                    let result = try? JSONDecoder().decode(SkillOperationResult.self, from: resultData),
                    result.ok {
-                    ProviderRegistry.shared.reload()
+                    AgentRegistry.shared.reload()
                     self.refresh()
                     ToastCenter.shared.success(L10n.shared.toastSaved)
                 } else {
-                    self.errorMessage = "Failed to save provider config"
+                    self.errorMessage = "Failed to save agent config"
                     ToastCenter.shared.error(L10n.shared.toastSaveFailed)
                 }
             }

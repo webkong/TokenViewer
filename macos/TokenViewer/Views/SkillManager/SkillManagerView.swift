@@ -8,7 +8,7 @@ struct SkillManagerView: View {
     @State private var showOrganizeAllConfirm = false
     @State private var showRestoreAllConfirm = false
     @State private var showOnboarding = false
-    @AppStorage("skillsEnabledProviders") private var enabledProvidersJSON: String = ProviderRegistry.defaultSkillSourcesJSON
+    @AppStorage("skillsEnabledProviders") private var enabledAgentsJSON: String = AgentRegistry.defaultAgentSourcesJSON
     @AppStorage("skillsOnboardingSeen") private var onboardingSeen = false
 
     var body: some View {
@@ -40,7 +40,7 @@ struct SkillManagerView: View {
             }
         }
         .onDisappear { viewModel.resetInstallForm() }
-        .onChange(of: enabledProvidersJSON) { _, _ in
+        .onChange(of: enabledAgentsJSON) { _, _ in
             viewModel.ensureValidFilter()
             viewModel.refresh()
         }
@@ -162,10 +162,10 @@ struct SkillManagerView: View {
                 action: { viewModel.selectedFilter = SkillManagerViewModel.globalFilter }
             )
 
-            ForEach(viewModel.visibleProviders) { p in
+            ForEach(viewModel.visibleAgents) { p in
                 FilterChip(
                     icon: nil,
-                    providerIcon: p.source,
+                    agentIcon: p.source,
                     label: p.displayName,
                     isSelected: viewModel.selectedFilter == p.source,
                     tooltip: L10n.shared.skillAgentFilterTip(p.displayName),
@@ -365,7 +365,7 @@ private struct SkillEnvironmentGroup: Identifiable {
 
 struct FilterChip: View {
     var icon: String? = nil
-    var providerIcon: String? = nil
+    var agentIcon: String? = nil
     let label: String
     let isSelected: Bool
     let tooltip: String
@@ -374,8 +374,8 @@ struct FilterChip: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                if let name = providerIcon {
-                    ProviderIcon(source: name, size: 14)
+                if let name = agentIcon {
+                    AgentIcon(source: name, size: 14)
                 } else if let icon {
                     Image(systemName: icon)
                         .font(.system(size: 11, weight: .medium))

@@ -20,7 +20,7 @@ struct PopoverView: View {
     var onHeightChange: ((CGFloat) -> Void)?
 
     var body: some View {
-        let limitRowCount = visibleLimitProviders.reduce(0) { $0 + max(1, $1.windows.count) }
+        let limitRowCount = visibleLimitAgents.reduce(0) { $0 + max(1, $1.windows.count) }
         let extraLimitRows = max(0, limitRowCount - 1)
         let visibleSectionCount = 2
             + (showTrend && !viewModel.dailyUsage.isEmpty ? 1 : 0)
@@ -76,7 +76,7 @@ struct PopoverView: View {
 
     private var header: some View {
         HStack {
-            ProviderIconLogo()
+            AppIconLogo()
             Text(l10n.appName).font(.system(size: 13, weight: .bold))
             Spacer()
             Button(action: { AppSyncCoordinator.shared.syncAll() }) {
@@ -160,15 +160,15 @@ struct PopoverView: View {
 
     // MARK: Limits (compact)
 
-    private var visibleLimitProviders: [ProviderLimit] {
+    private var visibleLimitAgents: [AgentLimit] {
         let visibleSet = LimitsVisibilityStore.visibleSet(from: limitsVisibleSources)
-        return limitsVM.providers.filter {
+        return limitsVM.agents.filter {
             $0.configured && $0.hasLimitDisplay && visibleSet.contains($0.name)
         }
     }
 
     private var limitsSection: some View {
-        let active = visibleLimitProviders
+        let active = visibleLimitAgents
         return Group {
             if !active.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
@@ -184,7 +184,7 @@ struct PopoverView: View {
                         .help(l10n.limits)
                     }
                     ForEach(active) { p in
-                        CompactProviderLimitCard(provider: p)
+                        CompactAgentLimitCard(agent: p)
                     }
                 }
             }
@@ -276,7 +276,7 @@ struct PopoverView: View {
             sectionHeader(l10n.topModels)
             ForEach(Array(merged.prefix(4).enumerated()), id: \.offset) { _, m in
                 HStack(spacing: 6) {
-                    ProviderIcon(source: m.source, modelName: m.model, size: 13)
+                    ModelProviderIcon(model: m.model, fallbackAgentSource: m.source, size: 13)
                     Text(m.model).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: 4)
                     Text(tvFormatTokens(m.total_tokens)).font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
@@ -298,37 +298,37 @@ struct PopoverView: View {
     }
 }
 
-private struct CompactProviderLimitCard: View {
-    let provider: ProviderLimit
+private struct CompactAgentLimitCard: View {
+    let agent: AgentLimit
     @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
-                ProviderIcon(source: provider.name, size: 13)
-                Text(ProviderRegistry.shared.displayName(for: provider.name))
+                AgentIcon(source: agent.name, size: 13)
+                Text(AgentRegistry.shared.displayName(for: agent.name))
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
-                if let plan = provider.planLabel {
+                if let plan = agent.planLabel {
                     Text(plan)
                         .font(.system(size: 8, weight: .medium))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
-                        .background(Capsule().fill(ProviderRegistry.shared.brandColor(for: provider.name).opacity(0.14)))
-                        .foregroundStyle(ProviderRegistry.shared.brandColor(for: provider.name))
+                        .background(Capsule().fill(AgentRegistry.shared.brandColor(for: agent.name).opacity(0.14)))
+                        .foregroundStyle(AgentRegistry.shared.brandColor(for: agent.name))
                 }
                 Spacer(minLength: 4)
-                if let expiry = provider.subscriptionExpiresAt {
-                    CompactProviderDateBadge(kind: .expires, date: expiry, tint: ProviderRegistry.shared.brandColor(for: provider.name))
-                } else if let reset = provider.subscriptionResetAt {
-                    CompactProviderDateBadge(kind: .subscriptionReset, date: reset, tint: ProviderRegistry.shared.brandColor(for: provider.name))
-                } else if let reset = provider.quotaResetAt {
-                    CompactProviderDateBadge(kind: .quotaReset, date: reset, tint: ProviderRegistry.shared.brandColor(for: provider.name))
+                if let expiry = agent.subscriptionExpiresAt {
+                    CompactAgentDateBadge(kind: .expires, date: expiry, tint: AgentRegistry.shared.brandColor(for: agent.name))
+                } else if let reset = agent.subscriptionResetAt {
+                    CompactAgentDateBadge(kind: .subscriptionReset, date: reset, tint: AgentRegistry.shared.brandColor(for: agent.name))
+                } else if let reset = agent.quotaResetAt {
+                    CompactAgentDateBadge(kind: .quotaReset, date: reset, tint: AgentRegistry.shared.brandColor(for: agent.name))
                 }
             }
 
-            ForEach(provider.windows) { window in
-                CompactLimitWindowRow(window: window, tint: ProviderRegistry.shared.brandColor(for: provider.name))
+            ForEach(agent.windows) { window in
+                CompactLimitWindowRow(window: window, tint: AgentRegistry.shared.brandColor(for: agent.name))
             }
         }
         .padding(9)
@@ -340,8 +340,8 @@ private struct CompactProviderLimitCard: View {
     }
 }
 
-private struct CompactProviderDateBadge: View {
-    let kind: ProviderCountdownKind
+private struct CompactAgentDateBadge: View {
+    let kind: AgentCountdownKind
     let date: Date
     let tint: Color
     @ObservedObject private var l10n = L10n.shared
@@ -403,7 +403,7 @@ private struct CompactLimitWindowRow: View {
 }
 
 /// Small app logo for the panel header.
-private struct ProviderIconLogo: View {
+private struct AppIconLogo: View {
     var body: some View {
         if let img = logo() {
             Image(nsImage: img).resizable().interpolation(.high).scaledToFit().frame(width: 16, height: 16)

@@ -6,9 +6,9 @@ use rayon::prelude::*;
 
 use crate::skills::models::LinkType;
 
-/// Canonical provider skills configuration.
+/// Canonical coding-agent configuration.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ProviderSkillsConfig {
+pub struct AgentConfig {
     pub source: String,
     pub display_name: String,
     pub skills_path: String,
@@ -37,7 +37,7 @@ pub struct ProviderSkillsConfig {
     pub logo_file: String,
 }
 
-impl ProviderSkillsConfig {
+impl AgentConfig {
     /// Convenience constructor for tests.
     pub fn custom(source: &str, name: &str, skills_path: &str, link_type: LinkType) -> Self {
         Self {
@@ -57,18 +57,18 @@ impl ProviderSkillsConfig {
     }
 }
 
-/// Registry of all providers with skills configuration.
-/// Builtin providers are derived from parser sources + additional skill-only agents.
-pub struct ProviderSkillsRegistry {
-    builtin: Vec<ProviderSkillsConfig>,
-    /// Custom overrides for provider skills paths.
-    overrides: HashMap<String, ProviderSkillsOverrides>,
+/// Registry of all coding agents with skills configuration.
+/// Builtin agents are derived from parser sources + additional skill-only agents.
+pub struct AgentRegistry {
+    builtin: Vec<AgentConfig>,
+    /// Custom overrides for agent skills paths.
+    overrides: HashMap<String, AgentOverrides>,
     /// Config directory for persistent linked_skills
     config_dir: PathBuf,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct ProviderSkillsOverrides {
+struct AgentOverrides {
     skills_path: Option<String>,
     link_type: Option<LinkType>,
     linked_skills: Vec<String>,
@@ -80,12 +80,12 @@ struct PersistedLinkedSkills {
     linked: HashMap<String, Vec<String>>,
 }
 
-impl ProviderSkillsRegistry {
+impl AgentRegistry {
     pub fn new(config_dir: &Path) -> Result<Self, String> {
         fs::create_dir_all(config_dir)
             .map_err(|e| format!("Failed to create config dir: {}", e))?;
 
-        let builtin = builtin_providers();
+        let builtin = builtin_agents();
         let overrides = Self::load_overrides(config_dir).unwrap_or_default();
 
         Ok(Self {
@@ -95,8 +95,8 @@ impl ProviderSkillsRegistry {
         })
     }
 
-    /// Returns all providers (builtin merged with overrides).
-    pub fn all(&self) -> Vec<ProviderSkillsConfig> {
+    /// Returns all agents (builtin merged with overrides).
+    pub fn all(&self) -> Vec<AgentConfig> {
         let linked_skills_map = self.load_linked_skills();
 
         self.builtin
@@ -128,8 +128,8 @@ impl ProviderSkillsRegistry {
             .collect()
     }
 
-    /// Find a provider config by source name. Uses canonical name.
-    pub fn find(&self, source: &str) -> Option<ProviderSkillsConfig> {
+    /// Find an agent config by source name. Uses canonical name.
+    pub fn find(&self, source: &str) -> Option<AgentConfig> {
         let canonical = canonical_source(source);
         self.builtin
             .iter()
@@ -156,7 +156,7 @@ impl ProviderSkillsRegistry {
             })
     }
 
-    /// Set per-provider override (skills_path / link_type).
+    /// Set a per-agent override (skills_path / link_type).
     pub fn set_override(
         &mut self,
         source: &str,
@@ -167,7 +167,7 @@ impl ProviderSkillsRegistry {
         let entry = self
             .overrides
             .entry(canonical.to_string())
-            .or_insert_with(|| ProviderSkillsOverrides {
+            .or_insert_with(|| AgentOverrides {
                 skills_path: None,
                 link_type: None,
                 linked_skills: Vec::new(),
@@ -181,14 +181,14 @@ impl ProviderSkillsRegistry {
         self.persist_overrides()
     }
 
-    /// Reset per-provider override to defaults.
+    /// Reset a per-agent override to defaults.
     pub fn reset_override(&mut self, source: &str) -> Result<(), String> {
         let canonical = canonical_source(source);
         self.overrides.remove(canonical);
         self.persist_overrides()
     }
 
-    /// Link a skill to a provider.
+    /// Link a skill to an agent.
     pub fn link_skill(&mut self, source: &str, skill_id: &str) -> Result<(), String> {
         let canonical = canonical_source(source);
         let mut linked = self.load_linked_skills();
@@ -199,7 +199,7 @@ impl ProviderSkillsRegistry {
         self.persist_linked_skills(&linked)
     }
 
-    /// Unlink a skill from a provider.
+    /// Unlink a skill from an agent.
     pub fn unlink_skill(&mut self, source: &str, skill_id: &str) -> Result<(), String> {
         let canonical = canonical_source(source);
         let mut linked = self.load_linked_skills();
@@ -212,12 +212,12 @@ impl ProviderSkillsRegistry {
         self.persist_linked_skills(&linked)
     }
 
-    /// Remove a deleted skill from every persisted provider association.
+    /// Remove a deleted skill from every persisted agent association.
     pub fn unlink_skill_from_all(&mut self, skill_id: &str) -> Result<(), String> {
         self.unlink_skills_from_all(&HashSet::from([skill_id.to_string()]))
     }
 
-    /// Remove deleted skills from every persisted provider association in one read/write pass.
+    /// Remove deleted skills from every persisted agent association in one read/write pass.
     pub fn unlink_skills_from_all(&mut self, skill_ids: &HashSet<String>) -> Result<(), String> {
         if skill_ids.is_empty() {
             return Ok(());
@@ -246,7 +246,7 @@ impl ProviderSkillsRegistry {
         Ok(())
     }
 
-    /// Check if a skill is linked to a provider.
+    /// Check if a skill is linked to an agent.
     pub fn is_skill_linked(&self, source: &str, skill_id: &str) -> bool {
         let canonical = canonical_source(source);
         self.load_linked_skills()
@@ -258,6 +258,7 @@ impl ProviderSkillsRegistry {
     // ── Persistence ──
 
     fn overrides_path(&self) -> PathBuf {
+        // Keep the legacy filename so existing installations retain overrides.
         self.config_dir.join("provider_overrides.json")
     }
 
@@ -267,7 +268,8 @@ impl ProviderSkillsRegistry {
 
     fn load_overrides(
         config_dir: &Path,
-    ) -> Result<HashMap<String, ProviderSkillsOverrides>, String> {
+    ) -> Result<HashMap<String, AgentOverrides>, String> {
+        // Compatibility with the filename used before Agent terminology.
         let path = config_dir.join("provider_overrides.json");
         if !path.exists() {
             return Ok(HashMap::new());
@@ -323,8 +325,8 @@ pub fn expand_path(raw: &str) -> Result<PathBuf, String> {
 /// 1. CLI check: if detect_cmd is set, run `which <cmd>` (fast, ms-level)
 /// 2. Presence check: inspect known config/data directories for agents without
 ///    a CLI, or when the CLI binary is not on PATH.
-pub fn detect_installed_agents(providers: &[ProviderSkillsConfig]) -> Vec<(String, bool)> {
-    providers
+pub fn detect_installed_agents(agents: &[AgentConfig]) -> Vec<(String, bool)> {
+    agents
         .par_iter()
         .map(|p| {
             let installed = p
@@ -338,25 +340,25 @@ pub fn detect_installed_agents(providers: &[ProviderSkillsConfig]) -> Vec<(Strin
         .collect()
 }
 
-/// Check whether provider-specific local data exists.
-fn is_agent_present_on_disk(provider: &ProviderSkillsConfig) -> bool {
-    agent_presence_paths(provider)
+/// Check whether agent-specific local data exists.
+fn is_agent_present_on_disk(agent: &AgentConfig) -> bool {
+    agent_presence_paths(agent)
         .into_iter()
         .any(|path| path.exists())
 }
 
 /// Candidate files/directories that indicate an agent has been used/installed.
-fn agent_presence_paths(provider: &ProviderSkillsConfig) -> Vec<PathBuf> {
+fn agent_presence_paths(agent: &AgentConfig) -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
-    if let Ok(skills_path) = expand_path(&provider.skills_path) {
+    if let Ok(skills_path) = expand_path(&agent.skills_path) {
         if let Some(parent) = skills_path.parent() {
             paths.push(parent.to_path_buf());
         }
     }
 
     if let Some(home) = dirs::home_dir() {
-        match provider.source.as_str() {
+        match agent.source.as_str() {
             "codebuddy" => {
                 if let Ok(custom_home) = std::env::var("CODEBUDDY_HOME") {
                     paths.push(PathBuf::from(custom_home));
@@ -371,6 +373,7 @@ fn agent_presence_paths(provider: &ProviderSkillsConfig) -> Vec<PathBuf> {
                 if let Ok(custom_home) = std::env::var("WORKBUDDY_HOME") {
                     paths.push(PathBuf::from(custom_home));
                 }
+                paths.push(home.join(".workbuddy"));
                 paths.push(home.join(".antigravity_cockpit/workbuddy_accounts"));
                 paths.push(home.join(".antigravity_cockpit/workbuddy_accounts.json"));
             }
@@ -501,13 +504,13 @@ fn save_install_cache(config_dir: &Path, statuses: &HashMap<String, bool>) -> Re
 /// Pass `force: true` to skip cache and re-detect.
 pub fn detect_installed_agents_cached(
     config_dir: &Path,
-    providers: &[ProviderSkillsConfig],
+    agents: &[AgentConfig],
     force: bool,
 ) -> Vec<(String, bool)> {
     if !force {
         if let Some(cached) = load_install_cache(config_dir) {
-            // Merge cached status with current provider list
-            return providers
+            // Merge cached status with current agent list.
+            return agents
                 .iter()
                 .map(|p| {
                     let installed = cached.get(&p.source).copied().unwrap_or(false);
@@ -517,7 +520,7 @@ pub fn detect_installed_agents_cached(
         }
     }
 
-    let results = detect_installed_agents(providers);
+    let results = detect_installed_agents(agents);
     let statuses: HashMap<String, bool> = results.iter().cloned().collect();
     let _ = save_install_cache(config_dir, &statuses);
     results
@@ -541,8 +544,8 @@ pub fn agent_name_for(source: &str) -> &str {
     }
 }
 
-/// Built-in providers derived from parser sources + additional skill-only agents.
-fn builtin_providers() -> Vec<ProviderSkillsConfig> {
+/// Built-in agents derived from parser sources + additional skill-only agents.
+fn builtin_agents() -> Vec<AgentConfig> {
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
     let home_str = home.to_string_lossy().to_string();
 
@@ -575,7 +578,7 @@ fn builtin_providers() -> Vec<ProviderSkillsConfig> {
         "zcode",
     ]);
 
-    // Providers with subscription/quota tracking (limits panel).
+    // Agents with subscription/quota tracking (limits panel).
     let limits_sources: std::collections::HashSet<&str> = std::collections::HashSet::from([
         "claude",
         "codex",
@@ -598,7 +601,7 @@ fn builtin_providers() -> Vec<ProviderSkillsConfig> {
     let all_sources: Vec<(&str, &str, &str, Option<&str>, &str)> = {
         let mut sources: Vec<(&str, &str, &str, Option<&str>, &str)> = vec![
             // (source, display_name, logo_file, detect_cmd, brand_color)
-            // ── Canonical providers with parsers ──
+            // ── Canonical agents with parsers ──
             (
                 "claude",
                 "Claude Code",
@@ -606,7 +609,7 @@ fn builtin_providers() -> Vec<ProviderSkillsConfig> {
                 Some("claude"),
                 "#d97757",
             ),
-            ("codex", "ChatGPT", "codex", Some("codex"), "#3b82f6"),
+            ("codex", "ChatGPT", "chatgpt", Some("codex"), "#3b82f6"),
             (
                 "cursor",
                 "Cursor",
@@ -655,7 +658,7 @@ fn builtin_providers() -> Vec<ProviderSkillsConfig> {
             ("ohmypi", "OhMyPi", "ohmypi", None, "#db2777"),
             ("pi", "Pi", "pi", Some("pi"), "#9333ea"),
             ("craft", "Craft Agent", "craft", None, "#0284c7"),
-            ("everycode", "EveryCode", "codex", None, "#3b82f6"),
+            ("everycode", "EveryCode", "chatgpt", None, "#3b82f6"),
             ("mimocode", "MimoCode", "mimo", Some("mimo"), "#2563eb"),
             ("zcode", "ZCode", "zcode", None, "#4f5cf5"),
             ("codebuddy", "CodeBuddy", "codebuddy", None, "#d97757"),
@@ -744,7 +747,7 @@ fn builtin_providers() -> Vec<ProviderSkillsConfig> {
                 };
                 let skills_path = format!("{}/{}/skills", home_str, skills_dir);
 
-                ProviderSkillsConfig {
+                AgentConfig {
                     source: source.to_string(),
                     display_name: display_name.to_string(),
                     skills_path,
@@ -770,20 +773,20 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn test_builtin_providers() {
+    fn test_builtin_agents() {
         let dir = TempDir::new().unwrap();
-        let registry = ProviderSkillsRegistry::new(dir.path()).unwrap();
-        let providers = registry.all();
+        let registry = AgentRegistry::new(dir.path()).unwrap();
+        let agents = registry.all();
         // Should have all parser sources + agent-only
-        assert!(providers.len() >= 42);
-        assert!(providers.iter().any(|a| a.source == "claude"));
-        assert!(providers.iter().any(|a| a.source == "cursor"));
+        assert!(agents.len() >= 42);
+        assert!(agents.iter().any(|a| a.source == "claude"));
+        assert!(agents.iter().any(|a| a.source == "cursor"));
         // Claude should have display name "Claude Code"
-        let claude = providers.iter().find(|a| a.source == "claude").unwrap();
+        let claude = agents.iter().find(|a| a.source == "claude").unwrap();
         assert_eq!(claude.display_name, "Claude Code");
         assert!(claude.has_parser);
         // Trae should exist but have has_parser = false
-        let trae = providers.iter().find(|a| a.source == "trae").unwrap();
+        let trae = agents.iter().find(|a| a.source == "trae").unwrap();
         assert!(!trae.has_parser);
     }
 
@@ -800,7 +803,7 @@ mod tests {
     #[test]
     fn test_link_and_unlink_skill() {
         let dir = TempDir::new().unwrap();
-        let mut registry = ProviderSkillsRegistry::new(dir.path()).unwrap();
+        let mut registry = AgentRegistry::new(dir.path()).unwrap();
 
         registry.link_skill("claude", "code-review").unwrap();
         assert!(registry.is_skill_linked("claude", "code-review"));
@@ -821,7 +824,7 @@ mod tests {
         let skills_dir = dir.path().join("custom-skills");
         fs::create_dir_all(&skills_dir).unwrap();
 
-        let mut registry = ProviderSkillsRegistry::new(dir.path()).unwrap();
+        let mut registry = AgentRegistry::new(dir.path()).unwrap();
 
         // Set override
         registry
@@ -848,13 +851,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
 
         // Create and link
-        let mut registry = ProviderSkillsRegistry::new(dir.path()).unwrap();
+        let mut registry = AgentRegistry::new(dir.path()).unwrap();
         registry.link_skill("claude", "code-review").unwrap();
         registry.link_skill("cursor", "commit-msg").unwrap();
         drop(registry);
 
         // Reload and verify
-        let registry2 = ProviderSkillsRegistry::new(dir.path()).unwrap();
+        let registry2 = AgentRegistry::new(dir.path()).unwrap();
         assert!(registry2.is_skill_linked("claude", "code-review"));
         assert!(registry2.is_skill_linked("cursor", "commit-msg"));
         assert!(!registry2.is_skill_linked("codex", "code-review"));

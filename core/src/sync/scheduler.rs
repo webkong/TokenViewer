@@ -5,7 +5,7 @@ use crate::parsers;
 use crate::storage::Database;
 
 pub struct SyncResult {
-    pub providers_synced: u32,
+    pub agents_synced: u32,
     pub records_added: u32,
     pub errors: Vec<String>,
 }
@@ -22,7 +22,7 @@ pub fn sync_all(db: &Database, home_dir: &Path) -> SyncResult {
     let codex_homes = crate::codex_home::discover_with_database(db, home_dir, false);
     let results = parsers::parse_all_with_codex_homes(home_dir, &cursors, &codex_homes);
 
-    let mut providers_synced = 0u32;
+    let mut agents_synced = 0u32;
     let mut records_added = 0u32;
 
     for result in results {
@@ -30,7 +30,7 @@ pub fn sync_all(db: &Database, home_dir: &Path) -> SyncResult {
             continue;
         }
 
-        // All-or-nothing transaction per provider; on failure the cursor is not
+        // All-or-nothing transaction per agent source; on failure the cursor is not
         // advanced so the next sync retries (UPSERT makes retries idempotent).
         match db.upsert_usage_batch(&result.records) {
             Ok(()) => {
@@ -38,7 +38,7 @@ pub fn sync_all(db: &Database, home_dir: &Path) -> SyncResult {
                 if let Err(e) = db.set_cursor(&result.source, &result.new_cursor) {
                     errors.push(format!("{}: cursor update failed: {}", result.source, e));
                 } else {
-                    providers_synced += 1;
+                    agents_synced += 1;
                 }
             }
             Err(e) => {
@@ -48,7 +48,7 @@ pub fn sync_all(db: &Database, home_dir: &Path) -> SyncResult {
     }
 
     SyncResult {
-        providers_synced,
+        agents_synced,
         records_added,
         errors,
     }

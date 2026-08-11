@@ -144,8 +144,8 @@ final class L10n: ObservableObject {
     func copyrightFooter(year: Int) -> String {
         isZh ? "© \(year) webkong. 保留所有权利。" : "© \(year) webkong. All rights reserved."
     }
-    var providers: String { isZh ? "数据源" : "Providers" }
-    var noProviderData: String { isZh ? "尚无数据。使用任意 AI 工具后点击同步。" : "No provider data yet. Use any supported AI tool, then Sync." }
+    var agents: String { isZh ? "Agent" : "Agents" }
+    var noAgentData: String { isZh ? "尚无数据。使用任意 AI Agent 后点击同步。" : "No agent data yet. Use any supported AI agent, then Sync." }
     func recordsCount(_ n: Int) -> String { isZh ? "\(n) 条记录" : "\(n) records" }
     func activeCount(_ n: Int) -> String { isZh ? "23 个支持工具中 \(n) 个活跃" : "\(n) of 23 supported tools active" }
     var data: String { isZh ? "数据" : "Data" }
@@ -455,7 +455,7 @@ final class L10n: ObservableObject {
     var usageDaily: String { isZh ? "每日用量" : "Daily Usage" }
     var usageModels: String { isZh ? "模型" : "Models" }
     var usageTokenBreakdown: String { isZh ? "Token 分解" : "Token Breakdown" }
-    var usageProviders: String { isZh ? "数据源" : "Providers" }
+    var usageAgents: String { isZh ? "Agent" : "Agents" }
     var usageActivity: String { isZh ? "活跃度" : "Activity" }
     var usageDailyDetails: String { isZh ? "每日明细" : "Daily Details" }
     var usageTotalTokens: String { isZh ? "总 Token 数" : "Total Tokens" }
@@ -478,7 +478,7 @@ final class L10n: ObservableObject {
     var sync30min: String { "30 min" }
     var sync1hour: String { "1 hour" }
 
-    // MARK: - Provider settings
+    // MARK: - Agent settings
     var pathLabel: String { "Path" }
     var linkLabel: String { "Link" }
     var linkDirectory: String { "Directory" }

@@ -394,8 +394,8 @@ private struct SkillRowView: View {
         }
         if let sourceAgent = viewModel.sourceAgent(for: skill) {
             if !viewModel.isInSourceRoot(skill) {
-                let tint = ProviderRegistry.shared.brandColor(for: sourceAgent)
-                Text(ProviderRegistry.shared.displayName(for: sourceAgent))
+                let tint = AgentRegistry.shared.brandColor(for: sourceAgent)
+                Text(AgentRegistry.shared.displayName(for: sourceAgent))
                     .font(.caption2)
                     .padding(.horizontal, 5).padding(.vertical, 1)
                     .background(tint.opacity(0.12), in: Capsule())
@@ -418,7 +418,7 @@ private struct SkillRowView: View {
     private var actionButtons: some View {
         HStack(spacing: 4) {
             if !operationIsInSourceRoot, let sourceAgent = operationSourceAgent {
-                let displayName = ProviderRegistry.shared.displayName(for: sourceAgent)
+                let displayName = AgentRegistry.shared.displayName(for: sourceAgent)
                 Button {
                     if operationIsBuiltIn {
                         viewModel.builtInOrganizeAlert = BuiltInOrganizeAlert(
@@ -441,7 +441,7 @@ private struct SkillRowView: View {
                 .buttonStyle(.plain)
                 .quickHelp(l10n.skillOrganizeTip(displayName))
             } else if operationIsInSourceRoot, let sourceAgent = operationSourceAgent {
-                let displayName = ProviderRegistry.shared.displayName(for: sourceAgent)
+                let displayName = AgentRegistry.shared.displayName(for: sourceAgent)
                 Button {
                     viewModel.restoreSkill(skillID: operationSkillID, agentID: sourceAgent)
                 } label: {
@@ -473,7 +473,7 @@ private struct SkillRowView: View {
     // MARK: - Agent Link Tags
 
     private var agentLinkTags: some View {
-        let agents = viewModel.visibleProviders
+        let agents = viewModel.visibleAgents
         let activeAgentIDs = operationAgentIDs
         let linked = agents.filter { viewModel.isSkillLinked(skillID: operationSkillID, agentID: $0.source) }
         let active = agents.filter { activeAgentIDs.contains($0.source) && !linked.contains($0) }
@@ -497,7 +497,7 @@ private struct SkillRowView: View {
         }
     }
 
-    private func agentLinkChip(agent: SkillProvider, isLinked: Bool, isSource: Bool) -> some View {
+    private func agentLinkChip(agent: AgentConfig, isLinked: Bool, isSource: Bool) -> some View {
         Button {
             if isLinked {
                 viewModel.unlinkSkill(skillID: operationSkillID, agentID: agent.source)
@@ -514,9 +514,9 @@ private struct SkillRowView: View {
                 viewModel.linkSkill(skillID: operationSkillID, agentID: agent.source)
             }
         } label: {
-            let tint = ProviderRegistry.shared.brandColor(for: agent.source)
+            let tint = AgentRegistry.shared.brandColor(for: agent.source)
             HStack(spacing: 3) {
-                ProviderIcon(source: agent.source, size: 12)
+                AgentIcon(source: agent.source, size: 12)
                 Text(agent.displayName)
                     .font(.caption2)
             }
@@ -546,7 +546,7 @@ private struct SkillRowView: View {
         return .secondary
     }
 
-    private func linkTooltip(isLinked: Bool, isSource: Bool, agent: SkillProvider) -> String {
+    private func linkTooltip(isLinked: Bool, isSource: Bool, agent: AgentConfig) -> String {
         if isLinked { return l10n.skillUnlinkTip(agent.displayName) }
         if isSource { return l10n.skillSourceLinkTip(agent.displayName) }
         return l10n.skillLinkTip(agent.displayName)

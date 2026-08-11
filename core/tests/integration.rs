@@ -13,13 +13,13 @@ fn test_full_sync() {
     println!("Database opened at: {}", db_path);
 
     let result = sync::sync_all(&db, Path::new(&home));
-    println!("Providers synced: {}", result.providers_synced);
+    println!("Agents synced: {}", result.agents_synced);
     println!("Records added: {}", result.records_added);
     for e in &result.errors {
         println!("  Error: {}", e);
     }
-    // Should not panic, providers_synced should be > 0 if any tool is installed
-    assert!(result.errors.len() <= 23); // at most one error per provider
+    // Should not panic; agents_synced should be > 0 if any tool is installed.
+    assert!(result.errors.len() <= 23); // at most one error per agent
 
     // Verify cost computation does not panic and pricing resolves.
     let rows = db

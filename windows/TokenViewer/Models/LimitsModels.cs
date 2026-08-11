@@ -7,7 +7,7 @@ public sealed record LimitWindow(
     double UsedPercent,
     DateTime? ResetAt);
 
-public sealed record ProviderLimit(
+public sealed record AgentLimit(
     string Name,
     string? PlanLabel,
     bool Configured,

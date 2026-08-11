@@ -14,13 +14,13 @@ const copy = {
     htmlLang: "en",
     pageTitle: "TokenViewer - AI Token Usage Tracker for macOS",
     pageDescription:
-      "TokenViewer is a free, native macOS menu-bar app that tracks your AI token usage and costs across 25 providers — Claude, ChatGPT, Kiro, Cursor, Copilot, ZCode and more. Local-first, no cloud required.",
+      "TokenViewer is a free, native macOS menu-bar app that tracks your AI token usage and costs across 25 agents — Claude Code, ChatGPT, Kiro, Cursor, Copilot, ZCode and more. Local-first, no cloud required.",
     pageKeywords:
       "AI token tracker, token usage macOS, Claude token counter, ChatGPT Codex usage, Kiro token, AI cost tracker, menu bar app macOS, AI skills manager",
     brandHome: "TokenViewer home",
     nav: {
       features: "Features",
-      providers: "Providers",
+      agents: "Agents",
       skills: "Skills",
       about: "About",
       github: "GitHub",
@@ -34,7 +34,7 @@ const copy = {
         "TokenViewer sits in your menu bar and quietly tracks token usage and costs across 25 AI coding tools. See where your tokens go — today, this week, or over time.",
       primary: "Download for macOS",
       secondary: "See features",
-      proof: ["Free", "25 providers", "Local-first"],
+      proof: ["Free", "25 agents", "Local-first"],
       previewLabel: "TokenViewer menu-bar panel preview",
     },
     features: [
@@ -64,8 +64,8 @@ const copy = {
         "You see tokens, costs, and trends instantly",
       ],
     },
-    providers: {
-      title: "25 supported providers",
+    agents: {
+      title: "25 supported agents",
       description:
         "TokenViewer reads local data from the AI tools you already use — no API keys or logins required.",
       list: [
@@ -114,7 +114,7 @@ const copy = {
     brandHome: "TokenViewer 官网首页",
     nav: {
       features: "功能",
-      providers: "支持工具",
+      agents: "支持的 Agent",
       skills: "技能管理",
       about: "关于",
       github: "GitHub",
@@ -158,7 +158,7 @@ const copy = {
         "你立刻看到 Token 数量、费用和趋势",
       ],
     },
-    providers: {
+    agents: {
       title: "支持 25 个工具",
       description:
         "TokenViewer 直接读取你已使用工具的本地数据——无需 API Key，无需登录。",
@@ -235,7 +235,7 @@ function App() {
       <ProductStory t={t} />
       <SkillsSection t={t} />
       <ScreenshotRow />
-      <ProvidersSection t={t} />
+      <AgentsSection t={t} />
       <Footer t={t} />
     </main>
   );
@@ -252,7 +252,7 @@ function Navigation({ t, onToggleLanguage }) {
         <div className="nav-links">
           <a href="/#features">{t.nav.features}</a>
           <a href="/#skills">{t.nav.skills}</a>
-          <a href="/#providers">{t.nav.providers}</a>
+          <a href="/#agents">{t.nav.agents}</a>
           <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">{t.nav.github}</a>
         </div>
         <div className="nav-actions">
@@ -388,8 +388,8 @@ function SkillsSection({ t }) {
   );
 }
 
-// Provider logo mapping
-const PROVIDER_LOGOS = {
+// Agent logo mapping
+const AGENT_LOGOS = {
   "Claude Code": "claude-code",
   "ChatGPT": "codex",
   "Kiro": "kiro",
@@ -426,19 +426,19 @@ function ScreenshotRow() {
   );
 }
 
-function ProvidersSection({ t }) {
+function AgentsSection({ t }) {
   return (
-    <section className="providers-section" id="providers">
-      <div className="providers-copy">
+    <section className="agents-section" id="agents">
+      <div className="agents-copy">
         <Zap size={34} />
-        <h2>{t.providers.title}</h2>
-        <p>{t.providers.description}</p>
+        <h2>{t.agents.title}</h2>
+        <p>{t.agents.description}</p>
       </div>
-      <div className="providers-grid">
-        {t.providers.list.map(name => {
-          const logoKey = PROVIDER_LOGOS[name];
+      <div className="agents-grid">
+        {t.agents.list.map(name => {
+          const logoKey = AGENT_LOGOS[name];
           return (
-            <div className="provider-chip" key={name}>
+            <div className="agent-chip" key={name}>
               {logoKey && (
                 <img
                   src={logoKey.endsWith(".png") ? `/logos/${logoKey}` : `/logos/${logoKey}.svg`}
