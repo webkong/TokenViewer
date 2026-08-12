@@ -57,7 +57,7 @@ struct UsageView: View {
 
                     if let s = viewModel.summary {
                         // Overview
-                        SummaryCardsView(summary: s)
+                        SummaryCardsView(summary: s, models: viewModel.modelBreakdown)
                         TokenTypeBar(summary: s)
 
                         // Trend (hero, full width)
@@ -256,19 +256,122 @@ private struct CustomPickerHeightKey: PreferenceKey {
 
 private struct SummaryCardsView: View {
     let summary: UsageSummary
+    let models: [ModelEntry]
     @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         HStack(spacing: 12) {
             MetricCard(title: l10n.usageTotalTokens, value: tvFormatTokens(summary.total_tokens),
                        icon: "number", tint: TVColor.brand)
-            MetricCard(title: l10n.cost, value: tvFormatCost(summary.total_cost_usd),
-                       icon: "dollarsign.circle.fill", tint: .orange)
+            CostMetricCard(totalCost: summary.total_cost_usd, models: models)
             MetricCard(title: l10n.usageConversations, value: "\(summary.conversation_count)",
                        icon: "bubble.left.and.bubble.right.fill", tint: .blue)
             MetricCard(title: l10n.usageActiveDaysTitle, value: "\(summary.active_days)",
                        icon: "calendar", tint: .purple)
         }
+    }
+}
+
+private struct CostMetricCard: View {
+    let totalCost: Double
+    let models: [ModelEntry]
+    @ObservedObject private var l10n = L10n.shared
+    @State private var showsBreakdown = false
+    @State private var dismissWorkItem: DispatchWorkItem?
+
+    private var costByModel: [ModelEntry] {
+        mergedByModel(models)
+            .filter { $0.total_cost_usd > 0 }
+            .sorted { lhs, rhs in
+                if lhs.total_cost_usd == rhs.total_cost_usd {
+                    return lhs.model.localizedCaseInsensitiveCompare(rhs.model) == .orderedAscending
+                }
+                return lhs.total_cost_usd > rhs.total_cost_usd
+            }
+    }
+
+    var body: some View {
+        MetricCard(title: l10n.cost, value: tvFormatCost(totalCost),
+                   icon: "dollarsign.circle.fill", tint: .orange)
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+            .onHover { hovering in
+                hovering ? presentBreakdown() : scheduleDismiss()
+            }
+            .popover(isPresented: $showsBreakdown, arrowEdge: .bottom) {
+                CostBreakdownTip(models: costByModel, totalCost: totalCost)
+                    .onHover { hovering in
+                        hovering ? cancelDismiss() : scheduleDismiss()
+                    }
+            }
+    }
+
+    private func presentBreakdown() {
+        cancelDismiss()
+        showsBreakdown = true
+    }
+
+    private func scheduleDismiss() {
+        cancelDismiss()
+        let item = DispatchWorkItem { showsBreakdown = false }
+        dismissWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: item)
+    }
+
+    private func cancelDismiss() {
+        dismissWorkItem?.cancel()
+        dismissWorkItem = nil
+    }
+}
+
+private struct CostBreakdownTip: View {
+    let models: [ModelEntry]
+    let totalCost: Double
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(l10n.costByModel)
+                .font(.system(size: 13, weight: .semibold))
+
+            if models.isEmpty {
+                Text(l10n.noUsageData)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView(showsIndicators: models.count > 8) {
+                    VStack(spacing: 8) {
+                        ForEach(models) { entry in
+                            HStack(spacing: 8) {
+                                ModelProviderIcon(model: entry.model,
+                                                  fallbackAgentSource: entry.source,
+                                                  size: 14)
+                                Text(entry.model)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .lineLimit(1)
+                                Spacer(minLength: 16)
+                                Text(tvFormatCost(entry.total_cost_usd))
+                                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                    .monospacedDigit()
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 240)
+
+                Divider()
+
+                HStack {
+                    Text(l10n.total)
+                        .font(.system(size: 12, weight: .semibold))
+                    Spacer()
+                    Text(tvFormatCost(totalCost))
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .monospacedDigit()
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: 290)
     }
 }
 
@@ -706,4 +809,3 @@ private struct DailyTableView: View {
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: align)
     }
 }
-

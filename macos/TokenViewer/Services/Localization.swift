@@ -69,6 +69,7 @@ final class L10n: ObservableObject {
     var cacheRead: String { isZh ? "缓存读取" : "Cache Read" }
     var reasoning: String { isZh ? "推理" : "Reasoning" }
     var cost: String { isZh ? "费用" : "Cost" }
+    var costByModel: String { isZh ? "模型费用明细" : "Cost by Model" }
     var cacheHit: String { isZh ? "缓存命中" : "Cache hit" }
 
     // MARK: - Limits
