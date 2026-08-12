@@ -69,6 +69,7 @@
 		A04BA67DA7E9F51F9DCAD36F /* AgentRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60471D3FF4AD89FABBDBD8E1 /* AgentRegistry.swift */; };
 		A9EC0A799C64FF8F236AFBEE /* aider.svg in Resources */ = {isa = PBXBuildFile; fileRef = 440C5D55636EB0B620818EC9 /* aider.svg */; };
 		AC2D83CF6C4BFF0B194E2AC9 /* wenxin.svg in Resources */ = {isa = PBXBuildFile; fileRef = 45FEF0D38A2ECDC7BAFCB8CB /* wenxin.svg */; };
+		B3168CBA18341E3C316AE859 /* LiteLLMPricingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A260662A12B58E589DB7D94 /* LiteLLMPricingService.swift */; };
 		B43B91210F29322F053A9F0B /* droid.svg in Resources */ = {isa = PBXBuildFile; fileRef = E67DB0868DF0281C2ACF07B3 /* droid.svg */; };
 		B46E624E79A30F1B0B72E060 /* qoder.png in Resources */ = {isa = PBXBuildFile; fileRef = EE91DBFAE4E2670D53307DE2 /* qoder.png */; };
 		B4A238F2E201B26D767D94B6 /* cline.svg in Resources */ = {isa = PBXBuildFile; fileRef = 78939B0AD0C6C5326F124418 /* cline.svg */; };
@@ -119,6 +120,7 @@
 		034652C5EE019A959887EFA2 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		0495AEF0E7BB906AC8EACB8E /* llama.svg */ = {isa = PBXFileReference; path = llama.svg; sourceTree = "<group>"; };
 		068F9C35A6FFB2F33320C210 /* SkillGitSyncSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillGitSyncSheet.swift; sourceTree = "<group>"; };
+		0A260662A12B58E589DB7D94 /* LiteLLMPricingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteLLMPricingService.swift; sourceTree = "<group>"; };
 		0F9CAADCE87E6ADB31C02E50 /* SkillManagerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillManagerViewModel.swift; sourceTree = "<group>"; };
 		1715F8A7F9DCB981DFA8559E /* chatgpt.svg */ = {isa = PBXFileReference; path = chatgpt.svg; sourceTree = "<group>"; };
 		1B98E866BA953AC0243EF6B6 /* SkillPreviewCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillPreviewCache.swift; sourceTree = "<group>"; };
@@ -327,6 +329,7 @@
 				3A0F91FA57420FB58729B647 /* KeychainManager.swift */,
 				EBE72CF07CC99195B52D4715 /* LimitsService.swift */,
 				39EB5D762689CD00096F0785 /* LimitsVisibilityStore.swift */,
+				0A260662A12B58E589DB7D94 /* LiteLLMPricingService.swift */,
 				034652C5EE019A959887EFA2 /* Localization.swift */,
 				1EA10E5AF44220515CDD3FC6 /* ModelProviderRegistry.swift */,
 				C54A6C43A31CA1B59412B121 /* Preferences.swift */,
@@ -608,6 +611,7 @@
 				C410EC5A0E53CD4A11C75B0C /* LimitsView.swift in Sources */,
 				F68C7E360D4621D052429EFB /* LimitsViewModel.swift in Sources */,
 				3F3AA6C6B6C882FEEC1628A5 /* LimitsVisibilityStore.swift in Sources */,
+				B3168CBA18341E3C316AE859 /* LiteLLMPricingService.swift in Sources */,
 				88038E2FBCB342196F263BFA /* Localization.swift in Sources */,
 				59C9CF298FD67A2731CDD576 /* MainWindowView.swift in Sources */,
 				EF6E2600F39385227BF8EA03 /* ModelProviderRegistry.swift in Sources */,
@@ -728,7 +732,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 21700;
+				CURRENT_PROJECT_VERSION = 21800;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -747,7 +751,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.17;
+				MARKETING_VERSION = 0.2.18;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -827,7 +831,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 21700;
+				CURRENT_PROJECT_VERSION = 21800;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -840,7 +844,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.17;
+				MARKETING_VERSION = 0.2.18;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

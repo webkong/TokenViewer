@@ -18,6 +18,12 @@ private struct CodexHomesUpdateResponse: Codable {
     let error: String?
 }
 
+private struct SetPricingResponse: Codable {
+    let ok: Bool
+    let models: Int?
+    let error: String?
+}
+
 /// Swift wrapper around the Rust FFI core.
 /// All FFI calls are serialized through a private queue so the Rust handle is
 /// never accessed concurrently from the main thread and background sync tasks.
@@ -69,6 +75,26 @@ final class CoreBridge: @unchecked Sendable {
         }
         if response.ok {
             return .success(response.homes ?? [])
+        }
+        return .failure(CoreBridgeError.operationFailed(response.error ?? "Unknown error"))
+    }
+
+    /// Install a LiteLLM pricing table into the Rust runtime. `json` is a JSON
+    /// object of model -> { input_cost_per_token, output_cost_per_token, ... }.
+    /// Runs on the serial queue (harmless — the pricing table is a process-global
+    /// static) and returns the number of models installed on success.
+    func setPricing(_ json: String) -> Result<Int, Error> {
+        let data: Data? = queue.sync {
+            guard let ptr = json.withCString({ tt_set_pricing($0) }) else { return nil }
+            defer { tt_free_string(ptr) }
+            return String(cString: ptr).data(using: .utf8)
+        }
+        guard let data else { return .failure(CoreBridgeError.invalidResponse) }
+        guard let response = try? JSONDecoder().decode(SetPricingResponse.self, from: data) else {
+            return .failure(CoreBridgeError.invalidResponse)
+        }
+        if response.ok {
+            return .success(response.models ?? 0)
         }
         return .failure(CoreBridgeError.operationFailed(response.error ?? "Unknown error"))
     }
