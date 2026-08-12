@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         seedLimitsVisibilityDefaultAfterDetection()
         rebuildIfVersionChanged()
         ThemeManager.shared.apply()
+        LiteLLMPricingService.shared.start()
         statusBarController = StatusBarController.shared
         UpdateChecker.shared.startAutoCheck()
 

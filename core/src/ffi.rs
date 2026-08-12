@@ -174,6 +174,28 @@ pub extern "C" fn tt_set_codex_additional_homes(
     }
 }
 
+/// Replace the runtime LiteLLM pricing table from a JSON object of model
+/// entries (per-token USD cost fields, as in LiteLLM's model_prices_and_context_window.json).
+/// Returns `{ "ok": true, "models": <count> }` on success, or
+/// `{ "ok": false, "error": ... }` when the JSON is invalid.
+///
+/// # Safety
+/// `json` must be a valid, non-null, NUL-terminated C string.
+#[no_mangle]
+pub extern "C" fn tt_set_pricing(json: *const c_char) -> *mut c_char {
+    if json.is_null() {
+        return to_json_cstring(&serde_json::json!({"ok": false, "error": "Null json"}));
+    }
+    let raw = match unsafe { CStr::from_ptr(json) }.to_str() {
+        Ok(s) => s,
+        Err(e) => return to_json_cstring(&serde_json::json!({"ok": false, "error": e.to_string()})),
+    };
+    match crate::pricing::set_pricing_override(raw) {
+        Ok(models) => to_json_cstring(&serde_json::json!({"ok": true, "models": models})),
+        Err(error) => to_json_cstring(&serde_json::json!({"ok": false, "error": error})),
+    }
+}
+
 /// Clear processed data and immediately resync from raw sources.
 /// Returns the same JSON shape as `tt_sync_all`.
 ///
