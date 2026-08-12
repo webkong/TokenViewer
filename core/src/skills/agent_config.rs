@@ -258,19 +258,23 @@ impl AgentRegistry {
     // ── Persistence ──
 
     fn overrides_path(&self) -> PathBuf {
-        // Keep the legacy filename so existing installations retain overrides.
-        self.config_dir.join("provider_overrides.json")
+        self.config_dir.join("agent_overrides.json")
     }
 
     fn linked_skills_path(&self) -> PathBuf {
         self.config_dir.join("linked_skills.json")
     }
 
-    fn load_overrides(
-        config_dir: &Path,
-    ) -> Result<HashMap<String, AgentOverrides>, String> {
-        // Compatibility with the filename used before Agent terminology.
-        let path = config_dir.join("provider_overrides.json");
+    fn load_overrides(config_dir: &Path) -> Result<HashMap<String, AgentOverrides>, String> {
+        let current_path = config_dir.join("agent_overrides.json");
+        // Compatibility with installations that already used the private config
+        // directory while retaining the filename from Provider terminology.
+        let legacy_path = config_dir.join("provider_overrides.json");
+        let path = if current_path.exists() {
+            current_path
+        } else {
+            legacy_path
+        };
         if !path.exists() {
             return Ok(HashMap::new());
         }

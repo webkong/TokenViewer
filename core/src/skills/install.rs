@@ -395,6 +395,14 @@ impl SkillInstaller {
     }
 
     fn metadata_path(&self) -> PathBuf {
+        if self.config_dir.file_name().and_then(|name| name.to_str()) == Some("skills-manager") {
+            return self
+                .config_dir
+                .parent()
+                .unwrap_or(&self.config_dir)
+                .join("install.json");
+        }
+
         let home = self
             .config_dir
             .parent()

@@ -675,8 +675,7 @@ struct SettingsView: View {
                     } else if moveSkills(from: oldPath, to: newPath, overwrite: false) {
                         saveSkillsSourceRoot(
                             newPath,
-                            successMessage: l10n.skillsMoveSuccess,
-                            relinkExistingSkills: true
+                            successMessage: l10n.skillsMoveSuccess
                         )
                     }
                 }
@@ -704,8 +703,7 @@ struct SettingsView: View {
                     if moveSkills(from: oldPath, to: newPath, overwrite: true) {
                         saveSkillsSourceRoot(
                             newPath,
-                            successMessage: l10n.skillsMoveSuccess,
-                            relinkExistingSkills: true
+                            successMessage: l10n.skillsMoveSuccess
                         )
                     }
                 }
@@ -752,8 +750,7 @@ struct SettingsView: View {
 
     private func saveSkillsSourceRoot(
         _ path: String,
-        successMessage: String? = nil,
-        relinkExistingSkills: Bool = false
+        successMessage: String? = nil
     ) {
         let payload: [String: String] = ["source_root": path]
         guard let data = try? JSONSerialization.data(withJSONObject: payload),
@@ -766,68 +763,8 @@ struct SettingsView: View {
 
         lastSavedSkillsSourceRoot = path
         agentRegistry.reload()
-        if relinkExistingSkills, !relinkSkillsToMovedRoot(sourceRoot: path) {
-            SkillManagerViewModel.shared.refresh()
-            ToastCenter.shared.error(l10n.skillsMoveRelinkFailed)
-            return
-        }
         SkillManagerViewModel.shared.refresh()
         ToastCenter.shared.success(successMessage ?? l10n.toastSaved)
-    }
-
-    private func relinkSkillsToMovedRoot(sourceRoot: String) -> Bool {
-        var succeeded = true
-        for agent in agentRegistry.skillAgents {
-            for skillID in agent.linkedSkills {
-                let payload = ["skill_id": skillID, "agent_id": agent.source]
-                if let data = try? JSONEncoder().encode(payload),
-                   let resultData = CoreBridge.shared.skillsLink(data),
-                   let result = try? JSONDecoder().decode(SkillOperationResult.self, from: resultData),
-                   result.ok {
-                    continue
-                }
-
-                // Only surface an error when the final directory link still does not
-                // point at the moved source root.
-                if agent.linkType != "Directory"
-                    || !directoryLinkIsCurrent(
-                        agent: agent,
-                        skillID: skillID,
-                        sourceRoot: sourceRoot
-                    ) {
-                    succeeded = false
-                }
-            }
-        }
-        return succeeded
-    }
-
-    private func directoryLinkIsCurrent(
-        agent: AgentConfig,
-        skillID: String,
-        sourceRoot: String
-    ) -> Bool {
-        let linkPath = URL(
-            fileURLWithPath: standardizedSkillsPath(agent.skillsPath),
-            isDirectory: true
-        ).appendingPathComponent(skillID)
-        guard let rawDestination = try? FileManager.default.destinationOfSymbolicLink(atPath: linkPath.path) else {
-            return false
-        }
-
-        let destination: String
-        if rawDestination.hasPrefix("/") {
-            destination = standardizedSkillsPath(rawDestination)
-        } else {
-            destination = standardizedSkillsPath(
-                linkPath.deletingLastPathComponent().appendingPathComponent(rawDestination).path
-            )
-        }
-        let expected = URL(
-            fileURLWithPath: standardizedSkillsPath(sourceRoot),
-            isDirectory: true
-        ).appendingPathComponent(skillID).standardized.path
-        return destination == expected && FileManager.default.fileExists(atPath: expected)
     }
 
     private func standardizedSkillsPath(_ path: String) -> String {

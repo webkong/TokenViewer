@@ -250,11 +250,9 @@ mod tests {
 }
 
 impl SkillsCore {
-    pub fn new(db: &Database, source_root: PathBuf) -> Result<Self, String> {
+    pub fn new(db: &Database, source_root: PathBuf, config_dir: PathBuf) -> Result<Self, String> {
         db.migrate_skills_schema().map_err(|e| e.to_string())?;
 
-        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
-        let config_dir = home.join(".agents");
         let registry = AgentRegistry::new(&config_dir).map_err(|e| e.to_string())?;
         let scanner = Scanner::new(source_root.clone());
         let symlink = SymlinkManager::new(source_root.clone());

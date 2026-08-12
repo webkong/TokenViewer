@@ -43,7 +43,10 @@ pub extern "C" fn tt_init(db_path: *const c_char) -> *mut CoreHandle {
 
     match Database::open(&path) {
         Ok(db) => {
-            let config_dir = home_dir.join(".agents");
+            let config_dir = match migrate_skills_manager_config(&home_dir) {
+                Ok(path) => path,
+                Err(_) => return std::ptr::null_mut(),
+            };
             let persisted_config = load_skills_config(&config_dir);
             let env_source_root = std::env::var("TOKENVIEWER_SKILLS_ROOT").ok();
             let persisted_source_root_raw = persisted_config
@@ -82,7 +85,7 @@ pub extern "C" fn tt_init(db_path: *const c_char) -> *mut CoreHandle {
                 })
                 .unwrap_or_else(|| home_dir.join(".tokenviewer").join("skills"));
 
-            let mut skills = match crate::skills::SkillsCore::new(&db, source_root) {
+            let mut skills = match crate::skills::SkillsCore::new(&db, source_root, config_dir) {
                 Ok(skills) => skills,
                 Err(_) => return std::ptr::null_mut(),
             };
@@ -1339,6 +1342,14 @@ pub extern "C" fn tt_skills_set_git_config(
                 ));
             }
         }
+        let old_source_root = handle.skills.source_root.clone();
+        if let Err(e) = handle.skills.symlink.retarget_source_root_links(
+            &old_source_root,
+            &path,
+            &handle.skills.registry.all(),
+        ) {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(e));
+        }
         handle.skills.source_root = path.clone();
         handle.skills.source_root_display = root.to_string();
         // Re-init git engine for new path
@@ -1496,6 +1507,47 @@ struct PersistedSkillsConfig {
 
 fn skills_config_path(config_dir: &std::path::Path) -> PathBuf {
     config_dir.join("skills_config.json")
+}
+
+/// Move TokenViewer-owned Skill Manager state out of the shared `~/.agents`
+/// directory. Files are copied before their legacy counterparts are removed;
+/// an existing destination always wins and leaves the legacy file untouched.
+fn migrate_skills_manager_config(home_dir: &std::path::Path) -> Result<PathBuf, String> {
+    let config_dir = home_dir.join(".tokenviewer").join("skills-manager");
+    std::fs::create_dir_all(&config_dir)
+        .map_err(|e| format!("Failed to create skills config dir: {}", e))?;
+
+    let legacy_dir = home_dir.join(".agents");
+    for (legacy_name, current_name) in [
+        ("skills_config.json", "skills_config.json"),
+        ("linked_skills.json", "linked_skills.json"),
+        ("provider_overrides.json", "agent_overrides.json"),
+        ("install_status.json", "install_status.json"),
+    ] {
+        let legacy_path = legacy_dir.join(legacy_name);
+        let current_path = config_dir.join(current_name);
+        if !legacy_path.is_file() || current_path.exists() {
+            continue;
+        }
+
+        std::fs::copy(&legacy_path, &current_path).map_err(|e| {
+            format!(
+                "Failed to migrate {} to {}: {}",
+                legacy_path.display(),
+                current_path.display(),
+                e
+            )
+        })?;
+        std::fs::remove_file(&legacy_path).map_err(|e| {
+            format!(
+                "Migrated {}, but failed to remove legacy file: {}",
+                legacy_path.display(),
+                e
+            )
+        })?;
+    }
+
+    Ok(config_dir)
 }
 
 fn load_skills_config(config_dir: &std::path::Path) -> Option<PersistedSkillsConfig> {

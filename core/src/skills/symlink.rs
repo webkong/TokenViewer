@@ -1,6 +1,7 @@
+use std::collections::HashSet;
 use std::fs;
 use std::os::unix::fs as unix_fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::skills::models::LinkType;
 use crate::skills::agent_config::{expand_path, AgentConfig};
@@ -36,6 +37,79 @@ impl SymlinkManager {
             LinkType::SingleFile => self.link_single_file(&source, &target_base),
             LinkType::Overlay => self.link_overlay(&source, &target_base, skill_id),
         }
+    }
+
+    /// Retarget every real symlink under the registered Agent Skill paths that
+    /// points into `old_root`. This intentionally scans the filesystem instead
+    /// of relying on linked_skills.json, because links created by other Skill
+    /// managers must keep working when the shared library is moved.
+    pub fn retarget_source_root_links(
+        &self,
+        old_root: &Path,
+        new_root: &Path,
+        agents: &[AgentConfig],
+    ) -> Result<usize, String> {
+        let old_root = normalize_path(old_root);
+        let new_root = normalize_path(new_root);
+        if old_root == new_root {
+            return Ok(0);
+        }
+
+        let mut visited_links = HashSet::new();
+        let mut updated = 0;
+        for agent in agents {
+            if agent.link_type == LinkType::SingleFile {
+                continue;
+            }
+            let skills_path = expand_path(&agent.skills_path)?;
+            if !skills_path.is_dir() {
+                continue;
+            }
+
+            for entry in walkdir::WalkDir::new(&skills_path).follow_links(false) {
+                let entry = entry.map_err(|e| {
+                    format!(
+                        "Failed to scan Agent Skill path {}: {}",
+                        skills_path.display(),
+                        e
+                    )
+                })?;
+                if !entry.file_type().is_symlink() {
+                    continue;
+                }
+                let link_path = entry.path().to_path_buf();
+                if !visited_links.insert(link_path.clone()) {
+                    continue;
+                }
+                let raw_target = fs::read_link(&link_path).map_err(|e| {
+                    format!("Failed to read symlink {}: {}", link_path.display(), e)
+                })?;
+                let resolved_target = if raw_target.is_absolute() {
+                    normalize_path(&raw_target)
+                } else {
+                    normalize_path(
+                        &link_path
+                            .parent()
+                            .unwrap_or_else(|| Path::new("/"))
+                            .join(&raw_target),
+                    )
+                };
+                let relative_target = match resolved_target.strip_prefix(&old_root) {
+                    Ok(relative) => relative,
+                    Err(_) => continue,
+                };
+                let new_target = new_root.join(relative_target);
+                // A link that was already broken before the directory move cannot
+                // be repaired safely. Leave it untouched rather than guessing.
+                if !new_target.exists() {
+                    continue;
+                }
+
+                replace_symlink_atomically(&link_path, &new_target)?;
+                updated += 1;
+            }
+        }
+        Ok(updated)
     }
 
     /// Remove a symlink for a specific skill from a specific agent.
@@ -504,6 +578,50 @@ impl SymlinkManager {
     }
 }
 
+fn normalize_path(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+    normalized
+}
+
+fn replace_symlink_atomically(link_path: &Path, new_target: &Path) -> Result<(), String> {
+    let file_name = link_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("skill");
+    let temporary = link_path.with_file_name(format!(
+        ".{}.tokenviewer-relink-{}",
+        file_name,
+        uuid::Uuid::new_v4()
+    ));
+    unix_fs::symlink(new_target, &temporary).map_err(|e| {
+        format!(
+            "Failed to prepare replacement symlink {} -> {}: {}",
+            link_path.display(),
+            new_target.display(),
+            e
+        )
+    })?;
+    if let Err(error) = fs::rename(&temporary, link_path) {
+        let _ = fs::remove_file(&temporary);
+        return Err(format!(
+            "Failed to replace symlink {} -> {}: {}",
+            link_path.display(),
+            new_target.display(),
+            error
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -537,6 +655,54 @@ mod tests {
         let link_path = target_base.join("code-review");
         assert!(link_path.is_symlink());
         assert_eq!(fs::read_link(&link_path).unwrap(), skill_dir);
+    }
+
+    #[test]
+    fn retargets_registered_and_unregistered_links_after_source_root_move() {
+        let dir = TempDir::new().unwrap();
+        let old_root = dir.path().join("old-skills");
+        let new_root = dir.path().join("new-skills");
+        let agent_root = dir.path().join("agent-skills");
+        for skill_id in ["registered", "external"] {
+            let skill = old_root.join(skill_id);
+            fs::create_dir_all(&skill).unwrap();
+            fs::write(skill.join("SKILL.md"), format!("# {}\n", skill_id)).unwrap();
+        }
+        fs::create_dir_all(&agent_root).unwrap();
+        unix_fs::symlink(old_root.join("registered"), agent_root.join("registered")).unwrap();
+        unix_fs::symlink(
+            Path::new("../old-skills/external"),
+            agent_root.join("external"),
+        )
+        .unwrap();
+        unix_fs::symlink(old_root.join("missing"), agent_root.join("missing")).unwrap();
+
+        fs::rename(&old_root, &new_root).unwrap();
+        let agent = AgentConfig::custom(
+            "test-agent",
+            "Test Agent",
+            &agent_root.to_string_lossy(),
+            LinkType::Directory,
+        );
+        let manager = SymlinkManager::new(new_root.clone());
+
+        let updated = manager
+            .retarget_source_root_links(&old_root, &new_root, &[agent])
+            .unwrap();
+
+        assert_eq!(updated, 2);
+        assert_eq!(
+            fs::read_link(agent_root.join("registered")).unwrap(),
+            new_root.join("registered")
+        );
+        assert_eq!(
+            fs::read_link(agent_root.join("external")).unwrap(),
+            new_root.join("external")
+        );
+        assert_eq!(
+            fs::read_link(agent_root.join("missing")).unwrap(),
+            old_root.join("missing")
+        );
     }
 
     #[test]
