@@ -268,6 +268,36 @@ impl Database {
         rows.collect()
     }
 
+    /// Full per-30-min-bucket records with UTC `hour_start` preserved, grouped by
+    /// (hour_start, source, model). Used by the cost layer so peak/off-peak
+    /// pricing can key off the actual usage hour before aggregation.
+    pub fn bucket_records(&self, from: &str, to: &str) -> SqlResult<Vec<UsageRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT hour_start, source, model,
+                SUM(input_tokens), SUM(output_tokens), SUM(cached_input_tokens),
+                SUM(cache_creation_input_tokens), SUM(reasoning_output_tokens),
+                SUM(total_tokens), SUM(conversation_count)
+             FROM usage WHERE hour_start >= ?1 AND hour_start < ?2
+             GROUP BY hour_start, source, model ORDER BY hour_start",
+        )?;
+        let rows = stmt.query_map(params![from, to], |row| {
+            Ok(UsageRecord {
+                id: None,
+                hour_start: row.get(0)?,
+                source: row.get(1)?,
+                model: row.get(2)?,
+                input_tokens: row.get::<_, i64>(3)? as u64,
+                output_tokens: row.get::<_, i64>(4)? as u64,
+                cached_input_tokens: row.get::<_, i64>(5)? as u64,
+                cache_creation_input_tokens: row.get::<_, i64>(6)? as u64,
+                reasoning_output_tokens: row.get::<_, i64>(7)? as u64,
+                total_tokens: row.get::<_, i64>(8)? as u64,
+                conversation_count: row.get::<_, i32>(9)? as u32,
+            })
+        })?;
+        rows.collect()
+    }
+
     /// Aggregate full token columns grouped by (date, source, model).
     /// hour_start holds the YYYY-MM-DD date. Used by the daily cost layer.
     pub fn aggregate_by_day_model(&self, from: &str, to: &str) -> SqlResult<Vec<UsageRecord>> {

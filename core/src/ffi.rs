@@ -3,8 +3,31 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 
+use chrono::{DateTime, Datelike, Local, Timelike};
+
 use crate::storage::Database;
 use crate::sync;
+
+/// Convert a UTC `hour_start` bucket (`YYYY-MM-DDTHH:MM:SSZ`) to a local date
+/// string (`YYYY-MM-DD`), matching SQLite's
+/// `strftime('%Y-%m-%d', hour_start, 'localtime')`.
+fn local_date(hour_start: &str) -> Option<String> {
+    let ts = DateTime::parse_from_rfc3339(hour_start).ok()?.with_timezone(&Local);
+    Some(format!("{:04}-{:02}-{:02}", ts.year(), ts.month(), ts.day()))
+}
+
+/// Like [`local_date`] but with the hour appended (`YYYY-MM-DDTHH`), matching
+/// `strftime('%Y-%m-%dT%H', hour_start, 'localtime')`.
+fn local_hour(hour_start: &str) -> Option<String> {
+    let ts = DateTime::parse_from_rfc3339(hour_start).ok()?.with_timezone(&Local);
+    Some(format!(
+        "{:04}-{:02}-{:02}T{:02}",
+        ts.year(),
+        ts.month(),
+        ts.day(),
+        ts.hour()
+    ))
+}
 
 pub struct CoreHandle {
     pub db: Database,
@@ -283,8 +306,9 @@ pub extern "C" fn tt_query_summary(
     };
     match handle.db.query_summary(&from, &to) {
         Ok(mut summary) => {
-            // Compute total cost from per-model aggregates.
-            if let Ok(rows) = handle.db.aggregate_by_model(&from, &to) {
+            // Compute total cost from 30-min buckets so peak/off-peak pricing
+            // keys off the actual usage hour.
+            if let Ok(rows) = handle.db.bucket_records(&from, &to) {
                 summary.total_cost_usd = rows.iter().map(crate::pricing::compute_row_cost).sum();
             }
             to_json_cstring(&summary)
@@ -309,13 +333,14 @@ pub extern "C" fn tt_query_daily(
     };
     match handle.db.query_daily(&from, &to) {
         Ok(mut data) => {
-            // Compute per-day cost from (date, model) aggregates.
-            if let Ok(rows) = handle.db.aggregate_by_day_model(&from, &to) {
-                use std::collections::HashMap;
+            // Compute per-day cost from 30-min buckets, bucketed to local dates.
+            if let Ok(rows) = handle.db.bucket_records(&from, &to) {
                 let mut cost_by_date: HashMap<String, f64> = HashMap::new();
                 for r in &rows {
-                    *cost_by_date.entry(r.hour_start.clone()).or_insert(0.0) +=
-                        crate::pricing::compute_row_cost(r);
+                    if let Some(date) = local_date(&r.hour_start) {
+                        *cost_by_date.entry(date).or_insert(0.0) +=
+                            crate::pricing::compute_row_cost(r);
+                    }
                 }
                 for d in &mut data {
                     d.total_cost_usd = cost_by_date.get(&d.date).copied().unwrap_or(0.0);
@@ -343,12 +368,13 @@ pub extern "C" fn tt_query_hourly(
     };
     match handle.db.query_hourly(&from, &to) {
         Ok(mut data) => {
-            if let Ok(rows) = handle.db.aggregate_by_hour_model(&from, &to) {
-                use std::collections::HashMap;
+            if let Ok(rows) = handle.db.bucket_records(&from, &to) {
                 let mut cost_by_hour: HashMap<String, f64> = HashMap::new();
                 for r in &rows {
-                    *cost_by_hour.entry(r.hour_start.clone()).or_insert(0.0) +=
-                        crate::pricing::compute_row_cost(r);
+                    if let Some(hour) = local_hour(&r.hour_start) {
+                        *cost_by_hour.entry(hour).or_insert(0.0) +=
+                            crate::pricing::compute_row_cost(r);
+                    }
                 }
                 for d in &mut data {
                     d.total_cost_usd = cost_by_hour.get(&d.date).copied().unwrap_or(0.0);
@@ -376,6 +402,16 @@ pub extern "C" fn tt_query_model_breakdown(
     };
     match handle.db.aggregate_by_model(&from, &to) {
         Ok(rows) => {
+            // Cost is peak/off-peak aware, so compute it at the 30-min bucket
+            // level and aggregate by (source, model).
+            let mut cost_by_model: HashMap<(String, String), f64> = HashMap::new();
+            if let Ok(buckets) = handle.db.bucket_records(&from, &to) {
+                for b in &buckets {
+                    *cost_by_model
+                        .entry((b.source.clone(), b.model.clone()))
+                        .or_insert(0.0) += crate::pricing::compute_row_cost(b);
+                }
+            }
             let grand_total: u64 = rows.iter().map(|r| r.total_tokens).sum();
             let entries: Vec<crate::models::ModelBreakdownEntry> = rows
                 .iter()
@@ -383,7 +419,10 @@ pub extern "C" fn tt_query_model_breakdown(
                     model: r.model.clone(),
                     source: r.source.clone(),
                     total_tokens: r.total_tokens,
-                    total_cost_usd: crate::pricing::compute_row_cost(r),
+                    total_cost_usd: cost_by_model
+                        .get(&(r.source.clone(), r.model.clone()))
+                        .copied()
+                        .unwrap_or(0.0),
                     percentage: if grand_total > 0 {
                         r.total_tokens as f64 / grand_total as f64 * 100.0
                     } else {

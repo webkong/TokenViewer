@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
 
-use super::data::{PricingEntry, PRICING_DATA};
+use chrono::{DateTime, FixedOffset, Timelike};
+
+use super::data::{PricingEntry, PEAK_PRICING_DATA, PRICING_DATA};
 use crate::models::{ModelPricing, UsageRecord};
 
 const ZERO_PRICING: ModelPricing = ModelPricing {
@@ -704,9 +706,55 @@ fn warn_unpriced_once(model: &str) {
     }
 }
 
-/// Compute USD cost for a single usage record.
+/// DeepSeek-style peak/off-peak window (Beijing time, UTC+8): peak hours are
+/// 09:00-12:00 and 14:00-18:00. `hour_start` is a 30-min UTC bucket
+/// (`YYYY-MM-DDTHH:MM:SSZ`); since a bucket is keyed by its start hour, hour
+/// membership in {9,10,11,14,15,16,17} covers every 30-min bucket inside the
+/// peak windows (e.g. 11:30 is peak, 12:00 is off-peak). Unparseable/empty
+/// timestamps fall back to off-peak.
+fn is_peak_hour(hour_start: &str) -> bool {
+    let Ok(ts) = DateTime::parse_from_rfc3339(hour_start) else {
+        return false;
+    };
+    let beijing = ts.with_timezone(&FixedOffset::east_opt(8 * 3600).expect("valid UTC+8 offset"));
+    matches!(beijing.hour(), 9 | 10 | 11 | 14 | 15 | 16 | 17)
+}
+
+/// Peak-rate overlay lookup: exact, then longest-prefix, then last `/`-segment
+/// (provider-prefixed names like `deepseek/deepseek-v4-pro`). Mirrors
+/// `builtin_lookup` + `builtin_fallback`. `lower` is the normalized model name.
+fn lookup_peak_pricing(lower: &str) -> Option<ModelPricing> {
+    peak_lookup(lower).or_else(|| lower.rsplit('/').next().and_then(peak_lookup))
+}
+
+fn peak_lookup(lower: &str) -> Option<ModelPricing> {
+    for entry in PEAK_PRICING_DATA {
+        if entry.model == lower {
+            return Some(entry.pricing);
+        }
+    }
+    let mut best: Option<&PricingEntry> = None;
+    for entry in PEAK_PRICING_DATA {
+        if lower.starts_with(entry.model)
+            && best.map_or(true, |b| entry.model.len() > b.model.len())
+        {
+            best = Some(entry);
+        }
+    }
+    best.map(|e| e.pricing)
+}
+
+/// Compute USD cost for a single usage record (30-min bucket). DeepSeek models
+/// use peak/off-peak rates keyed off the bucket's Beijing hour.
 pub fn compute_row_cost(record: &UsageRecord) -> f64 {
-    let pricing = get_model_pricing(&record.model, &record.source);
+    let mut pricing = get_model_pricing(&record.model, &record.source);
+
+    if is_peak_hour(&record.hour_start) {
+        let normalized = normalize_for_source(&record.model, &record.source).to_lowercase();
+        if let Some(peak) = lookup_peak_pricing(&normalized) {
+            pricing = peak;
+        }
+    }
 
     let reasoning = if record.source == "codex" || record.source == "every-code" {
         0
@@ -927,5 +975,70 @@ mod tests {
         // Curated fuzzy "kiro" -> kiro-cli-agent.
         let p = lookup_model_pricing("kiro-future-xyz", "kiro").unwrap();
         assert_eq!(p.input, 3.0);
+    }
+
+    #[test]
+    fn peak_hour_windows() {
+        // Beijing peak windows: 09:00-12:00 and 14:00-18:00 (UTC+8).
+        assert!(is_peak_hour("2026-08-17T01:00:00Z")); // Beijing 09:00
+        assert!(is_peak_hour("2026-08-17T01:30:00Z")); // Beijing 09:30
+        assert!(is_peak_hour("2026-08-17T03:30:00Z")); // Beijing 11:30
+        assert!(!is_peak_hour("2026-08-17T04:00:00Z")); // Beijing 12:00 (lunch)
+        assert!(!is_peak_hour("2026-08-17T05:00:00Z")); // Beijing 13:00
+        assert!(is_peak_hour("2026-08-17T06:00:00Z")); // Beijing 14:00
+        assert!(is_peak_hour("2026-08-17T09:30:00Z")); // Beijing 17:30
+        assert!(!is_peak_hour("2026-08-17T10:00:00Z")); // Beijing 18:00
+        assert!(!is_peak_hour("2026-08-17T16:00:00Z")); // Beijing 00:00
+        assert!(!is_peak_hour("")); // unparseable -> off-peak
+        assert!(!is_peak_hour("not-a-timestamp"));
+    }
+
+    #[test]
+    fn peak_pricing_lookup() {
+        let pro = lookup_peak_pricing("deepseek-v4-pro").unwrap();
+        assert_eq!(pro.input, 1.25);
+        assert_eq!(pro.output, 3.75);
+
+        // Provider-prefixed names strip the last `/` segment.
+        let pro = lookup_peak_pricing("deepseek/deepseek-v4-pro").unwrap();
+        assert_eq!(pro.input, 1.25);
+
+        let flash = lookup_peak_pricing("deepseek-v4-flash").unwrap();
+        assert_eq!(flash.input, 0.416667);
+
+        // Bare family prefix resolves to the v4-pro peak rate.
+        let v4 = lookup_peak_pricing("deepseek-v4").unwrap();
+        assert_eq!(v4.input, 1.25);
+
+        // Non-DeepSeek models have no peak overlay.
+        assert!(lookup_peak_pricing("claude-sonnet-4").is_none());
+    }
+
+    #[test]
+    fn deepseek_cost_uses_peak_and_offpeak_rates() {
+        reset_runtime();
+        let mut record = UsageRecord {
+            id: None,
+            hour_start: String::new(),
+            source: "opencode".to_string(),
+            model: "deepseek-v4-pro".to_string(),
+            input_tokens: 1_000_000,
+            output_tokens: 1_000_000,
+            cached_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+            reasoning_output_tokens: 0,
+            total_tokens: 2_000_000,
+            conversation_count: 1,
+        };
+
+        // Off-peak (Beijing 20:00): input 0.625 + output 1.875 = 2.5.
+        record.hour_start = "2026-08-17T12:00:00Z".to_string();
+        let offpeak = compute_row_cost(&record);
+        assert!((offpeak - 2.5).abs() < 1e-9, "offpeak={offpeak}");
+
+        // Peak (Beijing 10:00): input 1.25 + output 3.75 = 5.0.
+        record.hour_start = "2026-08-17T02:00:00Z".to_string();
+        let peak = compute_row_cost(&record);
+        assert!((peak - 5.0).abs() < 1e-9, "peak={peak}");
     }
 }

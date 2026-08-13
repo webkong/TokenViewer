@@ -223,31 +223,34 @@ pub static PRICING_DATA: &[PricingEntry] = &[
             cache_write: 1.0,
         },
     },
+    // DeepSeek v4 peak/off-peak pricing (effective 2026-08-17, Beijing time).
+    // Base prices below are the OFF-PEAK (空闲时段) rates; peak rates live in
+    // PEAK_PRICING_DATA at the bottom of this file. RMB -> USD at ~7.2 RMB/USD.
     PricingEntry {
         model: "deepseek-v4-pro",
         pricing: ModelPricing {
-            input: 0.435,
-            output: 0.87,
-            cache_read: 0.003625,
-            cache_write: 0.435,
+            input: 0.625,
+            output: 1.875,
+            cache_read: 0.020833,
+            cache_write: 0.625,
         },
     },
     PricingEntry {
         model: "deepseek-v4-flash",
         pricing: ModelPricing {
-            input: 0.14,
-            output: 0.28,
-            cache_read: 0.0028,
-            cache_write: 0.14,
+            input: 0.208333,
+            output: 0.625,
+            cache_read: 0.006944,
+            cache_write: 0.208333,
         },
     },
     PricingEntry {
         model: "deepseek-v4",
         pricing: ModelPricing {
-            input: 0.435,
-            output: 0.87,
-            cache_read: 0.003625,
-            cache_write: 0.435,
+            input: 0.625,
+            output: 1.875,
+            cache_read: 0.020833,
+            cache_write: 0.625,
         },
     },
     PricingEntry {
@@ -342,6 +345,41 @@ pub static PRICING_DATA: &[PricingEntry] = &[
             output: 0.12,
             cache_read: 0.008,
             cache_write: 0.0,
+        },
+    },
+];
+
+/// Peak-hour (高峰时段) overlay for models with DeepSeek-style peak/off-peak
+/// pricing. Keyed by the same normalized model names as `PRICING_DATA`; only
+/// consulted when the usage record falls in a Beijing peak hour (9:00-12:00,
+/// 14:00-18:00), otherwise the base off-peak rate applies. cache_write = input
+/// (no separate write surcharge). RMB -> USD at ~7.2 RMB/USD.
+pub static PEAK_PRICING_DATA: &[PricingEntry] = &[
+    PricingEntry {
+        model: "deepseek-v4-pro",
+        pricing: ModelPricing {
+            input: 1.25,
+            output: 3.75,
+            cache_read: 0.041667,
+            cache_write: 1.25,
+        },
+    },
+    PricingEntry {
+        model: "deepseek-v4-flash",
+        pricing: ModelPricing {
+            input: 0.416667,
+            output: 1.25,
+            cache_read: 0.013889,
+            cache_write: 0.416667,
+        },
+    },
+    PricingEntry {
+        model: "deepseek-v4",
+        pricing: ModelPricing {
+            input: 1.25,
+            output: 3.75,
+            cache_read: 0.041667,
+            cache_write: 1.25,
         },
     },
 ];

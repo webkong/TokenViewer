@@ -2,7 +2,7 @@
   "_meta": {
     "note": "Curated price overrides. Always wins over LiteLLM. Two reasons to live here: (1) self-defined alias names that LiteLLM will never carry (kiro-*, hy3-*, composer-*, kimi-for-coding, free-tier OpenRouter routes); (2) prices we want to pin even if LiteLLM has the model (e.g. cache_write fields LiteLLM often omits). Units: USD per million tokens. Edit this file to override pricing without redeploying.",
     "units": "usd_per_million_tokens",
-    "deepseek_v4_pro_pricing_note": "The 2026-05-31 promotional-expiry warning is obsolete: api-docs.deepseek.com/quick_start/pricing verified on 2026-06-10 still lists input $0.435/M, output $0.87/M, cache_read $0.003625/M as the official v4-pro rates (the discount became the list price). Do NOT 'restore' the old 4x rates; re-verify against the official page before any change."
+    "deepseek_pricing_note": "DeepSeek moved to peak/off-peak (峰谷) pricing effective 2026-08-17 Beijing time. Peak hours are 09:00-12:00 and 14:00-18:00 Beijing; peak = off-peak x2. Off-peak RMB/MTok: v4-flash 1.5 in / 0.05 cache-hit / 4.5 out; v4-pro 4.5 in / 0.15 cache-hit / 13.5 out. Entries below store the OFF-PEAK rates in USD at ~7.2 RMB/USD; the peak overlay lives in data.rs PEAK_PRICING_DATA. cache_write = input (no write surcharge)."
   },
   "exact": {
     "claude-fable-5": {
@@ -133,16 +133,18 @@
       "cache_write": 0
     },
     "deepseek-v4-flash": {
-      "input": 0.14,
-      "output": 0.28,
-      "cache_read": 0.0028,
-      "cache_write": 0.14
+      "input": 0.208333,
+      "output": 0.625,
+      "cache_read": 0.006944,
+      "cache_write": 0.208333,
+      "note": "Off-peak rate (RMB 1.5 in / 0.05 cache-hit / 4.5 out, converted at ~7.2 RMB/USD). Peak (x2) lives in data.rs PEAK_PRICING_DATA."
     },
     "deepseek-v4-pro": {
-      "input": 0.435,
-      "output": 0.87,
-      "cache_read": 0.003625,
-      "cache_write": 0.435
+      "input": 0.625,
+      "output": 1.875,
+      "cache_read": 0.020833,
+      "cache_write": 0.625,
+      "note": "Off-peak rate (RMB 4.5 in / 0.15 cache-hit / 13.5 out, converted at ~7.2 RMB/USD). Peak (x2) lives in data.rs PEAK_PRICING_DATA."
     },
     "deepseek-chat": {
       "input": 0.14,
