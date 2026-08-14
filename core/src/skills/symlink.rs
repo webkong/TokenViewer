@@ -1,10 +1,9 @@
 use std::collections::HashSet;
 use std::fs;
-use std::os::unix::fs as unix_fs;
 use std::path::{Component, Path, PathBuf};
 
-use crate::skills::models::LinkType;
 use crate::skills::agent_config::{expand_path, AgentConfig};
+use crate::skills::models::LinkType;
 use crate::skills::scanner::Scanner;
 
 pub struct SymlinkManager {
@@ -17,11 +16,7 @@ impl SymlinkManager {
     }
 
     /// Create a symlink for a specific skill to a specific agent.
-    pub fn create_skill_link(
-        &self,
-        agent: &AgentConfig,
-        skill_id: &str,
-    ) -> Result<(), String> {
+    pub fn create_skill_link(&self, agent: &AgentConfig, skill_id: &str) -> Result<(), String> {
         let source = self.source_root.join(skill_id);
         if !source.exists() {
             return Err(format!(
@@ -113,11 +108,7 @@ impl SymlinkManager {
     }
 
     /// Remove a symlink for a specific skill from a specific agent.
-    pub fn remove_skill_link(
-        &self,
-        agent: &AgentConfig,
-        skill_id: &str,
-    ) -> Result<(), String> {
+    pub fn remove_skill_link(&self, agent: &AgentConfig, skill_id: &str) -> Result<(), String> {
         let target_base = expand_path(&agent.skills_path)?;
 
         match agent.link_type {
@@ -165,10 +156,7 @@ impl SymlinkManager {
         skill_ids: &[String],
     ) -> Result<(), String> {
         if agent.link_type != LinkType::SingleFile {
-            return Err(format!(
-                "Agent {} is not a SingleFile agent",
-                agent.source
-            ));
+            return Err(format!("Agent {} is not a SingleFile agent", agent.source));
         }
         let target = expand_path(&agent.skills_path)?;
         if skill_ids.is_empty() {
@@ -245,7 +233,7 @@ impl SymlinkManager {
                 .map_err(|e| format!("Failed to create parent dir {}: {}", parent.display(), e))?;
         }
 
-        unix_fs::symlink(source, &target).map_err(|e| {
+        create_symlink(source, &target).map_err(|e| {
             format!(
                 "Failed to create symlink {} -> {}: {}",
                 target.display(),
@@ -331,7 +319,7 @@ impl SymlinkManager {
                 continue;
             }
 
-            unix_fs::symlink(&source_file, &link_path).map_err(|e| {
+            create_symlink(&source_file, &link_path).map_err(|e| {
                 format!(
                     "Failed to create overlay symlink {} -> {}: {}",
                     link_path.display(),
@@ -384,11 +372,7 @@ impl SymlinkManager {
     }
 
     /// Organize a single skill: move from agent directory to source_root, create symlink at original location.
-    pub fn organize_skill(
-        &self,
-        agent: &AgentConfig,
-        skill_id: &str,
-    ) -> Result<(), String> {
+    pub fn organize_skill(&self, agent: &AgentConfig, skill_id: &str) -> Result<(), String> {
         let target_base = expand_path(&agent.skills_path)?;
         let source_dir = target_base.join(skill_id);
         self.organize_skill_from_source(skill_id, &source_dir)
@@ -455,7 +439,7 @@ impl SymlinkManager {
         })?;
 
         // Create symlink at original location
-        unix_fs::symlink(&dest_dir, &source_dir)
+        create_symlink(&dest_dir, &source_dir)
             .map_err(|e| format!("Failed to create symlink: {}", e))?;
 
         Ok(())
@@ -592,6 +576,20 @@ fn normalize_path(path: &Path) -> PathBuf {
     normalized
 }
 
+#[cfg(unix)]
+fn create_symlink(source: &Path, target: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(source, target)
+}
+
+#[cfg(windows)]
+fn create_symlink(source: &Path, target: &Path) -> std::io::Result<()> {
+    if source.is_dir() {
+        std::os::windows::fs::symlink_dir(source, target)
+    } else {
+        std::os::windows::fs::symlink_file(source, target)
+    }
+}
+
 fn replace_symlink_atomically(link_path: &Path, new_target: &Path) -> Result<(), String> {
     let file_name = link_path
         .file_name()
@@ -602,7 +600,7 @@ fn replace_symlink_atomically(link_path: &Path, new_target: &Path) -> Result<(),
         file_name,
         uuid::Uuid::new_v4()
     ));
-    unix_fs::symlink(new_target, &temporary).map_err(|e| {
+    create_symlink(new_target, &temporary).map_err(|e| {
         format!(
             "Failed to prepare replacement symlink {} -> {}: {}",
             link_path.display(),
@@ -610,6 +608,15 @@ fn replace_symlink_atomically(link_path: &Path, new_target: &Path) -> Result<(),
             e
         )
     })?;
+    #[cfg(windows)]
+    if let Err(error) = fs::remove_file(link_path) {
+        let _ = fs::remove_file(&temporary);
+        return Err(format!(
+            "Failed to remove old symlink {}: {}",
+            link_path.display(),
+            error
+        ));
+    }
     if let Err(error) = fs::rename(&temporary, link_path) {
         let _ = fs::remove_file(&temporary);
         return Err(format!(
@@ -658,6 +665,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn retargets_registered_and_unregistered_links_after_source_root_move() {
         let dir = TempDir::new().unwrap();
         let old_root = dir.path().join("old-skills");
@@ -669,13 +677,14 @@ mod tests {
             fs::write(skill.join("SKILL.md"), format!("# {}\n", skill_id)).unwrap();
         }
         fs::create_dir_all(&agent_root).unwrap();
-        unix_fs::symlink(old_root.join("registered"), agent_root.join("registered")).unwrap();
-        unix_fs::symlink(
+        std::os::unix::fs::symlink(old_root.join("registered"), agent_root.join("registered"))
+            .unwrap();
+        std::os::unix::fs::symlink(
             Path::new("../old-skills/external"),
             agent_root.join("external"),
         )
         .unwrap();
-        unix_fs::symlink(old_root.join("missing"), agent_root.join("missing")).unwrap();
+        std::os::unix::fs::symlink(old_root.join("missing"), agent_root.join("missing")).unwrap();
 
         fs::rename(&old_root, &new_root).unwrap();
         let agent = AgentConfig::custom(

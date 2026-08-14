@@ -929,11 +929,19 @@ fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<(), String> {
             fs::create_dir_all(&target)
                 .map_err(|e| format!("Failed to create {}: {}", target.display(), e))?;
         } else if file_type.is_symlink() {
-            let link_target = fs::read_link(path)
+            let _link_target = fs::read_link(path)
                 .map_err(|e| format!("Failed to read symlink {}: {}", path.display(), e))?;
             #[cfg(unix)]
-            std::os::unix::fs::symlink(&link_target, &target)
+            std::os::unix::fs::symlink(&_link_target, &target)
                 .map_err(|e| format!("Failed to copy symlink {}: {}", target.display(), e))?;
+            #[cfg(windows)]
+            if path.is_dir() {
+                std::os::windows::fs::symlink_dir(&_link_target, &target)
+                    .map_err(|e| format!("Failed to copy symlink {}: {}", target.display(), e))?;
+            } else {
+                std::os::windows::fs::symlink_file(&_link_target, &target)
+                    .map_err(|e| format!("Failed to copy symlink {}: {}", target.display(), e))?;
+            }
         } else if file_type.is_file() {
             if let Some(parent) = target.parent() {
                 fs::create_dir_all(parent)

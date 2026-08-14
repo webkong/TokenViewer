@@ -1124,6 +1124,7 @@ metadata:
     /// compatible_agents from ["*"] to the agent's id. This is the exact
     /// scenario that core/src/ffi.rs guards with the source_root_ids HashSet.
     #[test]
+    #[cfg(unix)]
     fn test_global_skill_symlinked_to_agent_keeps_wildcard() {
         let dir = TempDir::new().unwrap();
         let source_root = dir.path().join("shared-skills");
