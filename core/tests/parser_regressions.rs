@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread::sleep;
@@ -29,7 +30,7 @@ fn agent_parser_matrix_matches_reference_shapes() {
     let by_source: HashMap<String, _> =
         results.into_iter().map(|r| (r.source.clone(), r)).collect();
 
-    let cases: [(&str, Expectation); 25] = [
+    let cases: [(&str, Expectation); 26] = [
         (
             "claude",
             Expectation {
@@ -228,6 +229,14 @@ fn agent_parser_matrix_matches_reference_shapes() {
                 model: "GLM-5.2",
                 total_tokens: 21,
                 conversation_count: 0,
+            },
+        ),
+        (
+            "dsh",
+            Expectation {
+                model: "deepseek-v4-pro",
+                total_tokens: 175,
+                conversation_count: 1,
             },
         ),
     ];
@@ -909,6 +918,14 @@ fn temp_home() -> PathBuf {
 }
 
 fn seed_agent_fixtures(home: &Path) {
+    write_zstd(
+        &home.join(".dsh/sessions/project-a/session-a/session.jsonl.zstd"),
+        concat!(
+            "{\"type\":\"request/header\",\"seq\":0,\"time\":1786678139519,\"data\":{\"header\":{\"config\":{\"provider\":\"deepseek-official\",\"model\":\"deepseek-v4-flash\"}}}}\n",
+            "{\"type\":\"assistant/message\",\"seq\":1,\"time\":1786678145601,\"data\":{\"message\":{\"role\":\"assistant\",\"source\":{\"kind\":\"model\",\"provider\":\"deepseek-official\",\"model\":\"deepseek-v4-pro\"}},\"usage\":{\"inputTokens\":100,\"outputTokens\":50,\"cacheReadTokens\":20,\"cacheWriteTokens\":5,\"reasoningTokens\":10}}}\n"
+        ),
+    );
+
     write_text(
         &home.join(platform_path(
             "Library/Application Support/Cursor/User/globalStorage/cursorDiskModel/usage.json",
@@ -1090,6 +1107,16 @@ fn write_text(path: &Path, text: &str) {
         fs::create_dir_all(parent).unwrap();
     }
     fs::write(path, text).unwrap();
+}
+
+fn write_zstd(path: &Path, text: &str) {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    let mut encoder = zstd::stream::Encoder::new(Vec::new(), 0).unwrap();
+    encoder.include_checksum(true).unwrap();
+    encoder.write_all(text.as_bytes()).unwrap();
+    fs::write(path, encoder.finish().unwrap()).unwrap();
 }
 
 fn init_opencode_db(db_path: &Path, id: &str, data_json: &str) {
