@@ -327,8 +327,12 @@ pub fn expand_path(raw: &str) -> Result<PathBuf, String> {
 
 /// Detect which agents are installed. Two strategies are OR'ed:
 /// 1. CLI check: if detect_cmd is set, run `which <cmd>` (fast, ms-level)
-/// 2. Presence check: inspect known config/data directories for agents without
-///    a CLI, or when the CLI binary is not on PATH.
+/// 2. Presence check: inspect product-specific runtime/config artifacts for
+///    agents without a CLI, or when the CLI binary is not on PATH.
+///
+/// A generic `~/.<agent>/skills` directory is deliberately not evidence of an
+/// installation: TokenViewer may create it while linking skills, and it often
+/// survives after an agent is removed.
 pub fn detect_installed_agents(agents: &[AgentConfig]) -> Vec<(String, bool)> {
     agents
         .par_iter()
@@ -346,23 +350,24 @@ pub fn detect_installed_agents(agents: &[AgentConfig]) -> Vec<(String, bool)> {
 
 /// Check whether agent-specific local data exists.
 fn is_agent_present_on_disk(agent: &AgentConfig) -> bool {
-    agent_presence_paths(agent)
+    let Some(home) = dirs::home_dir() else {
+        return false;
+    };
+    is_agent_present_in_home(agent, &home)
+}
+
+fn is_agent_present_in_home(agent: &AgentConfig, home: &Path) -> bool {
+    agent_presence_paths(agent, home)
         .into_iter()
         .any(|path| path.exists())
 }
 
 /// Candidate files/directories that indicate an agent has been used/installed.
-fn agent_presence_paths(agent: &AgentConfig) -> Vec<PathBuf> {
+/// These must be product-owned artifacts, not the configured skills destination.
+fn agent_presence_paths(agent: &AgentConfig, home: &Path) -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
-    if let Ok(skills_path) = expand_path(&agent.skills_path) {
-        if let Some(parent) = skills_path.parent() {
-            paths.push(parent.to_path_buf());
-        }
-    }
-
-    if let Some(home) = dirs::home_dir() {
-        match agent.source.as_str() {
+    match agent.source.as_str() {
             "codebuddy" => {
                 if let Ok(custom_home) = std::env::var("CODEBUDDY_HOME") {
                     paths.push(PathBuf::from(custom_home));
@@ -387,7 +392,9 @@ fn agent_presence_paths(agent: &AgentConfig) -> Vec<PathBuf> {
                 paths.push(home.join(".zcode/v2/config.json"));
             }
             "dsh" => {
-                paths.push(home.join(".dsh"));
+                // Product-owned artifacts only: `~/.dsh/skills` may exist from
+                // TokenViewer skill linking alone, so the bare `~/.dsh` is not
+                // evidence of a DSH installation.
                 paths.push(home.join(".dsh/sessions"));
                 paths.push(home.join(".dsh/settings.yaml"));
             }
@@ -413,8 +420,11 @@ fn agent_presence_paths(agent: &AgentConfig) -> Vec<PathBuf> {
                 paths.push(home.join(".antigravity_cockpit/qoder_accounts"));
                 paths.push(home.join("Library/Application Support/Qoder"));
             }
+            // Extensions and a linked skills directory alone are not enough:
+            // require actual session data when the CLI is not available.
+            "omp" => paths.push(home.join(".omp/agent/sessions")),
+            "pi" => paths.push(home.join(".pi/agent/sessions")),
             _ => {}
-        }
     }
 
     paths.sort();
@@ -461,7 +471,7 @@ fn is_command_on_path(cmd: &str) -> bool {
 
 /// Cache TTL in seconds (1 hour).
 const INSTALL_CACHE_TTL_SECS: u64 = 3600;
-const INSTALL_CACHE_VERSION: u32 = 3;
+const INSTALL_CACHE_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct InstallStatusCache {
@@ -830,6 +840,47 @@ mod tests {
         assert_eq!(canonical_source("codex"), "codex");
         assert_eq!(canonical_source("kilo"), "kilocode");
         assert_eq!(canonical_source("mimo-code"), "mimocode");
+    }
+
+    #[test]
+    fn test_skills_and_extensions_do_not_count_as_agent_installation() {
+        let home = TempDir::new().unwrap();
+        let omp = AgentConfig::custom("omp", "OMP", "~/.omp/skills", LinkType::Directory);
+        let pi = AgentConfig::custom("pi", "Pi", "~/.pi/skills", LinkType::Directory);
+
+        // These directories can be created by skill linking or extension setup
+        // without the corresponding CLI ever having been installed.
+        fs::create_dir_all(home.path().join(".omp/agent/extensions")).unwrap();
+        fs::create_dir_all(home.path().join(".omp/skills")).unwrap();
+        fs::create_dir_all(home.path().join(".pi/agent/extensions")).unwrap();
+        fs::create_dir_all(home.path().join(".pi/agent/skills")).unwrap();
+        assert!(!is_agent_present_in_home(&omp, home.path()));
+        assert!(!is_agent_present_in_home(&pi, home.path()));
+
+        fs::create_dir_all(home.path().join(".omp/agent/sessions")).unwrap();
+        fs::create_dir_all(home.path().join(".pi/agent/sessions")).unwrap();
+        assert!(is_agent_present_in_home(&omp, home.path()));
+        assert!(is_agent_present_in_home(&pi, home.path()));
+    }
+
+    #[test]
+    fn test_old_install_status_cache_is_invalidated() {
+        let dir = TempDir::new().unwrap();
+        let old_cache = serde_json::json!({
+            "version": INSTALL_CACHE_VERSION - 1,
+            "updated_at": std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            "statuses": { "omp": true, "pi": true }
+        });
+        fs::write(
+            dir.path().join("install_status.json"),
+            serde_json::to_string(&old_cache).unwrap(),
+        )
+        .unwrap();
+
+        assert!(load_install_cache(dir.path()).is_none());
     }
 
     #[test]

@@ -1503,7 +1503,9 @@ pub extern "C" fn tt_skills_get_config(handle: *mut CoreHandle) -> *mut c_char {
     to_json_cstring(&config)
 }
 
-/// Detect which agents are installed (CLI binary on PATH). Returns JSON map: {"claude": true, "codex": false, ...}
+/// Detect which agents are installed. Returns JSON map: {"claude": true, "codex": false, ...}
+/// This is the explicit refresh endpoint, so it intentionally bypasses the
+/// short-lived status cache.
 ///
 /// # Safety
 /// `handle` must be a valid pointer from `tt_init`, or null (returns null).
@@ -1518,7 +1520,7 @@ pub extern "C" fn tt_skills_detect_installed(handle: *mut CoreHandle) -> *mut c_
         crate::skills::agent_config::detect_installed_agents_cached(
             &handle.skills.config_dir,
             &agents,
-            false,
+            true,
         );
     let map: std::collections::HashMap<String, bool> = results.into_iter().collect();
     to_json_cstring(&map)
