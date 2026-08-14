@@ -189,12 +189,6 @@ import_certificate() {
     -k "$KEYCHAIN_PASSWORD" \
     "$KEYCHAIN_PATH" >/dev/null
 
-  security add-trusted-cert \
-    -d \
-    -r trustRoot \
-    -k "$KEYCHAIN_PATH" \
-    "$CERT_PATH" >/dev/null
-
   ensure_keychain_in_search_list
   write_env_file
 
