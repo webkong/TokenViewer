@@ -59,7 +59,7 @@ public sealed class L10nExtension : MarkupExtension
     public string Key { get; set; } = "";
 
     public override object ProvideValue(IServiceProvider serviceProvider) =>
-        new Binding($"[{Key}]") { Source = L10n.Instance };
+        new Binding($"[{Key}]") { Source = L10n.Instance }.ProvideValue(serviceProvider);
 }
 
 public sealed class TokensConverter : IValueConverter

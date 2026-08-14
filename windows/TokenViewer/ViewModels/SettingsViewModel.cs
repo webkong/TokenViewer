@@ -12,7 +12,7 @@ public static class LimitsVisibility
     public static string AllVisible => string.Join(",", LimitsService.CanonicalSources);
 
     public static IReadOnlyList<string> Parse(string raw) =>
-        string.IsNullOrWhiteSpace(raw)
+        string.IsNullOrWhiteSpace(raw) || raw.Trim() == "[]"
             ? Array.Empty<string>()
             : raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
