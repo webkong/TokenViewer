@@ -175,10 +175,16 @@ pub fn set_pricing_override(json: &str) -> Result<usize, String> {
 
 /// Reset runtime state (used by tests for determinism).
 #[cfg(test)]
-fn reset_runtime() {
+fn reset_runtime() -> std::sync::MutexGuard<'static, ()> {
+    static TEST_RUNTIME_LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
+    let guard = TEST_RUNTIME_LOCK
+        .get_or_init(|| std::sync::Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Ok(mut guard) = litellm().write() {
         guard.clear();
     }
+    guard
 }
 
 /// Convert a per-token cost (as in LiteLLM JSON) to USD per million tokens,
@@ -785,7 +791,7 @@ mod tests {
 
     #[test]
     fn builtin_exact_and_prefix() {
-        reset_runtime();
+        let _runtime_guard = reset_runtime();
         let p = lookup_model_pricing("claude-sonnet-4-20250514", "claude").unwrap();
         assert_eq!(p.input, 3.0);
         // Family prefix fallback for undated names.
@@ -795,7 +801,7 @@ mod tests {
 
     #[test]
     fn claude_normalizer_handles_gateway_and_version_first() {
-        reset_runtime();
+        let _runtime_guard = reset_runtime();
         // Provider path prefix stripped.
         let p = lookup_model_pricing("anthropic/claude-opus-4-8", "claude").unwrap();
         assert_eq!(p.input, 5.0);
@@ -810,7 +816,7 @@ mod tests {
 
     #[test]
     fn zed_display_name_normalized() {
-        reset_runtime();
+        let _runtime_guard = reset_runtime();
         let p = lookup_model_pricing("Claude Sonnet 4", "zed").unwrap();
         assert_eq!(p.input, 3.0);
         assert_eq!(p.output, 15.0);
@@ -818,7 +824,7 @@ mod tests {
 
     #[test]
     fn antigravity_gateway_prefix_preserves_model_family() {
-        reset_runtime();
+        let _runtime_guard = reset_runtime();
         let p = lookup_model_pricing("gemini-claude-opus-4.6-high", "antigravity").unwrap();
         assert_eq!(p.input, 5.0);
         assert_eq!(p.output, 25.0);
@@ -830,7 +836,7 @@ mod tests {
 
     #[test]
     fn workbuddy_auto_maps_to_hy3_not_composer() {
-        reset_runtime();
+        let _runtime_guard = reset_runtime();
         // Curated alias would map "auto" -> composer-1 (Cursor); WorkBuddy's
         // normalizer pre-empts that with its own default model.
         let p = lookup_model_pricing("auto", "workbuddy").unwrap();
@@ -842,7 +848,7 @@ mod tests {
 
     #[test]
     fn litellm_exact_and_fuzzy() {
-        reset_runtime();
+        let _runtime_guard = reset_runtime();
         let mut litellm = HashMap::new();
         litellm.insert("openai/gpt-5.2".to_string(), pricing(1.75, 14.0));
         litellm.insert("deepseek/deepseek-chat".to_string(), pricing(0.14, 0.28));
@@ -866,7 +872,7 @@ mod tests {
 
     #[test]
     fn litellm_region_prefixed_keys_resolve_to_base_price() {
-        reset_runtime();
+        let _runtime_guard = reset_runtime();
         let mut litellm = HashMap::new();
         litellm.insert(
             "anthropic.claude-opus-4-6-v1".to_string(),
@@ -890,7 +896,7 @@ mod tests {
 
     #[test]
     fn litellm_missing_cache_fields_fall_back_to_builtin_pricing() {
-        reset_runtime();
+        let _runtime_guard = reset_runtime();
         let mut litellm = HashMap::new();
         litellm.insert(
             "claude-sonnet-4-20250514".to_string(),
@@ -911,7 +917,7 @@ mod tests {
 
     #[test]
     fn set_pricing_override_converts_per_token_to_per_million() {
-        reset_runtime();
+        let _runtime_guard = reset_runtime();
         let json = r#"{
             "_meta": {"note": "x"},
             "acme.chat-v9": {
@@ -933,7 +939,7 @@ mod tests {
 
     #[test]
     fn curated_wins_over_litellm() {
-        reset_runtime();
+        let _runtime_guard = reset_runtime();
         // kiro-agent is pinned in curated; a (wrong) litellm price must not win.
         let _ = set_pricing_override(
             r#"{"kiro-agent":{"input_cost_per_token":0.0000999,"output_cost_per_token":0.0000999}}"#,
@@ -952,7 +958,7 @@ mod tests {
 
     #[test]
     fn reasoning_suffix_attached_resolves_via_curated_fuzzy() {
-        reset_runtime();
+        let _runtime_guard = reset_runtime();
         // `gpt-5.6-solhigh` has no exact key, but the curated fuzzy needle
         // `gpt-5.6-sol` matches as a substring and wins with the pinned price.
         let mut litellm = HashMap::new();
@@ -971,7 +977,7 @@ mod tests {
 
     #[test]
     fn fuzzy_substring_matches_kiro() {
-        reset_runtime();
+        let _runtime_guard = reset_runtime();
         // Curated fuzzy "kiro" -> kiro-cli-agent.
         let p = lookup_model_pricing("kiro-future-xyz", "kiro").unwrap();
         assert_eq!(p.input, 3.0);
@@ -1016,7 +1022,7 @@ mod tests {
 
     #[test]
     fn deepseek_cost_uses_peak_and_offpeak_rates() {
-        reset_runtime();
+        let _runtime_guard = reset_runtime();
         let mut record = UsageRecord {
             id: None,
             hour_start: String::new(),
