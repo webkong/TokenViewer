@@ -12,6 +12,7 @@
 		07A56C7960CC443D6E8A3CEE /* devin.svg in Resources */ = {isa = PBXBuildFile; fileRef = C7FBFEA94EFDD24E553E0AFB /* devin.svg */; };
 		0990F9AF3227ECE947742A87 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 6DC1D012B29037EB42DA1429 /* AppIcon.icns */; };
 		0E0B6D6D08106FA4CD3ECEE7 /* LimitsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBE72CF07CC99195B52D4715 /* LimitsService.swift */; };
+		11365F046CE8DCC368821536 /* dsh.svg in Resources */ = {isa = PBXBuildFile; fileRef = A1E6BB8DE7BC147F79E1C269 /* dsh.svg */; };
 		12B566AD46B9BA091FB15546 /* autohand.svg in Resources */ = {isa = PBXBuildFile; fileRef = BC5D99C7B2DEA0AB39C5C4A8 /* autohand.svg */; };
 		12C8B7DA13305A7A1240532F /* aug.svg in Resources */ = {isa = PBXBuildFile; fileRef = 2626E2AB89FE668F6F21014F /* aug.svg */; };
 		13A280D2AB0B9FD6CBA5E8DA /* trae.png in Resources */ = {isa = PBXBuildFile; fileRef = 9FCDFF3B030DCF4A5536E67E /* trae.png */; };
@@ -175,6 +176,7 @@
 		9FCDFF3B030DCF4A5536E67E /* trae.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = trae.png; sourceTree = "<group>"; };
 		A0D1853042F0DA1BB8979D53 /* perplexity.svg */ = {isa = PBXFileReference; path = perplexity.svg; sourceTree = "<group>"; };
 		A11C5F726D4BF938374A9F8B /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowView.swift; sourceTree = "<group>"; };
+		A1E6BB8DE7BC147F79E1C269 /* dsh.svg */ = {isa = PBXFileReference; path = dsh.svg; sourceTree = "<group>"; };
 		A30035A7991BA5D4CBAAFA67 /* AppSyncCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSyncCoordinatorTests.swift; sourceTree = "<group>"; };
 		A8B41A7FC4AB00CC55B3B49B /* SkillManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillManagerView.swift; sourceTree = "<group>"; };
 		A9F3FB73CDED44D7115FB025 /* grok.svg */ = {isa = PBXFileReference; path = grok.svg; sourceTree = "<group>"; };
@@ -373,6 +375,7 @@
 				4D00CFDFBC25C922B0FCA60B /* deepseek.svg */,
 				C7FBFEA94EFDD24E553E0AFB /* devin.svg */,
 				E67DB0868DF0281C2ACF07B3 /* droid.svg */,
+				A1E6BB8DE7BC147F79E1C269 /* dsh.svg */,
 				E9F2DD464AF49DBA8E6A6E86 /* gemini.svg */,
 				B11438BA1A5E03040D8077DE /* glm.svg */,
 				F57FB649662214DFA95C4247 /* goose.svg */,
@@ -523,6 +526,7 @@
 				702B25562F0C184BA1BAAD79 /* deepseek.svg in Resources */,
 				07A56C7960CC443D6E8A3CEE /* devin.svg in Resources */,
 				B43B91210F29322F053A9F0B /* droid.svg in Resources */,
+				11365F046CE8DCC368821536 /* dsh.svg in Resources */,
 				149B8B58C06302D14076B43F /* gemini.svg in Resources */,
 				2FA4573D36131DD3CDA26CCC /* glm.svg in Resources */,
 				6BC748D99DEB01A3415D7FB9 /* goose.svg in Resources */,
@@ -732,7 +736,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 21800;
+				CURRENT_PROJECT_VERSION = 21900;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -751,7 +755,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.18;
+				MARKETING_VERSION = 0.2.19;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -831,7 +835,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 21800;
+				CURRENT_PROJECT_VERSION = 21900;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -844,7 +848,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.18;
+				MARKETING_VERSION = 0.2.19;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

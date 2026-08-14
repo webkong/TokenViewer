@@ -5,6 +5,7 @@ pub mod codex;
 pub mod copilot;
 pub mod craft;
 pub mod cursor;
+pub mod dsh;
 pub mod everycode;
 pub mod gemini;
 pub mod goose;
@@ -48,6 +49,7 @@ fn all_parsers() -> Vec<(&'static str, ParserFn)> {
         ("claude", claude::parse),
         ("codex", codex::parse),
         ("cursor", cursor::parse),
+        ("dsh", dsh::parse),
         ("gemini", gemini::parse),
         ("kiro", kiro::parse),
         ("opencode", opencode::parse),

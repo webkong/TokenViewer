@@ -386,6 +386,11 @@ fn agent_presence_paths(agent: &AgentConfig) -> Vec<PathBuf> {
                 paths.push(home.join(".zcode/cli/db/db.sqlite"));
                 paths.push(home.join(".zcode/v2/config.json"));
             }
+            "dsh" => {
+                paths.push(home.join(".dsh"));
+                paths.push(home.join(".dsh/sessions"));
+                paths.push(home.join(".dsh/settings.yaml"));
+            }
             "craft" => {
                 paths.push(home.join(".craft-agent"));
             }
@@ -456,7 +461,7 @@ fn is_command_on_path(cmd: &str) -> bool {
 
 /// Cache TTL in seconds (1 hour).
 const INSTALL_CACHE_TTL_SECS: u64 = 3600;
-const INSTALL_CACHE_VERSION: u32 = 2;
+const INSTALL_CACHE_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct InstallStatusCache {
@@ -558,6 +563,7 @@ fn builtin_agents() -> Vec<AgentConfig> {
         "claude",
         "codex",
         "cursor",
+        "dsh",
         "gemini",
         "kiro",
         "opencode",
@@ -620,6 +626,13 @@ fn builtin_agents() -> Vec<AgentConfig> {
                 "cursor",
                 Some("cursor-agent"),
                 "#8c5cf5",
+            ),
+            (
+                "dsh",
+                "DeepSeek Harness",
+                "dsh",
+                Some("dsh"),
+                "#4d6bfe",
             ),
             ("kiro", "Kiro", "kiro", Some("kiro-cli"), "#059669"),
             (
@@ -792,6 +805,21 @@ mod tests {
         // Trae should exist but have has_parser = false
         let trae = agents.iter().find(|a| a.source == "trae").unwrap();
         assert!(!trae.has_parser);
+    }
+
+    #[test]
+    fn test_dsh_agent() {
+        let dir = TempDir::new().unwrap();
+        let registry = AgentRegistry::new(dir.path()).unwrap();
+        let agents = registry.all();
+        let dsh = agents.iter().find(|a| a.source == "dsh").unwrap();
+        assert_eq!(dsh.display_name, "DeepSeek Harness");
+        assert_eq!(dsh.logo_file, "dsh");
+        assert_eq!(dsh.brand_color, "#4d6bfe");
+        assert_eq!(dsh.detect_cmd.as_deref(), Some("dsh"));
+        assert!(dsh.has_parser);
+        assert!(!dsh.has_limits);
+        assert!(dsh.skills_path.ends_with("/.dsh/skills"));
     }
 
     #[test]
