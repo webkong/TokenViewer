@@ -10,6 +10,7 @@ settings:
     MARKETING_VERSION: "0.2.20"
     CURRENT_PROJECT_VERSION: 22000
     SWIFT_VERSION: "5.9"
+    TOKENVIEWER_RUST_TARGET: aarch64-apple-darwin
 
 targets:
   TokenViewer:
@@ -23,10 +24,10 @@ targets:
         INFOPLIST_FILE: TokenViewer/Resources/Info.plist
         CODE_SIGN_STYLE: Automatic
         LIBRARY_SEARCH_PATHS:
-          - "$(PROJECT_DIR)/../core/target/aarch64-apple-darwin/release"
+          - "$(PROJECT_DIR)/../core/target/$(TOKENVIEWER_RUST_TARGET)/release"
         OTHER_LDFLAGS:
           - "-force_load"
-          - "$(PROJECT_DIR)/../core/target/aarch64-apple-darwin/release/libtokenviewer_core.a"
+          - "$(PROJECT_DIR)/../core/target/$(TOKENVIEWER_RUST_TARGET)/release/libtokenviewer_core.a"
           - "-framework"
           - "Security"
           - "-framework"
@@ -41,9 +42,9 @@ targets:
         script: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cd "$PROJECT_DIR/../core"
-          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target "$TOKENVIEWER_RUST_TARGET"
         outputFiles:
-          - "$(PROJECT_DIR)/../core/target/aarch64-apple-darwin/release/libtokenviewer_core.a"
+          - "$(PROJECT_DIR)/../core/target/$(TOKENVIEWER_RUST_TARGET)/release/libtokenviewer_core.a"
   TokenViewerTests:
     type: bundle.unit-test
     platform: macOS

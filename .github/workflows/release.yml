@@ -69,12 +69,33 @@ jobs:
 
   macos:
     needs: prepare
-    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            macos_arch: arm64
+            rust_target: aarch64-apple-darwin
+            package_arch: arm64
+            package_pkg: TokenViewer-Installer.pkg
+            stable_aliases: true
+          - runner: macos-15-intel
+            macos_arch: x86_64
+            rust_target: x86_64-apple-darwin
+            package_arch: x64
+            package_pkg: TokenViewer-macOS-x64-Installer.pkg
+            stable_aliases: false
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
       BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
+      MACOS_ARCH: ${{ matrix.macos_arch }}
+      MACOS_RUST_TARGET: ${{ matrix.rust_target }}
+      PACKAGE_ARCH: ${{ matrix.package_arch }}
+      PACKAGE_PKG: ${{ matrix.package_pkg }}
+      STABLE_ALIASES: ${{ matrix.stable_aliases }}
 
     steps:
       - uses: actions/checkout@v4
@@ -82,7 +103,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin
+          targets: ${{ matrix.rust_target }}
 
       - name: Cache Rust
         uses: actions/cache@v4
@@ -91,8 +112,8 @@ jobs:
             core/target
             ~/.cargo/registry
             ~/.cargo/git
-          key: macos-rust-${{ hashFiles('core/Cargo.lock') }}
-          restore-keys: macos-rust-
+          key: macos-${{ matrix.package_arch }}-rust-${{ hashFiles('core/Cargo.lock') }}
+          restore-keys: macos-${{ matrix.package_arch }}-rust-
 
       - name: Install packaging tools
         run: brew install create-dmg xcodegen
@@ -109,7 +130,10 @@ jobs:
           xcodebuild test \
             -project macos/TokenViewer.xcodeproj \
             -scheme TokenViewer \
-            -destination 'platform=macOS'
+            -destination 'platform=macOS' \
+            ARCHS="$MACOS_ARCH" \
+            ONLY_ACTIVE_ARCH=YES \
+            TOKENVIEWER_RUST_TARGET="$MACOS_RUST_TARGET"
 
       - name: Prepare ephemeral signing identity
         run: |
@@ -123,23 +147,43 @@ jobs:
         run: |
           chmod +x script/release.sh script/version_utils.sh
           ./script/release.sh build-release
-          cp dist/release/TokenViewer.dmg "dist/release/TokenViewer-${VERSION}-macOS-arm64.dmg"
-          cp "dist/release/TokenViewer-${VERSION}.zip" "dist/release/TokenViewer-${VERSION}-macOS-arm64.zip"
+
+          ARCH_DMG="TokenViewer-${VERSION}-macOS-${PACKAGE_ARCH}.dmg"
+          ARCH_ZIP="TokenViewer-${VERSION}-macOS-${PACKAGE_ARCH}.zip"
+          VERSIONED_PKG="TokenViewer-${VERSION}-Installer.pkg"
+          cp dist/release/TokenViewer.dmg "dist/release/$ARCH_DMG"
+          cp "dist/release/TokenViewer-${VERSION}.zip" "dist/release/$ARCH_ZIP"
+          if [[ "$PACKAGE_PKG" != 'TokenViewer-Installer.pkg' ]]; then
+            cp "dist/release/$VERSIONED_PKG" "dist/release/$PACKAGE_PKG"
+          fi
+
+          UPLOAD_DIR='dist/release/upload'
+          rm -rf "$UPLOAD_DIR"
+          mkdir -p "$UPLOAD_DIR"
+          cp "dist/release/$ARCH_DMG" "dist/release/$ARCH_ZIP" "$UPLOAD_DIR/"
+          if [[ "$STABLE_ALIASES" == 'true' ]]; then
+            cp "dist/release/$VERSIONED_PKG" "$UPLOAD_DIR/"
+            cp dist/release/TokenViewer.dmg dist/release/TokenViewer-Installer.pkg "$UPLOAD_DIR/"
+          else
+            cp "dist/release/$PACKAGE_PKG" "$UPLOAD_DIR/TokenViewer-${VERSION}-macOS-${PACKAGE_ARCH}-Installer.pkg"
+          fi
 
       - name: Verify release packages
         run: |
           APP='dist/release/TokenViewer.app'
           DMG='dist/release/TokenViewer.dmg'
-          ZIP="dist/release/TokenViewer-${VERSION}-macOS-arm64.zip"
+          ARCH_DMG="dist/release/TokenViewer-${VERSION}-macOS-${PACKAGE_ARCH}.dmg"
+          ZIP="dist/release/TokenViewer-${VERSION}-macOS-${PACKAGE_ARCH}.zip"
           PKG="dist/release/TokenViewer-${VERSION}-Installer.pkg"
 
           test -d "$APP"
           test -f "$DMG"
-          test -f "dist/release/TokenViewer-${VERSION}-macOS-arm64.dmg"
+          test -f "$ARCH_DMG"
           test -f "$ZIP"
           test -f "$PKG"
           test -f 'dist/release/TokenViewer-Installer.pkg'
           codesign --verify --deep --strict --verbose=2 "$APP"
+          test "$(lipo -archs "$APP/Contents/MacOS/TokenViewer")" = "$MACOS_ARCH"
           test "$(defaults read "$PWD/$APP/Contents/Info" CFBundleShortVersionString)" = "$VERSION"
           if otool -L "$APP/Contents/MacOS/TokenViewer" | grep -E '/opt/homebrew|/usr/local'; then
             echo "Packaged binary depends on a builder-local library" >&2
@@ -158,13 +202,8 @@ jobs:
       - name: Upload macOS packages
         uses: actions/upload-artifact@v4
         with:
-          name: tokenviewer-macos-${{ env.VERSION }}
-          path: |
-            dist/release/TokenViewer.dmg
-            dist/release/TokenViewer-${{ env.VERSION }}-macOS-arm64.dmg
-            dist/release/TokenViewer-${{ env.VERSION }}-macOS-arm64.zip
-            dist/release/TokenViewer-${{ env.VERSION }}-Installer.pkg
-            dist/release/TokenViewer-Installer.pkg
+          name: tokenviewer-macos-${{ matrix.package_arch }}-${{ env.VERSION }}
+          path: dist/release/upload/*
 
   windows:
     needs: prepare
@@ -245,10 +284,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download macOS packages
+      - name: Download macOS ARM64 packages
         uses: actions/download-artifact@v4
         with:
-          name: tokenviewer-macos-${{ env.VERSION }}
+          name: tokenviewer-macos-arm64-${{ env.VERSION }}
+          path: release-assets
+
+      - name: Download macOS Intel packages
+        uses: actions/download-artifact@v4
+        with:
+          name: tokenviewer-macos-x64-${{ env.VERSION }}
           path: release-assets
 
       - name: Download Windows package
@@ -268,6 +313,9 @@ jobs:
             "TokenViewer-${VERSION}-macOS-arm64.zip"
             "TokenViewer-${VERSION}-Installer.pkg"
             'TokenViewer-Installer.pkg'
+            "TokenViewer-${VERSION}-macOS-x64.dmg"
+            "TokenViewer-${VERSION}-macOS-x64.zip"
+            "TokenViewer-${VERSION}-macOS-x64-Installer.pkg"
             "TokenViewer-${VERSION}-Windows-x64.zip"
           )
           assets=()

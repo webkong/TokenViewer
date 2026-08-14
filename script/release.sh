@@ -23,6 +23,8 @@ RELEASE_NOTES_FILE="${RELEASE_NOTES_FILE:-$ROOT_DIR/docs/releases/$RELEASE_TAG.m
 SELF_SIGNED_ENV_FILE="${SELF_SIGNED_ENV_FILE:-$ROOT_DIR/signing/tokenviewer-internal-codesign.env}"
 CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM:-}"
+MACOS_ARCH="${MACOS_ARCH:-arm64}"
+MACOS_RUST_TARGET="${MACOS_RUST_TARGET:-aarch64-apple-darwin}"
 KEYCHAIN_ARGS=()
 
 load_self_signed_env() {
@@ -88,7 +90,7 @@ usage() {
 Usage: $0 <command>
 
 Commands:
-  build-rust      Build Rust core (aarch64-apple-darwin release)
+  build-rust      Build Rust core for the configured macOS architecture
   build-app       Build Xcode release .app
   build-zip       Build .app and create zip
   build-pkg       Build .app and create PKG installer (auto-removes quarantine)
@@ -104,6 +106,8 @@ Environment:
   BUILD_NUMBER=NNNNN       Overrides script/version.env
   CODE_SIGN_IDENTITY=...   Codesign identity (default: project self-signed identity when available)
   DEVELOPMENT_TEAM=...     Team ID to pass through to Xcode signing
+  MACOS_ARCH=arm64|x86_64  Xcode build architecture (default: arm64)
+  MACOS_RUST_TARGET=...    Rust target (default: aarch64-apple-darwin)
   GITHUB_TOKEN=...         Required for push-release when gh not installed
   RELEASE_TAG=vX.Y.Z
   RELEASE_NOTES_FILE=docs/releases/vX.Y.Z.md
@@ -158,10 +162,17 @@ validate_non_adhoc_signature() {
 
 build_rust() {
   require_command cargo
-  echo "▶ Building Rust core (aarch64-apple-darwin)..."
+  case "$MACOS_ARCH:$MACOS_RUST_TARGET" in
+    arm64:aarch64-apple-darwin|x86_64:x86_64-apple-darwin) ;;
+    *)
+      echo "Unsupported macOS architecture/target pair: $MACOS_ARCH / $MACOS_RUST_TARGET" >&2
+      exit 1
+      ;;
+  esac
+  echo "▶ Building Rust core ($MACOS_RUST_TARGET)..."
   export PATH="$HOME/.cargo/bin:$PATH"
   cd "$ROOT_DIR/core"
-  cargo build --release --target aarch64-apple-darwin
+  cargo build --release --target "$MACOS_RUST_TARGET"
   echo "✓ Rust core built"
 }
 
@@ -206,6 +217,9 @@ build_app() {
     -derivedDataPath "$derived_data_path" \
     MARKETING_VERSION="$VERSION" \
     CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+    ARCHS="$MACOS_ARCH" \
+    ONLY_ACTIVE_ARCH=YES \
+    TOKENVIEWER_RUST_TARGET="$MACOS_RUST_TARGET" \
     "${xcode_sign_args[@]}" \
     build
 

@@ -33,7 +33,7 @@ PATH="/opt/homebrew/opt/rustup/bin:$PATH" DEVELOPER_DIR=/Applications/Xcode.app/
 - After ANY code change, run the appropriate `bash run.sh` variant when you need to launch and manually verify. For build-only validation, run `bash build.sh` and confirm `BUILD SUCCEEDED`.
 - For packaging a distributable installer (.pkg/.dmg), use `script/release.sh` (see Release section below). That outputs to `dist/release/` and is for releases only.
 - The Xcode project is generated from `macos/project.yml` via `xcodegen generate` (run after adding/removing Swift files). `project.pbxproj` is committed.
-- The Swift target `-force_load`s the static lib at `core/target/aarch64-apple-darwin/release/libtokenviewer_core.a` (a preBuildScript also rebuilds it). Always build the Rust target `aarch64-apple-darwin` — plain `cargo build` output is NOT linked by the app.
+- The Swift target `-force_load`s the static lib at `core/target/$(TOKENVIEWER_RUST_TARGET)/release/libtokenviewer_core.a` (a preBuildScript also rebuilds it). Local builds default to `aarch64-apple-darwin`; Intel releases set `TOKENVIEWER_RUST_TARGET=x86_64-apple-darwin` and `ARCHS=x86_64`. Plain `cargo build` output is NOT linked by the app.
 - Deployment target macOS 14.0, Swift 5.9.
 
 ### Agent workflow after code changes
@@ -139,19 +139,20 @@ Reference (read-only) implementation of all Agents lives in the sibling project 
 ## Release (`script/release.sh`)
 Version lives in **two** places — bump both: `macos/project.yml` (`MARKETING_VERSION`) and `script/version.env` (`VERSION`, `BUILD_NUMBER`).
 ```bash
-# 1) write docs/releases/vX.Y.Z.md  2) bump versions  3) commit + tag
-# 4) build artifacts (codesign needs keychain unlocked once per session):
+# 1) write docs/releases/vX.Y.Z.md  2) bump versions  3) commit and push
+# 4) push tag vX.Y.Z to github; GitHub Actions builds macOS ARM64, macOS Intel x64,
+#    and Windows x64, then publishes one Release only after all builds succeed.
+
+# Optional local packaging diagnostics (codesign needs keychain unlocked once per session):
 set -a; source signing/tokenviewer-internal-codesign.env; set +a
 security unlock-keychain -p "$SELF_SIGNED_KEYCHAIN_PASSWORD" "$SELF_SIGNED_KEYCHAIN_PATH"
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$SELF_SIGNED_KEYCHAIN_PASSWORD" "$SELF_SIGNED_KEYCHAIN_PATH"
-SKIP_RUST_BUILD=1 bash script/release.sh build-dmg   # → zip + dmg
-SKIP_RUST_BUILD=1 bash script/release.sh build-pkg   # → pkg (recommended installer; postinstall strips quarantine)
-# 5) publish
-SKIP_DMG_BUILD=1 RELEASE_TAG="vX.Y.Z" bash script/release.sh push-release
+bash script/release.sh build-release
+MACOS_ARCH=x86_64 MACOS_RUST_TARGET=x86_64-apple-darwin bash script/release.sh build-release
 ```
-- PKG filename includes the version (`TokenViewer-X.Y.Z-Installer.pkg`). Download links in `README.md`, `README.zh-CN.md`, `website/src/main.jsx` use `releases/latest/download/…` with that versioned filename — **update them on every version bump** or `latest/download` 404s.
+- Stable Apple silicon aliases are `TokenViewer.dmg` and `TokenViewer-Installer.pkg`. Intel packages are versioned as `TokenViewer-X.Y.Z-macOS-x64.{dmg,zip}` and `TokenViewer-X.Y.Z-macOS-x64-Installer.pkg`.
 - Website deploy: `npm run build` in `website/` outputs to `docs/`. ⚠️ Vite empties `docs/` on build, wiping `docs/releases/*.md` — restore them (`git checkout -- docs/releases`) after building. Pages serves from `main` `/docs`.
 
 ## Git
 - Remotes: `github` = `webkong/TokenViewer` (public, the one that matters for releases/Pages), `origin` = self-hosted Gitea (`main` is branch-protected; force-push is rejected server-side).
-- Only commit when asked. Never push to `main` directly unless asked. Tags `v0.1.0`, `v0.1.1` exist; latest = **v0.1.1**.
+- Only commit when asked. Never push to `main` directly unless asked. Latest release tag = **v0.2.20**.
