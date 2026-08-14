@@ -1344,6 +1344,11 @@ mod tests {
             .current_dir(path)
             .output()
             .unwrap();
+        Command::new("git")
+            .args(["config", "core.autocrlf", "false"])
+            .current_dir(path)
+            .output()
+            .unwrap();
 
         fs::write(path.join("README.md"), "# Test\n").unwrap();
         Command::new("git")
@@ -1704,7 +1709,15 @@ mod tests {
             .unwrap();
 
         Command::new("git")
-            .args(["clone", remote.to_str().unwrap(), peer.to_str().unwrap()])
+            .args([
+                "-c",
+                "core.autocrlf=false",
+                "clone",
+                "--branch",
+                "main",
+                remote.to_str().unwrap(),
+                peer.to_str().unwrap(),
+            ])
             .output()
             .unwrap();
         Command::new("git")
@@ -2001,7 +2014,15 @@ mod tests {
             .output()
             .unwrap();
         Command::new("git")
-            .args(["clone", remote.to_str().unwrap(), peer.to_str().unwrap()])
+            .args([
+                "-c",
+                "core.autocrlf=false",
+                "clone",
+                "--branch",
+                "main",
+                remote.to_str().unwrap(),
+                peer.to_str().unwrap(),
+            ])
             .output()
             .unwrap();
         Command::new("git")

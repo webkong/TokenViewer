@@ -452,13 +452,14 @@ mod tests {
         .unwrap();
 
         let homes = discover_codex_homes(home, &[], &[], true);
-        assert!(homes.iter().any(|item| item.path.ends_with("/.codex")));
         assert!(homes
             .iter()
-            .any(|item| item.path.ends_with("/.antigravity_cockpit/instances/codex")));
+            .any(|item| Path::new(&item.path).ends_with(".codex")));
+        assert!(homes.iter().any(|item| Path::new(&item.path)
+            .ends_with(Path::new(".antigravity_cockpit/instances/codex"))));
         assert!(!homes
             .iter()
-            .any(|item| item.path.ends_with("/.codex/browser")));
+            .any(|item| Path::new(&item.path).ends_with(Path::new(".codex/browser"))));
     }
 
     #[test]
@@ -485,7 +486,7 @@ mod tests {
 
         let homes = discover_codex_homes(home, &[], &[], true);
         assert!(homes.iter().any(|item| {
-            item.path.ends_with("AppData/Local/CodexWin")
+            Path::new(&item.path).ends_with(Path::new("AppData/Local/CodexWin"))
                 && item.exists
                 && item.has_sessions
                 && item.has_config

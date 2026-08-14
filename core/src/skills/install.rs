@@ -660,7 +660,7 @@ fn direct_directory_candidates(
         validate_skill_id(id)?;
         candidates.push(SkillInstallCandidate {
             id: id.to_string(),
-            source_dir: relative_root.join(id).to_string_lossy().to_string(),
+            source_dir: relative_root.join(id).to_string_lossy().replace('\\', "/"),
         });
     }
     candidates.sort_by(|lhs, rhs| lhs.id.cmp(&rhs.id));

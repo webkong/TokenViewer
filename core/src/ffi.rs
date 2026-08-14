@@ -709,12 +709,7 @@ mod skills_scan_tests {
         fs::create_dir_all(&skill_dir).unwrap();
         fs::write(system_dir.join(".codex-system-skills.marker"), "codex").unwrap();
 
-        #[cfg(unix)]
-        std::os::unix::fs::symlink(
-            dir.path().join("missing-global-skill"),
-            system_dir.join("imagegen"),
-        )
-        .unwrap();
+        fs::create_dir_all(system_dir.join("imagegen")).unwrap();
 
         assert!(is_agent_built_in_skill("codex", &skills_path, &skill_dir));
     }

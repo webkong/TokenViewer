@@ -138,7 +138,7 @@ impl SymlinkManager {
                     {
                         let path = entry.path();
                         if path.is_symlink() {
-                            fs::remove_file(&path).ok();
+                            remove_symlink(&path).ok();
                         }
                     }
                     // Remove the overlay directory if empty
@@ -218,7 +218,7 @@ impl SymlinkManager {
                 backup.display()
             );
         } else if target.is_symlink() {
-            fs::remove_file(&target).map_err(|e| {
+            remove_symlink(&target).map_err(|e| {
                 format!(
                     "Failed to remove existing symlink {}: {}",
                     target.display(),
@@ -311,7 +311,7 @@ impl SymlinkManager {
 
             // Remove existing symlink if present
             if link_path.is_symlink() {
-                fs::remove_file(&link_path).ok();
+                remove_symlink(&link_path).ok();
             }
 
             // Don't overwrite real files
@@ -335,7 +335,7 @@ impl SymlinkManager {
     /// Helper: remove a symlink path if it exists.
     fn remove_link_if_exists(&self, path: &Path) -> Result<(), String> {
         if path.is_symlink() {
-            fs::remove_file(path)
+            remove_symlink(path)
                 .map_err(|e| format!("Failed to remove symlink {}: {}", path.display(), e))?;
         }
         Ok(())
@@ -518,7 +518,7 @@ impl SymlinkManager {
 
         // Remove symlink at agent's location
         if target_dir.is_symlink() {
-            fs::remove_file(&target_dir).map_err(|e| {
+            remove_symlink(&target_dir).map_err(|e| {
                 format!(
                     "Failed to remove symlink at {}: {}",
                     target_dir.display(),
@@ -581,6 +581,21 @@ fn create_symlink(source: &Path, target: &Path) -> std::io::Result<()> {
     std::os::unix::fs::symlink(source, target)
 }
 
+fn remove_symlink(path: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        if path.is_dir() {
+            fs::remove_dir(path)
+        } else {
+            fs::remove_file(path)
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        fs::remove_file(path)
+    }
+}
+
 #[cfg(windows)]
 fn create_symlink(source: &Path, target: &Path) -> std::io::Result<()> {
     if source.is_dir() {
@@ -609,8 +624,8 @@ fn replace_symlink_atomically(link_path: &Path, new_target: &Path) -> Result<(),
         )
     })?;
     #[cfg(windows)]
-    if let Err(error) = fs::remove_file(link_path) {
-        let _ = fs::remove_file(&temporary);
+    if let Err(error) = remove_symlink(link_path) {
+        let _ = remove_symlink(&temporary);
         return Err(format!(
             "Failed to remove old symlink {}: {}",
             link_path.display(),
@@ -618,7 +633,7 @@ fn replace_symlink_atomically(link_path: &Path, new_target: &Path) -> Result<(),
         ));
     }
     if let Err(error) = fs::rename(&temporary, link_path) {
-        let _ = fs::remove_file(&temporary);
+        let _ = remove_symlink(&temporary);
         return Err(format!(
             "Failed to replace symlink {} -> {}: {}",
             link_path.display(),
