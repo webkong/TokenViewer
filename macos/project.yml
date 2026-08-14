@@ -24,7 +24,6 @@ targets:
         CODE_SIGN_STYLE: Automatic
         LIBRARY_SEARCH_PATHS:
           - "$(PROJECT_DIR)/../core/target/aarch64-apple-darwin/release"
-          - "/opt/homebrew/opt/openssl/lib"
         OTHER_LDFLAGS:
           - "-force_load"
           - "$(PROJECT_DIR)/../core/target/aarch64-apple-darwin/release/libtokenviewer_core.a"
@@ -34,8 +33,6 @@ targets:
           - "SystemConfiguration"
           - "-lz"
           - "-liconv"
-          - "-lssl"
-          - "-lcrypto"
         SWIFT_OBJC_BRIDGING_HEADER: "TokenViewer/Bridge/TokenViewer-Bridging-Header.h"
     entitlements:
       path: TokenViewer/Resources/TokenViewer.entitlements

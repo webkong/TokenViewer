@@ -66,6 +66,11 @@ jobs:
           export PATH="$HOME/.cargo/bin:$PATH"
           cd core && cargo build --release --target aarch64-apple-darwin
 
+      - name: Prepare ephemeral signing identity
+        run: |
+          chmod +x script/self_signed_codesign.sh
+          ./script/self_signed_codesign.sh generate
+
       - name: Build DMG
         env:
           CODE_SIGN_IDENTITY: "-"
