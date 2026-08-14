@@ -1792,11 +1792,15 @@ mod tests {
         drop(adopted_tree);
 
         assert_eq!(
-            fs::read_to_string(local.join("remote-only-skill/SKILL.md")).unwrap(),
+            fs::read_to_string(local.join("remote-only-skill/SKILL.md"))
+                .unwrap()
+                .replace("\r\n", "\n"),
             "remote only\n"
         );
         assert_eq!(
-            fs::read_to_string(local.join("locally-edited-skill/SKILL.md")).unwrap(),
+            fs::read_to_string(local.join("locally-edited-skill/SKILL.md"))
+                .unwrap()
+                .replace("\r\n", "\n"),
             "local content\n"
         );
 
