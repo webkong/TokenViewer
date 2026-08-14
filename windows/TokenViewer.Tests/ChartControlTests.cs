@@ -178,6 +178,7 @@ public class ChartControlTests
             r["CardTitle"] = new Style(typeof(TextBlock));
             r["MutedLabel"] = new Style(typeof(TextBlock));
             r["PanelBorder"] = Brushes.Gray;
+            r["MutedText"] = Brushes.Gray;
             r["CacheReadBrush"] = Brushes.Purple;
         }
     }
