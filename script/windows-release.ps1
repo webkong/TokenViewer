@@ -41,6 +41,11 @@ if (-not (Test-Path $builtDll)) {
 
 Copy-Item $builtDll (Join-Path $distDir $dllName) -Force
 
+# Copy brand/app resources alongside the publish output so the release zip
+# carries TokenViewer.ico + brand-logos/*.png explicitly (in addition to the
+# copies embedded in the executable).
+Copy-Item (Join-Path $windowsDir "Resources") -Destination (Join-Path $distDir "Resources") -Recurse -Force
+
 $zipPath = Join-Path $releaseDir "TokenViewer-Windows-$runtime.zip"
 if (Test-Path $zipPath) {
   Remove-Item $zipPath -Force

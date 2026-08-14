@@ -9,7 +9,7 @@ pub fn parse(
     home_dir: &Path,
     cursor_data: Option<&str>,
 ) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
-    let db_path = home_dir.join(".local/share/opencode/opencode.db");
+    let db_path = resolve_local_data_path(home_dir, "opencode/opencode.db");
     parse_opencode_db(&db_path, cursor_data, "opencode")
 }
 

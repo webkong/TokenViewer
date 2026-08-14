@@ -129,10 +129,7 @@ pub fn discover_codex_homes(
         false,
         true,
     );
-    for path in [
-        home.join("Library/Application Support/orca/codex-runtime-home/home"),
-        home.join(".antigravity_cockpit/instances/codex"),
-    ] {
+    for path in codex_known_host_roots(home) {
         add_candidate(
             &mut candidates,
             path,
@@ -162,12 +159,7 @@ pub fn discover_codex_homes(
     }
 
     if include_scan {
-        let scan_roots = [
-            (home.join(".antigravity_cockpit"), 6usize),
-            (home.join("Library/Application Support"), 6usize),
-            (home.join("Library/Containers"), 8usize),
-        ];
-        for (root, depth) in scan_roots {
+        for (root, depth) in codex_scan_roots(home) {
             scan_for_codex_homes(&root, depth, &mut candidates);
         }
         scan_home_codex_named_directories(home, &mut candidates);
@@ -183,6 +175,46 @@ pub fn discover_codex_homes(
             .then_with(|| left.path.cmp(&right.path))
     });
     homes
+}
+
+/// Known host apps that create their own Codex home, by platform. Kept a
+/// narrow, fixed list — never a full-disk walk.
+fn codex_known_host_roots(home: &Path) -> Vec<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        vec![
+            home.join("AppData/Roaming/orca/codex-runtime-home/home"),
+            home.join(".antigravity_cockpit/instances/codex"),
+        ]
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        vec![
+            home.join("Library/Application Support/orca/codex-runtime-home/home"),
+            home.join(".antigravity_cockpit/instances/codex"),
+        ]
+    }
+}
+
+/// Broad (24h-cached) scan roots for discovering additional Codex homes, by
+/// platform. Bounded depth keeps this a narrow scan, not a full-disk walk.
+fn codex_scan_roots(home: &Path) -> Vec<(PathBuf, usize)> {
+    #[cfg(target_os = "windows")]
+    {
+        vec![
+            (home.join(".antigravity_cockpit"), 6usize),
+            (home.join("AppData/Local"), 6usize),
+            (home.join("AppData/Roaming"), 6usize),
+        ]
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        vec![
+            (home.join(".antigravity_cockpit"), 6usize),
+            (home.join("Library/Application Support"), 6usize),
+            (home.join("Library/Containers"), 8usize),
+        ]
+    }
 }
 
 fn scan_home_codex_named_directories(home: &Path, candidates: &mut HashMap<String, Candidate>) {
@@ -436,6 +468,27 @@ mod tests {
         let homes = discover_codex_homes(dir.path(), &[missing.clone()], &[], false);
         assert!(homes.iter().any(|item| {
             item.path == missing.to_string_lossy() && item.is_user_configured && !item.exists
+        }));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn discovers_windows_appdata_scan_root() {
+        let dir = TempDir::new().unwrap();
+        let home = dir.path();
+        fs::create_dir_all(home.join("AppData/Local/CodexWin/sessions")).unwrap();
+        fs::write(
+            home.join("AppData/Local/CodexWin/config.toml"),
+            "model = 'test'",
+        )
+        .unwrap();
+
+        let homes = discover_codex_homes(home, &[], &[], true);
+        assert!(homes.iter().any(|item| {
+            item.path.ends_with("AppData/Local/CodexWin")
+                && item.exists
+                && item.has_sessions
+                && item.has_config
         }));
     }
 

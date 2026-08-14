@@ -1,52 +1,42 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
-using System.Globalization;
 using System.Windows.Input;
 using System.Windows.Threading;
-using TokenViewerWindows;
 using TokenViewerWindows.Infrastructure;
 using TokenViewerWindows.Models;
+using TokenViewerWindows.Services;
 
 namespace TokenViewerWindows.ViewModels;
 
+/// <summary>
+/// Owns shell-level state only: agent status plus a status line that mirrors the
+/// shared <see cref="SyncCoordinator"/>. It does not maintain its own usage
+/// summary — that belongs to <see cref="UsageViewModel"/>.
+/// </summary>
 public sealed class MainViewModel : ObservableObject
 {
-    private readonly CoreBridge _core;
+    private readonly ICoreBridge _core;
+    private readonly SyncCoordinator _sync;
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _syncTimer;
-    private bool _isLoading;
-    private UsageSummary? _summary;
-    private string _status = "Ready";
+    private readonly AsyncRelayCommand _syncCommand;
+    private string _status;
 
-    public MainViewModel(CoreBridge core, Dispatcher dispatcher)
+    public MainViewModel(ICoreBridge core, SyncCoordinator sync, Dispatcher dispatcher)
     {
         _core = core;
+        _sync = sync;
         _dispatcher = dispatcher;
         Agents = new ObservableCollection<AgentStatus>();
-        SyncCommand = new AsyncRelayCommand(SyncAsync, () => !IsLoading);
+        _syncCommand = new AsyncRelayCommand(() => _sync.SyncAsync(), () => !_sync.IsSyncing);
+        _status = L10n.Instance["statusReady"];
         _syncTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };
-        _syncTimer.Tick += async (_, _) => await SyncAsync();
+        _syncTimer.Tick += async (_, _) => await _sync.SyncAsync();
+        _sync.PropertyChanged += OnSyncPropertyChanged;
     }
 
     public ObservableCollection<AgentStatus> Agents { get; }
-
-    public bool IsLoading
-    {
-        get => _isLoading;
-        private set
-        {
-            if (SetProperty(ref _isLoading, value) && SyncCommand is AsyncRelayCommand command)
-            {
-                command.RaiseCanExecuteChanged();
-            }
-        }
-    }
-
-    public UsageSummary? Summary
-    {
-        get => _summary;
-        private set => SetProperty(ref _summary, value);
-    }
 
     public string Status
     {
@@ -54,9 +44,7 @@ public sealed class MainViewModel : ObservableObject
         private set => SetProperty(ref _status, value);
     }
 
-    public string SummaryTokens => FormatTokens(Summary?.TotalTokens ?? 0);
-    public string SummaryCost => FormatCost(Summary?.TotalCostUsd ?? 0);
-    public ICommand SyncCommand { get; }
+    public ICommand SyncCommand => _syncCommand;
 
     public void StartAutoSync(int minutes)
     {
@@ -66,52 +54,37 @@ public sealed class MainViewModel : ObservableObject
         _syncTimer.Start();
     }
 
-    public async Task SyncAsync()
+    public void RefreshAgents()
     {
-        if (IsLoading) return;
-        IsLoading = true;
-        Status = "Syncing…";
-
-        try
+        _ = Task.Run(() =>
         {
-            await Task.Run(() => _core.SyncAll());
-            Refresh();
-            Status = "Ready";
-        }
-        catch (Exception ex)
-        {
-            Status = $"Sync failed: {ex.Message}";
-        }
-        finally
-        {
-            IsLoading = false;
-        }
-    }
-
-    public void Refresh()
-    {
-        var now = DateTime.Now;
-        var todayStart = now.Date;
-        var tomorrowStart = todayStart.AddDays(1);
-        var from = todayStart.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss'Z'", CultureInfo.InvariantCulture);
-        var to = tomorrowStart.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss'Z'", CultureInfo.InvariantCulture);
-
-        var summary = _core.GetSummary(from, to);
-        var agents = _core.GetAgentStatus();
-
-        _dispatcher.Invoke(() =>
-        {
-            Summary = summary;
-            Agents.Clear();
-            foreach (var agent in agents.OrderByDescending(p => p.Installed).ThenBy(p => p.Source))
+            var agents = _core.GetAgentStatus();
+            _dispatcher.Invoke(() =>
             {
-                Agents.Add(agent);
-            }
-            RaisePropertyChanged(nameof(SummaryTokens));
-            RaisePropertyChanged(nameof(SummaryCost));
+                Agents.Clear();
+                foreach (var agent in agents.OrderByDescending(p => p.Installed).ThenBy(p => p.Source))
+                {
+                    Agents.Add(agent);
+                }
+            });
         });
     }
 
-    private static string FormatTokens(ulong value) => value.ToString("N0", CultureInfo.InvariantCulture);
-    private static string FormatCost(double value) => $"${value:0.00}";
+    private void OnSyncPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SyncCoordinator.IsSyncing))
+        {
+            _syncCommand.RaiseCanExecuteChanged();
+        }
+
+        if (e.PropertyName is nameof(SyncCoordinator.IsSyncing) or nameof(SyncCoordinator.Error) or nameof(SyncCoordinator.Status))
+        {
+            var l = L10n.Instance;
+            Status = _sync.IsSyncing
+                ? l["statusSyncing"]
+                : _sync.Error is { } message
+                    ? $"{l["statusSyncFailed"]}: {message}"
+                    : l["statusReady"];
+        }
+    }
 }

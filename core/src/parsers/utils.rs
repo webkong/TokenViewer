@@ -449,3 +449,131 @@ pub fn vscode_global_storage(home: &Path) -> PathBuf {
         home.join("AppData/Roaming/Code/User/globalStorage")
     }
 }
+
+/// Ordered candidates for a CLI-style local-data DB, `rel` like
+/// `opencode/opencode.db`.
+///
+/// On Windows the CLI keeps its DB under `%LOCALAPPDATA%`; the legacy
+/// `~/.local/share/<rel>` layout stays as a fallback so existing installs and
+/// injected test roots keep working. On macOS/Linux only the legacy layout is
+/// returned, so parser behavior is unchanged.
+pub fn local_data_candidates(home: &Path, rel: &str) -> Vec<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        vec![
+            home.join("AppData/Local").join(rel),
+            home.join(".local/share").join(rel),
+        ]
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        vec![home.join(".local/share").join(rel)]
+    }
+}
+
+/// First candidate that already exists on disk, else `None`.
+pub fn first_existing(candidates: &[PathBuf]) -> Option<PathBuf> {
+    candidates.iter().find(|p| p.exists()).cloned()
+}
+
+/// Resolve the primary path for a CLI local-data DB: the first existing
+/// candidate, else the legacy default. Callers keep their existing `!exists()`
+/// check, which turns a missing path into an empty result (never an error).
+pub fn resolve_local_data_path(home: &Path, rel: &str) -> PathBuf {
+    let candidates = local_data_candidates(home, rel);
+    first_existing(&candidates).unwrap_or_else(|| candidates.last().cloned().unwrap())
+}
+
+/// Resolve the first existing path among ordered relative candidates rooted at
+/// `home`, falling back to the first candidate when none exist. Callers rely on
+/// the returned path's own `.exists()` semantics to skip gracefully, so a
+/// missing result is never an error. An empty candidate list returns `home`.
+pub fn resolve_first_existing(home: &Path, rel_candidates: &[&str]) -> PathBuf {
+    let paths: Vec<PathBuf> = rel_candidates.iter().map(|rel| home.join(rel)).collect();
+    first_existing(&paths).unwrap_or_else(|| paths.first().cloned().unwrap_or_else(|| home.to_path_buf()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn first_existing_picks_first_and_returns_none_when_empty() {
+        let dir = TempDir::new().unwrap();
+        let existing = dir.path().join("a.db");
+        let missing = dir.path().join("b.db");
+        fs::write(&existing, b"x").unwrap();
+
+        assert_eq!(
+            first_existing(&[missing.clone(), existing.clone()]),
+            Some(existing)
+        );
+        assert_eq!(first_existing(&[missing.clone()]), None);
+        assert_eq!(first_existing(&[]), None);
+    }
+
+    #[test]
+    fn local_data_candidates_keep_legacy_layout_on_non_windows() {
+        let dir = TempDir::new().unwrap();
+        let rel = "opencode/opencode.db";
+        let candidates = local_data_candidates(dir.path(), rel);
+        #[cfg(not(target_os = "windows"))]
+        assert_eq!(candidates, vec![dir.path().join(".local/share").join(rel)]);
+        #[cfg(target_os = "windows")]
+        assert_eq!(candidates.len(), 2);
+    }
+
+    #[test]
+    fn resolve_local_data_path_falls_back_to_legacy_when_nothing_exists() {
+        let dir = TempDir::new().unwrap();
+        let rel = "opencode/opencode.db";
+        let resolved = resolve_local_data_path(dir.path(), rel);
+        assert_eq!(resolved, dir.path().join(".local/share").join(rel));
+    }
+
+    #[test]
+    fn resolve_local_data_path_picks_first_existing_candidate() {
+        let dir = TempDir::new().unwrap();
+        let legacy = dir.path().join(".local/share/opencode/opencode.db");
+        fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        fs::write(&legacy, b"x").unwrap();
+
+        let resolved = resolve_local_data_path(dir.path(), "opencode/opencode.db");
+        assert_eq!(resolved, legacy);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn resolve_local_data_path_prefers_windows_local_appdata() {
+        let dir = TempDir::new().unwrap();
+        let win = dir.path().join("AppData/Local/opencode/opencode.db");
+        fs::create_dir_all(win.parent().unwrap()).unwrap();
+        fs::write(&win, b"x").unwrap();
+
+        let resolved = resolve_local_data_path(dir.path(), "opencode/opencode.db");
+        assert_eq!(resolved, win);
+    }
+
+    #[test]
+    fn resolve_first_existing_picks_first_existing_and_falls_back_to_primary() {
+        let dir = TempDir::new().unwrap();
+
+        // Nothing exists -> falls back to the first (primary) candidate.
+        let resolved = resolve_first_existing(dir.path(), &["roaming/dev", "config/dev"]);
+        assert_eq!(resolved, dir.path().join("roaming/dev"));
+
+        // Second candidate exists -> it wins over the primary.
+        fs::create_dir_all(dir.path().join("config")).unwrap();
+        fs::write(dir.path().join("config/dev"), b"x").unwrap();
+        let resolved = resolve_first_existing(dir.path(), &["roaming/dev", "config/dev"]);
+        assert_eq!(resolved, dir.path().join("config/dev"));
+
+        // Empty candidate list -> returns the home directory itself.
+        assert_eq!(
+            resolve_first_existing(dir.path(), &[]),
+            dir.path().to_path_buf()
+        );
+    }
+}

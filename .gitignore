@@ -1,6 +1,8 @@
 # Build outputs
 dist/
 .build*/
+windows/**/bin/
+windows/**/obj/
 
 # Xcode
 *.xcodeproj/xcuserdata/

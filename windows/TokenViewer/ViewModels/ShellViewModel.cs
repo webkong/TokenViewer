@@ -1,23 +1,35 @@
 using System.ComponentModel;
-using TokenViewerWindows;
+using System.Windows.Threading;
+using TokenViewerWindows.Services;
 
 namespace TokenViewerWindows.ViewModels;
 
 public sealed class ShellViewModel
 {
-    public ShellViewModel(CoreBridge core, System.Windows.Threading.Dispatcher dispatcher)
+    public ShellViewModel(ICoreBridge core, Dispatcher dispatcher)
     {
-        Main = new MainViewModel(core, dispatcher);
+        Sync = new SyncCoordinator(core, dispatcher);
+        Usage = new UsageViewModel(core, Sync, dispatcher);
+        Main = new MainViewModel(core, Sync, dispatcher);
         Limits = new LimitsViewModel(dispatcher);
-        Settings = new SettingsViewModel();
+        Settings = new SettingsViewModel(Sync);
         Updates = new UpdateViewModel(dispatcher);
+
+        L10n.Instance.Language = Settings.Language;
+
         Main.StartAutoSync(Settings.SyncFrequencyMinutes);
         Settings.PropertyChanged += OnSettingsChanged;
         Limits.StartAutoRefresh();
         _ = Limits.RefreshAsync();
         Updates.StartAutoCheck();
+
+        // UsageViewModel subscribes to SyncCompleted itself (single refresh
+        // owner). The shell only refreshes agent status on completion.
+        Sync.SyncCompleted += (_, _) => Main.RefreshAgents();
     }
 
+    public SyncCoordinator Sync { get; }
+    public UsageViewModel Usage { get; }
     public MainViewModel Main { get; }
     public LimitsViewModel Limits { get; }
     public SettingsViewModel Settings { get; }
@@ -25,9 +37,14 @@ public sealed class ShellViewModel
 
     private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(SettingsViewModel.SyncFrequencyMinutes))
+        switch (e.PropertyName)
         {
-            Main.StartAutoSync(Settings.SyncFrequencyMinutes);
+            case nameof(SettingsViewModel.SyncFrequencyMinutes):
+                Main.StartAutoSync(Settings.SyncFrequencyMinutes);
+                break;
+            case nameof(SettingsViewModel.Language):
+                L10n.Instance.Language = Settings.Language;
+                break;
         }
     }
 }

@@ -1,0 +1,76 @@
+<UserControl x:Class="TokenViewerWindows.Views.AboutView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:TokenViewerWindows.Views">
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="0,16,0,0" MaxWidth="720" HorizontalAlignment="Left">
+
+      <TextBlock Text="{views:L10n about}" FontSize="24" FontWeight="Bold" Margin="0,0,0,14" />
+
+      <!-- App info -->
+      <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+        <StackPanel>
+          <TextBlock Text="{views:L10n about}" Style="{StaticResource CardTitle}" Margin="0,0,0,10" />
+          <DockPanel Margin="0,0,0,6">
+            <TextBlock DockPanel.Dock="Right" Text="{Binding CurrentVersion, StringFormat=v{0}}" FontSize="12" Foreground="{StaticResource MutedText}" />
+            <TextBlock Text="TokenViewer" FontSize="13" />
+          </DockPanel>
+          <DockPanel Margin="0,0,0,6">
+            <TextBlock DockPanel.Dock="Right" Text="{views:L10n engineValue}" FontSize="12" Foreground="{StaticResource MutedText}" />
+            <TextBlock Text="{views:L10n engine}" FontSize="13" />
+          </DockPanel>
+          <DockPanel Margin="0,0,0,6">
+            <TextBlock DockPanel.Dock="Right" Text="{views:L10n storageValue}" FontSize="12" Foreground="{StaticResource MutedText}" />
+            <TextBlock Text="{views:L10n storage}" FontSize="13" />
+          </DockPanel>
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Content="GitHub" Click="OnGitHubClick" Background="Transparent" BorderThickness="0" Foreground="{StaticResource Brand}" Padding="0" />
+            <TextBlock Text="{views:L10n github}" FontSize="13" VerticalAlignment="Center" />
+          </DockPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- Supported agents -->
+      <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+        <StackPanel>
+          <Button Content="{views:L10n aboutSupportedAgents}" Click="OnToggleAgentsClick" Background="Transparent" BorderThickness="0" HorizontalContentAlignment="Left" FontSize="15" FontWeight="SemiBold" Foreground="White" Padding="0" />
+          <TextBlock x:Name="AgentCountLabel" Style="{StaticResource MutedLabel}" Margin="0,4,0,0" />
+          <ItemsControl x:Name="AgentChips" Visibility="Collapsed" Margin="0,10,0,0">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="{StaticResource InputBg}" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="12" Padding="10,6" Margin="0,0,6,6">
+                  <TextBlock Text="{Binding}" FontSize="12" />
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <!-- Updates -->
+      <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+        <StackPanel>
+          <TextBlock Text="{views:L10n updates}" Style="{StaticResource CardTitle}" Margin="0,0,0,10" />
+          <DockPanel>
+            <StackPanel>
+              <TextBlock Text="{views:L10n softwareUpdate}" FontSize="13" />
+              <TextBlock Text="{Binding Status}" FontSize="10" Foreground="{StaticResource MutedText}" />
+            </StackPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+              <Button Content="{views:L10n checkNow}" Command="{Binding CheckCommand}" Padding="14,8" Background="{StaticResource Brand}" BorderThickness="0" Foreground="White" Margin="0,0,10,0" />
+              <Button Content="{views:L10n download}" Command="{Binding InstallCommand}" Padding="14,8" />
+            </StackPanel>
+          </DockPanel>
+        </StackPanel>
+      </Border>
+
+      <TextBlock x:Name="CopyrightLabel" FontSize="11" Foreground="{StaticResource MutedText}" HorizontalAlignment="Center" />
+      <Button Content="tokenviewer.webkong.top" Click="OnWebsiteClick" Background="Transparent" BorderThickness="0" Foreground="{StaticResource Brand}" FontSize="11" HorizontalAlignment="Center" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
