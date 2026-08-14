@@ -5,37 +5,79 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Version (e.g. 0.2.0)"
-        required: true
-      build_number:
-        description: "Build number"
-        required: true
-        default: "20000"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build-and-release:
-    runs-on: macos-15
+  prepare:
+    runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      build_number: ${{ steps.version.outputs.build_number }}
+      release_tag: ${{ steps.version.outputs.release_tag }}
+      publish: ${{ steps.version.outputs.publish }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set version
+      - name: Resolve and validate version
+        id: version
+        shell: bash
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-            BUILD="$(grep '^BUILD_NUMBER=' script/version.env | cut -d= -f2)"
-          else
-            VERSION="${{ github.event.inputs.version }}"
-            BUILD="${{ github.event.inputs.build_number }}"
+          set -euo pipefail
+
+          unset VERSION BUILD_NUMBER
+          source script/version.env
+          CONFIG_VERSION="$VERSION"
+          CONFIG_BUILD_NUMBER="$BUILD_NUMBER"
+          PROJECT_VERSION="$(awk -F: '/MARKETING_VERSION:/ { value=$2; gsub(/[[:space:]"]/, "", value); print value; exit }' macos/project.yml)"
+          PROJECT_BUILD_NUMBER="$(awk -F: '/CURRENT_PROJECT_VERSION:/ { value=$2; gsub(/[[:space:]"]/, "", value); print value; exit }' macos/project.yml)"
+
+          if [[ "$CONFIG_VERSION" != "$PROJECT_VERSION" ]]; then
+            echo "Version mismatch: script/version.env=$CONFIG_VERSION, macos/project.yml=$PROJECT_VERSION" >&2
+            exit 1
           fi
-          BUILD="${BUILD:-10000}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "BUILD_NUMBER=$BUILD" >> $GITHUB_ENV
-          echo "RELEASE_TAG=v$VERSION" >> $GITHUB_ENV
+          if [[ "$CONFIG_BUILD_NUMBER" != "$PROJECT_BUILD_NUMBER" ]]; then
+            echo "Build number mismatch: script/version.env=$CONFIG_BUILD_NUMBER, macos/project.yml=$PROJECT_BUILD_NUMBER" >&2
+            exit 1
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Release tag must use vX.Y.Z format: $GITHUB_REF_NAME" >&2
+              exit 1
+            fi
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            if [[ "$TAG_VERSION" != "$CONFIG_VERSION" ]]; then
+              echo "Tag version $TAG_VERSION does not match configured version $CONFIG_VERSION" >&2
+              exit 1
+            fi
+            PUBLISH=true
+          else
+            TAG_VERSION="$CONFIG_VERSION"
+            PUBLISH=false
+          fi
+
+          echo "version=$TAG_VERSION" >> "$GITHUB_OUTPUT"
+          echo "build_number=$CONFIG_BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "release_tag=v$TAG_VERSION" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+
+  macos:
+    needs: prepare
+    runs-on: macos-15
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
+
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -49,60 +91,209 @@ jobs:
             core/target
             ~/.cargo/registry
             ~/.cargo/git
-          key: rust-${{ hashFiles('core/Cargo.lock') }}
-          restore-keys: rust-
+          key: macos-rust-${{ hashFiles('core/Cargo.lock') }}
+          restore-keys: macos-rust-
 
-      - name: Install create-dmg
-        run: brew install create-dmg
-
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - name: Install packaging tools
+        run: brew install create-dmg xcodegen
 
       - name: Generate Xcode project
         run: cd macos && xcodegen generate
 
-      - name: Build Rust core
+      - name: Rust tests
+        working-directory: core
+        run: cargo test --lib --tests
+
+      - name: Swift tests
         run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
-          cd core && cargo build --release --target aarch64-apple-darwin
+          xcodebuild test \
+            -project macos/TokenViewer.xcodeproj \
+            -scheme TokenViewer \
+            -destination 'platform=macOS'
 
       - name: Prepare ephemeral signing identity
         run: |
           chmod +x script/self_signed_codesign.sh
           ./script/self_signed_codesign.sh generate
 
-      - name: Build DMG
+      - name: Build release packages
         env:
           CODE_SIGN_IDENTITY: "-"
           SKIP_RUST_BUILD: "1"
         run: |
           chmod +x script/release.sh script/version_utils.sh
-          VERSION=${{ env.VERSION }} BUILD_NUMBER=${{ env.BUILD_NUMBER }} ./script/release.sh build-dmg
+          ./script/release.sh build-release
+          cp dist/release/TokenViewer.dmg "dist/release/TokenViewer-${VERSION}-macOS-arm64.dmg"
+          cp "dist/release/TokenViewer-${VERSION}.zip" "dist/release/TokenViewer-${VERSION}-macOS-arm64.zip"
 
-      - name: Create release notes if missing
+      - name: Verify release packages
         run: |
-          mkdir -p docs/releases
-          NOTES_FILE="docs/releases/v${{ env.VERSION }}.md"
-          if [[ ! -f "$NOTES_FILE" ]]; then
-            echo "## TokenViewer v${{ env.VERSION }}" > "$NOTES_FILE"
-            echo "" >> "$NOTES_FILE"
-            echo "Release v${{ env.VERSION }}" >> "$NOTES_FILE"
+          APP='dist/release/TokenViewer.app'
+          DMG='dist/release/TokenViewer.dmg'
+          ZIP="dist/release/TokenViewer-${VERSION}-macOS-arm64.zip"
+          PKG="dist/release/TokenViewer-${VERSION}-Installer.pkg"
+
+          test -d "$APP"
+          test -f "$DMG"
+          test -f "dist/release/TokenViewer-${VERSION}-macOS-arm64.dmg"
+          test -f "$ZIP"
+          test -f "$PKG"
+          test -f 'dist/release/TokenViewer-Installer.pkg'
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          test "$(defaults read "$PWD/$APP/Contents/Info" CFBundleShortVersionString)" = "$VERSION"
+          if otool -L "$APP/Contents/MacOS/TokenViewer" | grep -E '/opt/homebrew|/usr/local'; then
+            echo "Packaged binary depends on a builder-local library" >&2
+            exit 1
           fi
+          unzip -t "$ZIP"
+          pkgutil --payload-files "$PKG" > "$RUNNER_TEMP/tokenviewer-pkg-files.txt"
+          grep -q 'TokenViewer.app/Contents/MacOS/TokenViewer' "$RUNNER_TEMP/tokenviewer-pkg-files.txt"
+          hdiutil verify "$DMG"
 
-      - name: Upload to GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SKIP_DMG_BUILD: "1"
+          MOUNT_DIR="$(mktemp -d)"
+          hdiutil attach "$DMG" -readonly -nobrowse -mountpoint "$MOUNT_DIR"
+          test -d "$MOUNT_DIR/TokenViewer.app"
+          hdiutil detach "$MOUNT_DIR"
+
+      - name: Upload macOS packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: tokenviewer-macos-${{ env.VERSION }}
+          path: |
+            dist/release/TokenViewer.dmg
+            dist/release/TokenViewer-${{ env.VERSION }}-macOS-arm64.dmg
+            dist/release/TokenViewer-${{ env.VERSION }}-macOS-arm64.zip
+            dist/release/TokenViewer-${{ env.VERSION }}-Installer.pkg
+            dist/release/TokenViewer-Installer.pkg
+
+  windows:
+    needs: prepare
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      RUST_TARGET: x86_64-pc-windows-msvc
+      WINDOWS_RUNTIME: win-x64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Rust tests
+        shell: pwsh
+        working-directory: core
+        run: cargo test --lib --tests
+
+      - name: .NET tests
+        shell: pwsh
+        run: dotnet test windows/TokenViewer.Tests/TokenViewer.Tests.csproj -c Release -p:EnableWindowsTargeting=true
+
+      - name: Build release package
+        shell: pwsh
+        run: ./script/windows-release.ps1
+
+      - name: Verify release package
+        shell: pwsh
         run: |
-          VERSION=${{ env.VERSION }} BUILD_NUMBER=${{ env.BUILD_NUMBER }} \
-          GITHUB_RELEASE_REPO="${{ github.repository }}" \
-          RELEASE_TAG="v${{ env.VERSION }}" \
-          RELEASE_NOTES_FILE="docs/releases/v${{ env.VERSION }}.md" \
-          ./script/release.sh push-release
+          $zip = "dist/release/TokenViewer-$env:VERSION-Windows-x64.zip"
+          $required = @(
+            'dist/windows/tokenviewer_core.dll',
+            'dist/windows/TokenViewer.exe',
+            'windows/TokenViewer/Resources/TokenViewer.ico',
+            $zip
+          )
+          foreach ($file in $required) {
+            if (-not (Test-Path $file)) { throw "Missing required artifact: $file" }
+          }
 
-  deploy-website:
-    needs: build-and-release
+          $tmp = Join-Path $env:RUNNER_TEMP 'tokenviewer-windows-zip'
+          if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+          Expand-Archive -Path $zip -DestinationPath $tmp
+          foreach ($file in @('TokenViewer.exe', 'tokenviewer_core.dll', 'Resources/TokenViewer.ico')) {
+            if (-not (Test-Path (Join-Path $tmp $file))) { throw "Missing in zip: $file" }
+          }
+          $logos = @(Get-ChildItem (Join-Path $tmp 'Resources/brand-logos/*.png'))
+          if ($logos.Count -lt 50) { throw "Missing brand PNGs in zip ($($logos.Count) < 50)" }
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: tokenviewer-windows-${{ env.VERSION }}
+          path: dist/release/TokenViewer-${{ env.VERSION }}-Windows-x64.zip
+
+  publish:
+    needs: [prepare, macos, windows]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    uses: ./.github/workflows/reusable-deploy-website.yml
-    secrets: inherit
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download macOS packages
+        uses: actions/download-artifact@v4
+        with:
+          name: tokenviewer-macos-${{ env.VERSION }}
+          path: release-assets
+
+      - name: Download Windows package
+        uses: actions/download-artifact@v4
+        with:
+          name: tokenviewer-windows-${{ env.VERSION }}
+          path: release-assets
+
+      - name: Publish GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          expected=(
+            'TokenViewer.dmg'
+            "TokenViewer-${VERSION}-macOS-arm64.dmg"
+            "TokenViewer-${VERSION}-macOS-arm64.zip"
+            "TokenViewer-${VERSION}-Installer.pkg"
+            'TokenViewer-Installer.pkg'
+            "TokenViewer-${VERSION}-Windows-x64.zip"
+          )
+          assets=()
+          for name in "${expected[@]}"; do
+            path="release-assets/$name"
+            test -f "$path"
+            assets+=("$path")
+          done
+
+          notes_file="docs/releases/${RELEASE_TAG}.md"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            edit_args=(--title "TokenViewer $VERSION")
+            if [[ -f "$notes_file" ]]; then
+              edit_args+=(--notes-file "$notes_file")
+            fi
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" "${edit_args[@]}"
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            notes_args=(--generate-notes)
+            if [[ -f "$notes_file" ]]; then
+              notes_args=(--notes-file "$notes_file")
+            fi
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --latest \
+              --title "TokenViewer $VERSION" \
+              "${notes_args[@]}"
+          fi

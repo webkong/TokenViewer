@@ -46,7 +46,7 @@ Copy-Item $builtDll (Join-Path $distDir $dllName) -Force
 # copies embedded in the executable).
 Copy-Item (Join-Path $windowsDir "Resources") -Destination (Join-Path $distDir "Resources") -Recurse -Force
 
-$zipPath = Join-Path $releaseDir "TokenViewer-Windows-$runtime.zip"
+$zipPath = Join-Path $releaseDir "TokenViewer-$version-Windows-x64.zip"
 if (Test-Path $zipPath) {
   Remove-Item $zipPath -Force
 }

@@ -93,9 +93,10 @@ Commands:
   build-zip       Build .app and create zip
   build-pkg       Build .app and create PKG installer (auto-removes quarantine)
   build-dmg       Build .app and create DMG
+  build-release   Build .app once and create ZIP + PKG + DMG
   build-website   Build website/dist
   push-website    Push built website to GitHub Pages branch
-  push-release    Upload DMG + ZIP to GitHub Release $RELEASE_TAG
+  push-release    Build and upload macOS packages to GitHub Release $RELEASE_TAG
   all             build-dmg + build-website + push-website + push-release
 
 Environment:
@@ -233,23 +234,23 @@ codesign_app() {
 
 # ─── ZIP ──────────────────────────────────────────────────────────────────────
 
-build_zip() {
-  build_app
-  codesign_app
-
+package_zip() {
   cd "$RELEASE_DIR"
   rm -f "$ZIP_PATH"
   zip -qr "$ZIP_PATH" "$APP_DISPLAY_NAME.app"
   echo "✓ ZIP: $ZIP_PATH"
 }
 
-# ─── PKG ──────────────────────────────────────────────────────────────────────
-
-build_pkg() {
-  require_command pkgbuild
-
+build_zip() {
   build_app
   codesign_app
+  package_zip
+}
+
+# ─── PKG ──────────────────────────────────────────────────────────────────────
+
+package_pkg() {
+  require_command pkgbuild
 
   local work_dir; work_dir="$(mktemp -d)"
   local root_dir="$work_dir/root"
@@ -325,12 +326,16 @@ POSTINSTALL
 
 }
 
+build_pkg() {
+  build_app
+  codesign_app
+  package_pkg
+}
+
 # ─── DMG ──────────────────────────────────────────────────────────────────────
 
-build_dmg() {
+package_dmg() {
   require_command create-dmg
-
-  build_zip
 
   local bg_png="$RELEASE_DIR/dmg-bg.png"
   python3 "$ROOT_DIR/script/gen_dmg_bg.py" "$bg_png" 2>/dev/null || true
@@ -353,6 +358,21 @@ build_dmg() {
     "$RELEASE_DIR/$APP_DISPLAY_NAME.app"
 
   echo "✓ DMG: $DMG_PATH"
+}
+
+build_dmg() {
+  build_zip
+  package_dmg
+}
+
+build_release() {
+  require_command create-dmg
+  require_command pkgbuild
+  build_app
+  codesign_app
+  package_zip
+  package_pkg
+  package_dmg
 }
 
 # ─── Website ──────────────────────────────────────────────────────────────────
@@ -412,7 +432,7 @@ push_website() {
 
 push_release() {
   require_release_notes
-  [[ "${SKIP_DMG_BUILD:-0}" != "1" ]] && build_dmg
+  [[ "${SKIP_DMG_BUILD:-0}" != "1" ]] && build_release
 
   local notes
   notes="$(cat "$RELEASE_NOTES_FILE")"
@@ -459,14 +479,15 @@ case "${1:-}" in
   build-zip)     build_zip ;;
   build-pkg)     build_pkg ;;
   build-dmg)     build_dmg ;;
+  build-release) build_release ;;
   build-website) build_website ;;
   push-website)  push_website ;;
   push-release)  push_release ;;
   all)
-    build_dmg
+    build_release
     build_website
     push_website
-    push_release
+    SKIP_DMG_BUILD=1 push_release
     ;;
   *) usage; exit 1 ;;
 esac
