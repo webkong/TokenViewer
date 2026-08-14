@@ -26,6 +26,10 @@ pub struct AgentConfig {
     /// None means the agent has no standalone CLI (IDE/plugin-only).
     #[serde(default)]
     pub detect_cmd: Option<String>,
+    /// Alternative binary names that identify the same agent (Orca's
+    /// `detectCmdAliases`), e.g. `mistral-vibe` → `vibe`.
+    #[serde(default)]
+    pub detect_cmd_aliases: Vec<String>,
     /// Whether the detect_cmd binary was found on PATH at last check.
     #[serde(default)]
     pub is_installed: bool,
@@ -50,6 +54,7 @@ impl AgentConfig {
             has_parser: false,
             has_limits: false,
             detect_cmd: None,
+            detect_cmd_aliases: Vec::new(),
             is_installed: false,
             brand_color: "#059669".to_string(),
             logo_file: String::new(),
@@ -337,15 +342,24 @@ pub fn detect_installed_agents(agents: &[AgentConfig]) -> Vec<(String, bool)> {
     agents
         .par_iter()
         .map(|p| {
-            let installed = p
-                .detect_cmd
-                .as_deref()
-                .map(is_command_on_path)
-                .unwrap_or(false)
-                || is_agent_present_on_disk(p);
+            let installed = is_agent_cli_on_path(p) || is_agent_present_on_disk(p);
             (p.source.clone(), installed)
         })
         .collect()
+}
+
+/// CLI strategy: the primary `detect_cmd` or any of its aliases on PATH
+/// (Orca's `getTuiAgentDetectCommands`).
+fn is_agent_cli_on_path(agent: &AgentConfig) -> bool {
+    agent
+        .detect_cmd
+        .as_deref()
+        .map(is_command_on_path)
+        .unwrap_or(false)
+        || agent
+            .detect_cmd_aliases
+            .iter()
+            .any(|alias| is_command_on_path(alias))
 }
 
 /// Check whether agent-specific local data exists.
@@ -363,68 +377,72 @@ fn is_agent_present_in_home(agent: &AgentConfig, home: &Path) -> bool {
 }
 
 /// Candidate files/directories that indicate an agent has been used/installed.
-/// These must be product-owned artifacts, not the configured skills destination.
+/// These must be product-owned artifacts, not the configured skills destination
+/// (TokenViewer may create the skills directory itself while linking skills, so
+/// a bare `~/.<agent>` home is not evidence of an installation).
 fn agent_presence_paths(agent: &AgentConfig, home: &Path) -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
     match agent.source.as_str() {
-            "codebuddy" => {
-                if let Ok(custom_home) = std::env::var("CODEBUDDY_HOME") {
-                    paths.push(PathBuf::from(custom_home));
-                }
-                paths.push(home.join(".codebuddy"));
-                paths.push(home.join(".antigravity_cockpit/codebuddy_accounts"));
-                paths.push(home.join(".antigravity_cockpit/codebuddy_cn_accounts"));
-                paths.push(home.join(".antigravity_cockpit/codebuddy_accounts.json"));
-                paths.push(home.join(".antigravity_cockpit/codebuddy_cn_accounts.json"));
+        "codebuddy" => {
+            if let Ok(custom_home) = std::env::var("CODEBUDDY_HOME") {
+                paths.push(PathBuf::from(custom_home));
             }
-            "workbuddy" => {
-                if let Ok(custom_home) = std::env::var("WORKBUDDY_HOME") {
-                    paths.push(PathBuf::from(custom_home));
-                }
-                paths.push(home.join(".workbuddy"));
-                paths.push(home.join(".antigravity_cockpit/workbuddy_accounts"));
-                paths.push(home.join(".antigravity_cockpit/workbuddy_accounts.json"));
+            paths.push(home.join(".codebuddy/projects"));
+            paths.push(home.join(".antigravity_cockpit/codebuddy_accounts"));
+            paths.push(home.join(".antigravity_cockpit/codebuddy_cn_accounts"));
+            paths.push(home.join(".antigravity_cockpit/codebuddy_accounts.json"));
+            paths.push(home.join(".antigravity_cockpit/codebuddy_cn_accounts.json"));
+        }
+        "workbuddy" => {
+            if let Ok(custom_home) = std::env::var("WORKBUDDY_HOME") {
+                paths.push(PathBuf::from(custom_home));
             }
-            "zcode" => {
-                paths.push(home.join(".zcode"));
-                paths.push(home.join(".zcode/cli/db/db.sqlite"));
-                paths.push(home.join(".zcode/v2/config.json"));
-            }
-            "dsh" => {
-                // Product-owned artifacts only: `~/.dsh/skills` may exist from
-                // TokenViewer skill linking alone, so the bare `~/.dsh` is not
-                // evidence of a DSH installation.
-                paths.push(home.join(".dsh/sessions"));
-                paths.push(home.join(".dsh/settings.yaml"));
-            }
-            "craft" => {
-                paths.push(home.join(".craft-agent"));
-            }
-            "zed" => {
-                paths.push(home.join(".config/zed"));
-                paths.push(home.join("Library/Application Support/Zed"));
-            }
-            "trae" => {
-                paths.push(home.join(".trae"));
-                paths.push(home.join(".antigravity_cockpit/trae_accounts"));
-                paths.push(home.join("Library/Application Support/Trae"));
-            }
-            "windsurf" => {
-                paths.push(home.join(".codeium/windsurf"));
-                paths.push(home.join(".antigravity_cockpit/windsurf_accounts"));
-                paths.push(home.join("Library/Application Support/Windsurf"));
-            }
-            "qoder" => {
-                paths.push(home.join(".qoder"));
-                paths.push(home.join(".antigravity_cockpit/qoder_accounts"));
-                paths.push(home.join("Library/Application Support/Qoder"));
-            }
-            // Extensions and a linked skills directory alone are not enough:
-            // require actual session data when the CLI is not available.
-            "omp" => paths.push(home.join(".omp/agent/sessions")),
-            "pi" => paths.push(home.join(".pi/agent/sessions")),
-            _ => {}
+            paths.push(home.join(".workbuddy/projects"));
+            paths.push(home.join(".antigravity_cockpit/workbuddy_accounts"));
+            paths.push(home.join(".antigravity_cockpit/workbuddy_accounts.json"));
+        }
+        "zcode" => {
+            paths.push(home.join(".zcode/cli/db/db.sqlite"));
+            paths.push(home.join(".zcode/v2/config.json"));
+        }
+        "dsh" => {
+            paths.push(home.join(".dsh/sessions"));
+            paths.push(home.join(".dsh/settings.yaml"));
+        }
+        "craft" => {
+            paths.push(home.join(".craft-agent"));
+        }
+        "zed" => {
+            paths.push(home.join(".config/zed"));
+            paths.push(home.join("Library/Application Support/Zed"));
+        }
+        "trae" => {
+            paths.push(home.join(".antigravity_cockpit/trae_accounts"));
+            paths.push(home.join("Library/Application Support/Trae"));
+        }
+        "windsurf" => {
+            paths.push(home.join(".codeium/windsurf"));
+            paths.push(home.join(".antigravity_cockpit/windsurf_accounts"));
+            paths.push(home.join("Library/Application Support/Windsurf"));
+        }
+        "qoder" => {
+            paths.push(home.join(".antigravity_cockpit/qoder_accounts"));
+            paths.push(home.join("Library/Application Support/Qoder"));
+        }
+        // OhMyPi (ohmypi) and OMP write the same session tree; Pi uses its own.
+        "omp" | "ohmypi" => paths.push(home.join(".omp/agent/sessions")),
+        "pi" => paths.push(home.join(".pi/agent/sessions")),
+        // RooCode is a VS Code extension: its globalStorage task history is the
+        // product-owned artifact (the same tree the usage parser reads).
+        "roocode" => paths.push(
+            crate::parsers::utils::vscode_global_storage(home).join("rooveterinaryinc.roo-cline"),
+        ),
+        // Kilo CLI's local SQLite history (the parser's data source).
+        "kilocli" => paths.push(home.join(".local/share/kilo/kilo.db")),
+        // EveryCode sessions mirror Codex rollout format under ~/.code/sessions.
+        "everycode" => paths.push(home.join(".code/sessions")),
+        _ => {}
     }
 
     paths.sort();
@@ -637,13 +655,7 @@ fn builtin_agents() -> Vec<AgentConfig> {
                 Some("cursor-agent"),
                 "#8c5cf5",
             ),
-            (
-                "dsh",
-                "DeepSeek Harness",
-                "dsh",
-                Some("dsh"),
-                "#4d6bfe",
-            ),
+            ("dsh", "DeepSeek Harness", "dsh", Some("dsh"), "#4d6bfe"),
             ("kiro", "Kiro", "kiro", Some("kiro-cli"), "#059669"),
             (
                 "copilot",
@@ -691,7 +703,7 @@ fn builtin_agents() -> Vec<AgentConfig> {
             ("codebuddy", "CodeBuddy", "codebuddy", None, "#d97757"),
             ("workbuddy", "WorkBuddy", "workbuddy", None, "#1d4ed8"),
             // ── Agent-only (limits card, no parser) ──
-            ("trae", "Trae", "trae", None, "#2563eb"),
+            ("trae", "Trae", "trae", Some("traecli"), "#2563eb"),
             ("windsurf", "Windsurf", "windsurf", None, "#0d9488"),
             ("qoder", "Qoder", "qoder", None, "#7c3aed"),
             // ── Orca-sourced agents (skill-only, no parser, no limits) ──
@@ -743,7 +755,9 @@ fn builtin_agents() -> Vec<AgentConfig> {
                 "qwen-code",
                 "Qwen Code",
                 "qwen",
-                Some("qwen-code"),
+                // Why: the package is qwen-code but the installed CLI binary is
+                // `qwen` (Orca tui-agent-config.ts).
+                Some("qwen"),
                 "#1e90ff",
             ),
             ("rovo", "Rovo Dev", "rovo", Some("rovo"), "#a855f7"),
@@ -774,6 +788,14 @@ fn builtin_agents() -> Vec<AgentConfig> {
                 };
                 let skills_path = format!("{}/{}/skills", home_str, skills_dir);
 
+                // Orca's detectCmdAliases: alternative binary names for the
+                // same agent. Mistral Vibe installs `vibe`; `mistral-vibe`
+                // remains an alias for wrapped installs.
+                let detect_cmd_aliases: Vec<String> = match source {
+                    "mistral-vibe" => vec!["mistral-vibe".to_string()],
+                    _ => Vec::new(),
+                };
+
                 AgentConfig {
                     source: source.to_string(),
                     display_name: display_name.to_string(),
@@ -784,6 +806,7 @@ fn builtin_agents() -> Vec<AgentConfig> {
                     has_parser,
                     has_limits,
                     detect_cmd: detect_cmd.map(|s| s.to_string()),
+                    detect_cmd_aliases,
                     is_installed: false,
                     brand_color: brand_color.to_string(),
                     logo_file: logo_file.to_string(),
@@ -830,6 +853,40 @@ mod tests {
         assert!(dsh.has_parser);
         assert!(!dsh.has_limits);
         assert!(dsh.skills_path.ends_with("/.dsh/skills"));
+    }
+
+    #[test]
+    fn test_detect_cmds_align_with_orca() {
+        let dir = TempDir::new().unwrap();
+        let registry = AgentRegistry::new(dir.path()).unwrap();
+        let agents = registry.all();
+        let find = |s: &str| {
+            agents
+                .iter()
+                .find(|a| a.source == s)
+                .unwrap_or_else(|| panic!("missing agent {s}"))
+        };
+
+        // qwen-code installs the `qwen` binary (package name ≠ binary name).
+        assert_eq!(find("qwen-code").detect_cmd.as_deref(), Some("qwen"));
+        // trae's CLI is `traecli` (not bytedance/trae-agent's `trae-cli`).
+        assert_eq!(find("trae").detect_cmd.as_deref(), Some("traecli"));
+        // mistral-vibe's binary is `vibe`, with the package name as alias.
+        assert_eq!(find("mistral-vibe").detect_cmd.as_deref(), Some("vibe"));
+        assert_eq!(
+            find("mistral-vibe").detect_cmd_aliases,
+            vec!["mistral-vibe".to_string()]
+        );
+        // KiloCode's CLI is `kilo`.
+        assert_eq!(find("kilocode").detect_cmd.as_deref(), Some("kilo"));
+        // Kiro's installer ships `kiro-cli`, not `kiro`.
+        assert_eq!(find("kiro").detect_cmd.as_deref(), Some("kiro-cli"));
+        // Augment's binary is `auggie`.
+        assert_eq!(find("aug").detect_cmd.as_deref(), Some("auggie"));
+        // Continue's CLI is `cn`.
+        assert_eq!(find("continue").detect_cmd.as_deref(), Some("cn"));
+        // Cursor's agent CLI is `cursor-agent`.
+        assert_eq!(find("cursor").detect_cmd.as_deref(), Some("cursor-agent"));
     }
 
     #[test]
@@ -881,6 +938,95 @@ mod tests {
         .unwrap();
 
         assert!(load_install_cache(dir.path()).is_none());
+    }
+
+    #[test]
+    fn test_parser_data_paths_are_installation_evidence() {
+        let home = TempDir::new().unwrap();
+        let h = home.path();
+
+        // roocode: the VS Code extension globalStorage tree its parser reads.
+        let roocode = AgentConfig::custom(
+            "roocode",
+            "RooCode",
+            "~/.roocode/skills",
+            LinkType::Directory,
+        );
+        fs::create_dir_all(h.join(".roocode")).unwrap();
+        assert!(!is_agent_present_in_home(&roocode, h));
+        let roo_dir =
+            crate::parsers::utils::vscode_global_storage(h).join("rooveterinaryinc.roo-cline");
+        fs::create_dir_all(&roo_dir).unwrap();
+        assert!(is_agent_present_in_home(&roocode, h));
+
+        // ohmypi: shares OMP's session tree; the bare ~/.ohmypi is not evidence.
+        let ohmypi =
+            AgentConfig::custom("ohmypi", "OhMyPi", "~/.ohmypi/skills", LinkType::Directory);
+        fs::create_dir_all(h.join(".ohmypi")).unwrap();
+        assert!(!is_agent_present_in_home(&ohmypi, h));
+        fs::create_dir_all(h.join(".omp/agent/sessions")).unwrap();
+        assert!(is_agent_present_in_home(&ohmypi, h));
+
+        // kilocli: its local SQLite history.
+        let kilocli = AgentConfig::custom(
+            "kilocli",
+            "Kilo CLI",
+            "~/.kilocli/skills",
+            LinkType::Directory,
+        );
+        fs::create_dir_all(h.join(".kilocli")).unwrap();
+        assert!(!is_agent_present_in_home(&kilocli, h));
+        fs::create_dir_all(h.join(".local/share/kilo")).unwrap();
+        fs::write(h.join(".local/share/kilo/kilo.db"), b"").unwrap();
+        assert!(is_agent_present_in_home(&kilocli, h));
+
+        // everycode: rollout-format sessions under ~/.code/sessions.
+        let everycode = AgentConfig::custom(
+            "everycode",
+            "EveryCode",
+            "~/.everycode/skills",
+            LinkType::Directory,
+        );
+        fs::create_dir_all(h.join(".everycode")).unwrap();
+        assert!(!is_agent_present_in_home(&everycode, h));
+        fs::create_dir_all(h.join(".code/sessions")).unwrap();
+        assert!(is_agent_present_in_home(&everycode, h));
+    }
+
+    #[test]
+    fn test_bare_home_dirs_are_not_installation_evidence() {
+        let home = TempDir::new().unwrap();
+        let h = home.path();
+
+        // Bare ~/.<source> (the skills parent) alone must never count — skill
+        // linking can create it — only product-owned artifacts below it do.
+        for source in ["codebuddy", "workbuddy", "zcode", "trae", "qoder", "dsh"] {
+            let agent = AgentConfig::custom(
+                source,
+                source,
+                &format!("~/.{source}/skills"),
+                LinkType::Directory,
+            );
+            fs::create_dir_all(h.join(format!(".{source}"))).unwrap();
+            assert!(
+                !is_agent_present_in_home(&agent, h),
+                "bare ~/.{source} must not be installation evidence"
+            );
+        }
+
+        // The product-owned children of the same trees do count.
+        let codebuddy = AgentConfig::custom(
+            "codebuddy",
+            "CodeBuddy",
+            "~/.codebuddy/skills",
+            LinkType::Directory,
+        );
+        fs::create_dir_all(h.join(".codebuddy/projects")).unwrap();
+        assert!(is_agent_present_in_home(&codebuddy, h));
+
+        let dsh = AgentConfig::custom("dsh", "dsh", "~/.dsh/skills", LinkType::Directory);
+        fs::create_dir_all(h.join(".dsh/sessions")).unwrap();
+        assert!(is_agent_present_in_home(&dsh, h));
     }
 
     #[test]

@@ -23,6 +23,8 @@ final class AgentRegistry: ObservableObject {
     private var agents: [String: AgentConfig] = [:]
     private var installStatus: [String: Bool] = [:]
     private var loaded = false
+    /// Debounce timestamp for `refreshInstallStatus()` (see that method).
+    private var lastInstallRefreshAt: Date?
 
     private init() {}
 
@@ -123,7 +125,19 @@ final class AgentRegistry: ObservableObject {
     }
 
     /// Refresh install status through the Rust core and publish one consistent agent snapshot.
+    ///
+    /// The Rust endpoint deliberately bypasses the 1-hour status cache (it is
+    /// the explicit refresh path), so collapse redundant triggers — Settings
+    /// fires `.onAppear` for both the window and the skills section — with a
+    /// short in-memory debounce instead of re-spawning `which` for every agent
+    /// on each one.
     func refreshInstallStatus() {
+        let now = Date()
+        if let last = lastInstallRefreshAt, now.timeIntervalSince(last) < 5 {
+            return
+        }
+        lastInstallRefreshAt = now
+
         Task.detached {
             var installMap: [String: Bool] = [:]
             if let detectData = CoreBridge.shared.skillsDetectInstalled(),
