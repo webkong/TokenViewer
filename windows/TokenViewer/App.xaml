@@ -3,8 +3,43 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnExplicitShutdown">
   <Application.Resources>
-    <SolidColorBrush x:Key="BrandBrush" Color="#059669" />
-    <SolidColorBrush x:Key="SurfaceBrush" Color="#111827" />
+    <!-- Brand + surface tokens (values match the macOS emerald theme). -->
+    <SolidColorBrush x:Key="Brand" Color="#059669" />
+    <SolidColorBrush x:Key="WindowBg" Color="#0B1220" />
+    <SolidColorBrush x:Key="PanelBg" Color="#111827" />
+    <SolidColorBrush x:Key="PanelBorder" Color="#243244" />
+    <SolidColorBrush x:Key="MutedText" Color="#94A3B8" />
+    <SolidColorBrush x:Key="InputBg" Color="#0F172A" />
+
+    <!-- Chart / token series colors (mirror macOS TrendChartView + TokenTypeBar). -->
+    <SolidColorBrush x:Key="InputBrush" Color="#3B82F6" />
+    <SolidColorBrush x:Key="OutputBrush" Color="#22C55E" />
+    <SolidColorBrush x:Key="CacheBrush" Color="#F59E0B" />
+    <SolidColorBrush x:Key="CacheReadBrush" Color="#8B5CF6" />
+    <SolidColorBrush x:Key="CostBrush" Color="#EF4444" />
+
+    <Style x:Key="Card" TargetType="Border">
+      <Setter Property="CornerRadius" Value="18" />
+      <Setter Property="Background" Value="{StaticResource PanelBg}" />
+      <Setter Property="BorderBrush" Value="{StaticResource PanelBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="18" />
+    </Style>
+
+    <Style x:Key="CardTitle" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <Style x:Key="MutedLabel" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Foreground" Value="{StaticResource MutedText}" />
+    </Style>
+
+    <Style TargetType="TextBlock">
+      <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+      <Setter Property="TextOptions.TextRenderingMode" Value="ClearType" />
+    </Style>
   </Application.Resources>
 </Application>
-

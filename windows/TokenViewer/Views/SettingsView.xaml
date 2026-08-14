@@ -1,0 +1,148 @@
+<UserControl x:Class="TokenViewerWindows.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:TokenViewerWindows.Views">
+  <UserControl.Resources>
+    <views:InverseBoolConverter x:Key="InverseBool" />
+  </UserControl.Resources>
+  <TabControl Background="Transparent" BorderThickness="0" TabStripPlacement="Left">
+    <TabControl.ItemContainerStyle>
+      <Style TargetType="TabItem">
+        <Setter Property="Foreground" Value="{StaticResource MutedText}" />
+        <Setter Property="Padding" Value="12,8" />
+      </Style>
+    </TabControl.ItemContainerStyle>
+
+    <!-- General -->
+    <TabItem Header="{views:L10n general}">
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16">
+          <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+            <StackPanel>
+              <TextBlock Text="{views:L10n general}" Style="{StaticResource CardTitle}" Margin="0,0,0,12" />
+              <CheckBox Content="{views:L10n launchAtLogin}" IsChecked="{Binding LaunchAtStartup, Mode=TwoWay}" Margin="0,0,0,10" />
+              <CheckBox Content="{views:L10n showMenuBarIcon}" IsChecked="{Binding ShowMenuBarIcon, Mode=TwoWay}" Margin="0,0,0,10" />
+              <TextBlock Text="{views:L10n showMenuBarIconDesc}" Style="{StaticResource MutedLabel}" TextWrapping="Wrap" Margin="20,0,0,12" />
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="180" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{views:L10n syncFrequency}" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1"
+                          SelectedValuePath="Key"
+                          DisplayMemberPath="Value"
+                          ItemsSource="{Binding SyncFrequencyOptions}"
+                          SelectedValue="{Binding SyncFrequencyMinutes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+              </Grid>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </TabItem>
+
+    <!-- Appearance -->
+    <TabItem Header="{views:L10n appearance}">
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16">
+          <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+            <StackPanel>
+              <TextBlock Text="{views:L10n appearance}" Style="{StaticResource CardTitle}" Margin="0,0,0,12" />
+              <Grid Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="180" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{views:L10n theme}" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" SelectedValuePath="Key" DisplayMemberPath="Value"
+                          ItemsSource="{Binding ThemeOptions}"
+                          SelectedValue="{Binding Theme, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+              </Grid>
+              <Grid Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="180" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{views:L10n currency}" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" SelectedValuePath="Key" DisplayMemberPath="Value"
+                          ItemsSource="{Binding CurrencyOptions}"
+                          SelectedValue="{Binding Currency, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+              </Grid>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="180" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{views:L10n languageLabel}" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" SelectedValuePath="Key" DisplayMemberPath="Value"
+                          ItemsSource="{Binding LanguageOptions}"
+                          SelectedValue="{Binding Language, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+              </Grid>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </TabItem>
+
+    <!-- Menu Bar -->
+    <TabItem Header="{views:L10n menuBarSectionTitle}">
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16">
+          <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+            <StackPanel>
+              <TextBlock Text="{views:L10n menuBarPanel}" Style="{StaticResource CardTitle}" Margin="0,0,0,4" />
+              <TextBlock Text="{views:L10n menuBarPanelDesc}" Style="{StaticResource MutedLabel}" TextWrapping="Wrap" Margin="0,0,0,12" />
+              <CheckBox Content="{views:L10n summary}" IsChecked="{Binding PanelShowSummary, Mode=TwoWay}" Margin="0,0,0,8" />
+              <CheckBox Content="{views:L10n limits}" IsChecked="{Binding PanelShowLimits, Mode=TwoWay}" Margin="0,0,0,8" />
+              <CheckBox Content="{views:L10n trend}" IsChecked="{Binding PanelShowTrend, Mode=TwoWay}" Margin="0,0,0,8" />
+              <CheckBox Content="{views:L10n heatmap}" IsChecked="{Binding PanelShowHeatmap, Mode=TwoWay}" Margin="0,0,0,8" />
+              <CheckBox Content="{views:L10n topModels}" IsChecked="{Binding PanelShowModels, Mode=TwoWay}" />
+
+              <TextBlock Text="{views:L10n menuBarLimitsCards}" Style="{StaticResource CardTitle}" Margin="0,12,0,8" />
+              <ItemsControl ItemsSource="{Binding LimitVisibilityItems}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <CheckBox Content="{Binding Name}" IsChecked="{Binding IsVisible, Mode=TwoWay}" Margin="0,0,14,8" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </TabItem>
+
+    <!-- Data -->
+    <TabItem Header="{views:L10n data}">
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16">
+          <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+            <StackPanel>
+              <TextBlock Text="{views:L10n rebuildData}" Style="{StaticResource CardTitle}" Margin="0,0,0,4" />
+              <TextBlock Text="{views:L10n rebuildDataDesc}" Style="{StaticResource MutedLabel}" TextWrapping="Wrap" Margin="0,0,0,12" />
+              <Button Content="{views:L10n rebuildData}" Click="OnRebuildClick"
+                      IsEnabled="{Binding IsRebuilding, Converter={StaticResource InverseBool}}"
+                      HorizontalAlignment="Left" Padding="14,8" Background="{StaticResource Brand}" BorderThickness="0" Foreground="White" />
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+            <StackPanel>
+              <TextBlock Text="{views:L10n resetSettings}" Style="{StaticResource CardTitle}" Margin="0,0,0,4" />
+              <TextBlock Text="{views:L10n resetSettingsDesc}" Style="{StaticResource MutedLabel}" TextWrapping="Wrap" Margin="0,0,0,12" />
+              <Button Content="{views:L10n resetSettings}" Click="OnResetClick"
+                      HorizontalAlignment="Left" Padding="14,8" Background="{StaticResource PanelBorder}" BorderThickness="0" Foreground="White" />
+            </StackPanel>
+          </Border>
+
+          <TextBlock Text="{Binding DataStatus}" Style="{StaticResource MutedLabel}" TextWrapping="Wrap" />
+        </StackPanel>
+      </ScrollViewer>
+    </TabItem>
+  </TabControl>
+</UserControl>

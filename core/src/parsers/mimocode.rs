@@ -11,7 +11,7 @@ pub fn parse(
     let mut all_records = Vec::new();
     let mut cursor = FileCursor::from_json(cursor_data);
 
-    let db_path = home_dir.join(".local/share/mimocode/mimocode.db");
+    let db_path = resolve_local_data_path(home_dir, "mimocode/mimocode.db");
     if !db_path.exists() {
         return Ok((vec![], cursor.to_json()));
     }

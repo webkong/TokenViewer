@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Linq;
 using System.Windows.Threading;
 using TokenViewerWindows.Infrastructure;
 using TokenViewerWindows.Models;
@@ -10,19 +9,36 @@ namespace TokenViewerWindows.ViewModels;
 public sealed class LimitsViewModel : ObservableObject
 {
     private readonly Dispatcher _dispatcher;
-    private readonly DispatcherTimer _timer;
+    private readonly DispatcherTimer _refreshTimer;
+    private readonly DispatcherTimer _countdownTimer;
     private bool _isLoading;
-    private string _status = "Ready";
+    private string _status;
+    private DateTime _now = DateTime.Now;
 
     public LimitsViewModel(Dispatcher dispatcher)
     {
         _dispatcher = dispatcher;
         Agents = new ObservableCollection<AgentLimit>();
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(10) };
-        _timer.Tick += async (_, _) => await RefreshAsync();
+        _status = L10n.Instance["statusReady"];
+
+        _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(10) };
+        _refreshTimer.Tick += async (_, _) => await RefreshAsync();
+
+        // Drives the per-minute reset countdown; lives on the app-level view model
+        // (constructed once), so it does not leak per window.
+        _countdownTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+        _countdownTimer.Tick += (_, _) => Now = DateTime.Now;
+        _countdownTimer.Start();
     }
 
     public ObservableCollection<AgentLimit> Agents { get; }
+
+    /// <summary>Configured agents with a limit display, sorted first.</summary>
+    public IReadOnlyList<AgentLimit> ActiveAgents =>
+        Agents.Where(a => a.Configured && a.HasLimitDisplay).ToList();
+
+    public IReadOnlyList<AgentLimit> InactiveAgents =>
+        Agents.Where(a => !(a.Configured && a.HasLimitDisplay)).ToList();
 
     public bool IsLoading
     {
@@ -36,16 +52,20 @@ public sealed class LimitsViewModel : ObservableObject
         private set => SetProperty(ref _status, value);
     }
 
-    public void StartAutoRefresh()
+    /// <summary>Current time, bumped once a minute so countdown bindings re-evaluate.</summary>
+    public DateTime Now
     {
-        _timer.Start();
+        get => _now;
+        private set => SetProperty(ref _now, value);
     }
+
+    public void StartAutoRefresh() => _refreshTimer.Start();
 
     public async Task RefreshAsync()
     {
         if (IsLoading) return;
         IsLoading = true;
-        Status = "Refreshing limits…";
+        Status = L10n.Instance["refreshingLimits"];
 
         try
         {
@@ -57,12 +77,14 @@ public sealed class LimitsViewModel : ObservableObject
                 {
                     Agents.Add(limit);
                 }
-                Status = "Ready";
+                Status = L10n.Instance["statusReady"];
+                RaisePropertyChanged(nameof(ActiveAgents));
+                RaisePropertyChanged(nameof(InactiveAgents));
             });
         }
-        catch (Exception ex)
+        catch
         {
-            Status = $"Limits failed: {ex.Message}";
+            Status = L10n.Instance["statusSyncFailed"];
         }
         finally
         {
@@ -70,4 +92,3 @@ public sealed class LimitsViewModel : ObservableObject
         }
     }
 }
-

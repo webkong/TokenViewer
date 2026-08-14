@@ -463,6 +463,44 @@ pub extern "C" fn tt_free_string(ptr: *mut c_char) {
     }
 }
 
+/// Cursor-specific narrow read-only helper: reads the Cursor account access token
+/// from a VS Code `state.vscdb` SQLite database. Fixed schema and a fixed query
+/// (no arbitrary SQL, no other keys). Returns a NUL-terminated string that the
+/// caller frees with `tt_free_string`, or null on any error.
+///
+/// # Safety
+/// `db_path` must be a valid, non-null, NUL-terminated C string.
+#[no_mangle]
+pub extern "C" fn tt_cursor_access_token(db_path: *const c_char) -> *mut c_char {
+    if db_path.is_null() {
+        return std::ptr::null_mut();
+    }
+    let path = match unsafe { CStr::from_ptr(db_path) }.to_str() {
+        Ok(s) => s,
+        Err(_) => return std::ptr::null_mut(),
+    };
+    match read_cursor_access_token(path) {
+        Some(token) => CString::new(token)
+            .map(|c| c.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        None => std::ptr::null_mut(),
+    }
+}
+
+fn read_cursor_access_token(db_path: &str) -> Option<String> {
+    let conn = rusqlite::Connection::open_with_flags(
+        db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .ok()?;
+    conn.query_row(
+        "SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken' LIMIT 1",
+        [],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+}
+
 /// Destroy the core handle.
 ///
 /// # Safety
@@ -1674,4 +1712,45 @@ unsafe fn from_cstring_json<T: serde::de::DeserializeOwned>(
         .to_str()
         .map_err(|e| format!("Invalid UTF-8: {}", e))?;
     serde_json::from_str(s).map_err(|e| format!("Failed to parse JSON: {}", e))
+}
+
+#[cfg(test)]
+mod cursor_access_token_tests {
+    use super::read_cursor_access_token;
+
+    #[test]
+    fn reads_cursor_access_token_from_fixture_db() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let db_path = dir.path().join("state.vscdb");
+
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE ItemTable (key TEXT, value TEXT); \
+             INSERT INTO ItemTable (key, value) VALUES ('cursorAuth/accessToken', 'eyJ-test-token');",
+        )
+        .unwrap();
+        drop(conn);
+
+        let token = read_cursor_access_token(db_path.to_str().unwrap());
+        assert_eq!(token.as_deref(), Some("eyJ-test-token"));
+    }
+
+    #[test]
+    fn returns_none_when_db_or_key_missing() {
+        let dir = tempfile::TempDir::new().unwrap();
+
+        // Missing database file.
+        assert_eq!(
+            read_cursor_access_token(dir.path().join("missing.vscdb").to_str().unwrap()),
+            None
+        );
+
+        // Empty database (no ItemTable).
+        let empty = dir.path().join("empty.vscdb");
+        let conn = rusqlite::Connection::open(&empty).unwrap();
+        conn.execute_batch("CREATE TABLE ItemTable (key TEXT, value TEXT);")
+            .unwrap();
+        drop(conn);
+        assert_eq!(read_cursor_access_token(empty.to_str().unwrap()), None);
+    }
 }

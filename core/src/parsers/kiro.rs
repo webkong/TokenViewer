@@ -32,7 +32,15 @@ pub fn parse(
     #[cfg(target_os = "macos")]
     let dev_data = home_dir
         .join("Library/Application Support/Kiro/User/globalStorage/kiro.kiroagent/dev_data");
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    let dev_data = resolve_first_existing(
+        home_dir,
+        &[
+            "AppData/Roaming/Kiro/User/globalStorage/kiro.kiroagent/dev_data",
+            ".config/Kiro/User/globalStorage/kiro.kiroagent/dev_data",
+        ],
+    );
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let dev_data = home_dir.join(".config/Kiro/User/globalStorage/kiro.kiroagent/dev_data");
 
     // Primary: devdata.sqlite — accurate per-session data with timestamps
@@ -167,7 +175,15 @@ pub fn parse(
     // conversations_v2 table: key=cwd, conversation_id, value=JSON with history[].request_metadata
     #[cfg(target_os = "macos")]
     let kiro_cli_db = home_dir.join("Library/Application Support/kiro-cli/data.sqlite3");
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    let kiro_cli_db = resolve_first_existing(
+        home_dir,
+        &[
+            "AppData/Local/kiro-cli/data.sqlite3",
+            ".local/share/kiro-cli/data.sqlite3",
+        ],
+    );
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let kiro_cli_db = home_dir.join(".local/share/kiro-cli/data.sqlite3");
 
     if kiro_cli_db.exists() {
@@ -733,7 +749,15 @@ fn resolve_kiro_model(timeline: &[(i64, String)], ts_ms: i64) -> Option<String> 
 fn read_kiro_settings_model(home_dir: &std::path::Path) -> Option<String> {
     #[cfg(target_os = "macos")]
     let storage_path = home_dir.join("Library/Application Support/Kiro/User/settings.json");
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    let storage_path = resolve_first_existing(
+        home_dir,
+        &[
+            "AppData/Roaming/Kiro/User/settings.json",
+            ".config/Kiro/User/settings.json",
+        ],
+    );
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let storage_path = home_dir.join(".config/Kiro/User/settings.json");
 
     let content = std::fs::read_to_string(&storage_path).ok()?;

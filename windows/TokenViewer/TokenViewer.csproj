@@ -9,9 +9,28 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>TokenViewerWindows</RootNamespace>
     <AssemblyName>TokenViewer</AssemblyName>
+    <ApplicationIcon>Resources\TokenViewer.ico</ApplicationIcon>
     <CoreRustTarget Condition="'$(CoreRustTarget)' == ''">x86_64-pc-windows-msvc</CoreRustTarget>
     <CoreDllName>tokenviewer_core.dll</CoreDllName>
   </PropertyGroup>
+
+  <!-- The WindowsDesktop SDK (UseWPF/UseWindowsForms) drops System.IO and
+       System.Net.Http from the default ImplicitUsings set. Restore them as
+       global usings so the existing services (SettingsStore, UpdateService,
+       LimitsService) and CoreBridge resolve Path/File/Directory/HttpClient. -->
+  <ItemGroup>
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
+  </ItemGroup>
+
+  <!-- Brand + app icon assets: embed as WPF Resource so they ship in the
+       publish output; remove them from the default None glob first. -->
+  <ItemGroup>
+    <None Remove="Resources\**\*.png" />
+    <None Remove="Resources\**\*.ico" />
+    <Resource Include="Resources\**\*.png" />
+    <Resource Include="Resources\**\*.ico" />
+  </ItemGroup>
 
   <Target Name="CopyRustCoreToOutput" AfterTargets="Build;Publish">
     <PropertyGroup>
