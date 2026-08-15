@@ -513,7 +513,8 @@ final class SkillManagerViewModel: ObservableObject {
         token: String? = nil,
         gitBranch: String = "main",
         userName: String? = nil,
-        userEmail: String? = nil
+        userEmail: String? = nil,
+        force: Bool = false
     ) {
         Task.detached {
             if let remoteURL, let platform, let token {
@@ -533,7 +534,9 @@ final class SkillManagerViewModel: ObservableObject {
                 self.gitStatusName = "pulling"
                 self.gitStatusMessage = nil
             }
-            let data = CoreBridge.shared.skillsGitPull()
+            let data = force
+                ? CoreBridge.shared.skillsGitForcePull()
+                : CoreBridge.shared.skillsGitPull()
             await MainActor.run {
                 self.handleGitSyncResult(data, successMessage: L10n.shared.toastPulled)
             }
@@ -555,7 +558,8 @@ final class SkillManagerViewModel: ObservableObject {
         gitBranch: String = "main",
         userName: String? = nil,
         userEmail: String? = nil,
-        filterPayload: Data? = nil
+        filterPayload: Data? = nil,
+        force: Bool = false
     ) {
         Task.detached {
             if let remoteURL, let platform, let token {
@@ -575,8 +579,16 @@ final class SkillManagerViewModel: ObservableObject {
                 self.gitStatusName = "pushing"
                 self.gitStatusMessage = nil
             }
-            let data = filterPayload.flatMap(CoreBridge.shared.skillsGitPushFiltered)
-                ?? CoreBridge.shared.skillsGitPush()
+            let data: Data?
+            if let filterPayload {
+                data = force
+                    ? CoreBridge.shared.skillsGitForcePushFiltered(filterPayload)
+                    : CoreBridge.shared.skillsGitPushFiltered(filterPayload)
+            } else {
+                data = force
+                    ? CoreBridge.shared.skillsGitForcePush()
+                    : CoreBridge.shared.skillsGitPush()
+            }
             await MainActor.run {
                 self.handleGitSyncResult(data, successMessage: L10n.shared.toastPushed)
             }

@@ -3,7 +3,10 @@ use std::io::Write;
 use std::path::Path;
 
 use git2::build::CheckoutBuilder;
-use git2::{Cred, Oid, RemoteCallbacks, Repository, Signature, Status, StatusOptions};
+use git2::{
+    Cred, ErrorClass, ErrorCode, Oid, RemoteCallbacks, Repository, Signature, StashApplyOptions,
+    StashFlags, Status, StatusOptions,
+};
 
 use crate::skills::models::{GitConnectivity, GitStatusInfo, PendingChange};
 
@@ -595,9 +598,13 @@ impl GitEngine {
             fetch_options.remote_callbacks(Self::make_remote_callbacks(tok));
         }
 
-        remote
-            .fetch(&[branch], Some(&mut fetch_options), None)
-            .map_err(|e| format!("Failed to fetch from origin: {}", e))?;
+        if let Err(error) = remote.fetch(&[branch], Some(&mut fetch_options), None) {
+            if error.code() == ErrorCode::NotFound && error.class() == ErrorClass::Reference {
+                debug_log!(" fetch_origin: remote branch does not exist yet");
+                return Ok(());
+            }
+            return Err(format!("Failed to fetch from origin: {error}"));
+        }
         drop(remote);
 
         if let Err(error) = self.ensure_upstream_tracking(branch) {
@@ -992,7 +999,12 @@ impl GitEngine {
         Ok(())
     }
 
-    fn push_filtered_commit(&self, oid: Oid, token: Option<&str>) -> Result<(), String> {
+    fn push_filtered_commit(
+        &self,
+        oid: Oid,
+        token: Option<&str>,
+        force: bool,
+    ) -> Result<(), String> {
         let branch = self.sync_branch();
         let temporary_ref = "refs/tokenviewer/filtered-sync";
         self.repo
@@ -1008,7 +1020,8 @@ impl GitEngine {
             if let Some(token) = token {
                 push_options.remote_callbacks(Self::make_remote_callbacks(token));
             }
-            let refspec = format!("+{temporary_ref}:refs/heads/{branch}");
+            let force_prefix = if force { "+" } else { "" };
+            let refspec = format!("{force_prefix}{temporary_ref}:refs/heads/{branch}");
             remote
                 .push(&[&refspec], Some(&mut push_options))
                 .map_err(|e| format!("Failed to push filtered sync: {}", e))?;
@@ -1020,6 +1033,7 @@ impl GitEngine {
                     "filtered sync pushed",
                 )
                 .map_err(|e| format!("Failed to update remote tracking branch: {}", e))?;
+            self.ensure_upstream_tracking(&branch)?;
             Ok(())
         })();
 
@@ -1086,8 +1100,202 @@ impl GitEngine {
         }
     }
 
-    /// Force pull from origin, replacing the local branch and worktree.
+    fn stash_pending_changes(
+        &mut self,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<Option<Oid>, String> {
+        if self.get_pending_changes()?.is_empty() {
+            return Ok(None);
+        }
+        let signature = self.signature(user_name, user_email)?;
+        self.repo
+            .stash_save(
+                &signature,
+                "TokenViewer safe sync",
+                Some(StashFlags::INCLUDE_UNTRACKED),
+            )
+            .map(Some)
+            .map_err(|e| format!("Failed to preserve local Skills changes: {e}"))
+    }
+
+    fn stash_index(&mut self, expected_oid: Oid) -> Result<usize, String> {
+        let mut found = None;
+        self.repo
+            .stash_foreach(|index, _message, oid| {
+                if *oid == expected_oid {
+                    found = Some(index);
+                    false
+                } else {
+                    true
+                }
+            })
+            .map_err(|e| format!("Failed to inspect preserved Skills changes: {e}"))?;
+        found.ok_or_else(|| "Preserved local Skills changes could not be found".to_string())
+    }
+
+    fn restore_stash(&mut self, stash_oid: Oid) -> Result<(), String> {
+        let index = self.stash_index(stash_oid)?;
+        let mut options = StashApplyOptions::new();
+        self.repo
+            .stash_apply(index, Some(&mut options))
+            .map_err(|e| {
+                format!(
+                    "Remote changes were integrated, but local Skills changes conflict while being restored. The stash was kept for recovery: {e}"
+                )
+            })?;
+        self.repo
+            .stash_drop(index)
+            .map_err(|e| format!("Local changes were restored but the preserved stash could not be removed: {e}"))
+    }
+
+    fn integrate_remote(
+        &mut self,
+        remote_oid: Oid,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<(), RebaseFailure> {
+        let branch = self.current_branch().map_err(RebaseFailure::Error)?;
+        let head_oid = self
+            .repo
+            .head()
+            .ok()
+            .and_then(|head| head.target())
+            .ok_or_else(|| RebaseFailure::Error("Local branch has no commits".to_string()))?;
+        if head_oid == remote_oid {
+            return Ok(());
+        }
+
+        let merge_base = self
+            .repo
+            .merge_base(head_oid, remote_oid)
+            .map_err(|e| RebaseFailure::Error(format!("Failed to compare local and remote history: {e}")))?;
+        if merge_base == remote_oid {
+            return Ok(());
+        }
+        if merge_base == head_oid {
+            let local_ref = format!("refs/heads/{branch}");
+            self.repo
+                .reference(&local_ref, remote_oid, true, "TokenViewer fast-forward pull")
+                .map_err(|e| RebaseFailure::Error(format!("Failed to fast-forward local branch: {e}")))?;
+            self.repo
+                .set_head(&local_ref)
+                .map_err(|e| RebaseFailure::Error(format!("Failed to update local HEAD: {e}")))?;
+            let mut checkout = CheckoutBuilder::new();
+            checkout.force();
+            self.repo
+                .checkout_head(Some(&mut checkout))
+                .map_err(|e| RebaseFailure::Error(format!("Failed to check out remote Skills: {e}")))?;
+            return Ok(());
+        }
+
+        let local = self
+            .repo
+            .find_annotated_commit(head_oid)
+            .map_err(|e| RebaseFailure::Error(format!("Failed to read local commit: {e}")))?;
+        let upstream = self
+            .repo
+            .find_annotated_commit(remote_oid)
+            .map_err(|e| RebaseFailure::Error(format!("Failed to read remote commit: {e}")))?;
+        let signature = self
+            .signature(user_name, user_email)
+            .map_err(RebaseFailure::Error)?;
+        let mut rebase = self
+            .repo
+            .rebase(Some(&local), Some(&upstream), None, None)
+            .map_err(|e| RebaseFailure::Error(format!("Failed to start rebase: {e}")))?;
+
+        while let Some(operation) = rebase.next() {
+            if let Err(error) = operation {
+                let _ = rebase.abort();
+                return Err(RebaseFailure::Error(format!("Failed to apply local commit: {error}")));
+            }
+            let index = self
+                .repo
+                .index()
+                .map_err(|e| RebaseFailure::Error(format!("Failed to inspect rebase: {e}")))?;
+            if index.has_conflicts() {
+                let paths = Self::conflict_paths_from_index(&index).unwrap_or_default();
+                drop(index);
+                let _ = rebase.abort();
+                return Err(RebaseFailure::Conflicted(paths));
+            }
+            drop(index);
+            if let Err(error) = rebase.commit(None, &signature, None) {
+                let _ = rebase.abort();
+                return Err(RebaseFailure::Error(format!("Failed to commit rebased Skills: {error}")));
+            }
+        }
+        rebase
+            .finish(Some(&signature))
+            .map_err(|e| RebaseFailure::Error(format!("Failed to finish rebase: {e}")))?;
+        let rebased_oid = self
+            .repo
+            .head()
+            .ok()
+            .and_then(|head| head.target())
+            .ok_or_else(|| RebaseFailure::Error("Rebase finished without a HEAD commit".into()))?;
+        let local_ref = format!("refs/heads/{branch}");
+        self.repo
+            .reference(&local_ref, rebased_oid, true, "TokenViewer safe rebase")
+            .map_err(|e| RebaseFailure::Error(format!("Failed to update rebased branch: {e}")))?;
+        self.repo
+            .set_head(&local_ref)
+            .map_err(|e| RebaseFailure::Error(format!("Failed to restore local branch: {e}")))?;
+        Ok(())
+    }
+
+    /// Pull from origin while preserving tracked and untracked local changes.
     pub fn pull(
+        &mut self,
+        token: Option<&str>,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<GitStatusInfo, String> {
+        debug_log!(" safe_pull: start");
+        if let Some(status) = self.sync_blocked_status()? {
+            return Ok(status);
+        }
+        let stash_oid = self.stash_pending_changes(user_name, user_email)?;
+        let remote_oid = match self.fetch_remote_head(token) {
+            Ok(Some(oid)) => oid,
+            Ok(None) => {
+                if let Some(stash_oid) = stash_oid {
+                    self.restore_stash(stash_oid)?;
+                }
+                return Err(format!("Remote branch '{}' has no commits", self.sync_branch()));
+            }
+            Err(error) => {
+                if let Some(stash_oid) = stash_oid {
+                    self.restore_stash(stash_oid)?;
+                }
+                return Err(error);
+            }
+        };
+
+        if let Err(failure) = self.integrate_remote(remote_oid, user_name, user_email) {
+            if let Some(stash_oid) = stash_oid {
+                self.restore_stash(stash_oid)?;
+            }
+            return Ok(self.status_for_rebase_failure(failure));
+        }
+        if let Some(stash_oid) = stash_oid {
+            if let Err(message) = self.restore_stash(stash_oid) {
+                let mut status = GitStatusInfo::conflicted(&message);
+                status.changes = self.conflict_paths().unwrap_or_default().into_iter().map(|file_path| PendingChange {
+                    file_path,
+                    change_type: "conflicted".to_string(),
+                }).collect();
+                return Ok(status);
+            }
+        }
+
+        debug_log!(" safe_pull: done");
+        self.get_status()
+    }
+
+    /// Force pull from origin, replacing the local branch and worktree.
+    pub fn force_pull(
         &mut self,
         token: Option<&str>,
         _user_name: Option<&str>,
@@ -1120,7 +1328,7 @@ impl GitEngine {
         self.get_status()
     }
 
-    /// Auto-commit pending changes and force push the local snapshot.
+    /// Auto-commit pending changes, rebase on the remote branch, and push safely.
     pub fn stage_and_push(
         &mut self,
         _message: &str,
@@ -1132,8 +1340,13 @@ impl GitEngine {
         self.auto_commit(user_name, user_email)?;
 
         if self.has_remote() {
-            debug_log!(" stage_and_push: has remote, starting force push");
-            self.push(token)?;
+            if let Some(remote_oid) = self.fetch_remote_head(token)? {
+                if let Err(failure) = self.integrate_remote(remote_oid, user_name, user_email) {
+                    return Ok(self.status_for_rebase_failure(failure));
+                }
+            }
+            debug_log!(" stage_and_push: has remote, starting safe push");
+            self.push(token, false)?;
             debug_log!(" stage_and_push: push ok");
         } else {
             debug_log!(" stage_and_push: no remote configured");
@@ -1142,7 +1355,20 @@ impl GitEngine {
         self.get_status()
     }
 
-    /// Replace matching remote Skills with the selected local snapshot and force push.
+    pub fn stage_and_force_push(
+        &mut self,
+        token: Option<&str>,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<GitStatusInfo, String> {
+        self.auto_commit(user_name, user_email)?;
+        if self.has_remote() {
+            self.push(token, true)?;
+        }
+        self.get_status()
+    }
+
+    /// Replace matching remote Skills with the selected local snapshot and push safely.
     pub fn stage_and_push_filtered(
         &mut self,
         _message: &str,
@@ -1160,7 +1386,11 @@ impl GitEngine {
             let head_oid = self.repo.head().ok().and_then(|head| head.target());
             let remote_parent = self.fetch_remote_head(token)?;
             let base_oid = match (remote_parent, head_oid) {
-                (Some(remote), _) => remote,
+                (Some(remote), Some(head)) => self
+                    .repo
+                    .merge_base(head, remote)
+                    .map_err(|e| format!("Failed to find filtered sync merge base: {e}"))?,
+                (Some(remote), None) => remote,
                 (None, Some(head)) => head,
                 (None, None) => return Err("Filtered sync requires an initial commit".into()),
             };
@@ -1172,7 +1402,7 @@ impl GitEngine {
                 user_email,
             ) {
                 Ok(Some(commit_oid)) => {
-                    self.push_filtered_commit(commit_oid, token)?;
+                    self.push_filtered_commit(commit_oid, token, false)?;
                     self.adopt_filtered_sync_commit(commit_oid)?;
                 }
                 Ok(None) => {
@@ -1190,22 +1420,45 @@ impl GitEngine {
         self.get_status()
     }
 
+    pub fn stage_and_force_push_filtered(
+        &mut self,
+        filter: &SkillSyncFilter,
+        token: Option<&str>,
+        user_name: Option<&str>,
+        user_email: Option<&str>,
+    ) -> Result<GitStatusInfo, String> {
+        if let Some(status) = self.sync_blocked_status()? {
+            return Ok(status);
+        }
+        if self.has_remote() {
+            let head_oid = self.repo.head().ok().and_then(|head| head.target());
+            let remote_parent = self.fetch_remote_head(token)?;
+            let base_oid = remote_parent.or(head_oid).ok_or("Filtered sync requires an initial commit")?;
+            if let Some(commit_oid) = self
+                .commit_filtered_snapshot(filter, base_oid, remote_parent, user_name, user_email)
+                .map_err(|failure| match failure {
+                    RebaseFailure::Conflicted(paths) => format!("Filtered Skills conflict: {}", paths.join(", ")),
+                    RebaseFailure::Error(message) => message,
+                })?
+            {
+                self.push_filtered_commit(commit_oid, token, true)?;
+                self.adopt_filtered_sync_commit(commit_oid)?;
+            }
+        } else {
+            self.auto_commit_filtered(filter, user_name, user_email)?;
+        }
+        self.get_status()
+    }
+
     fn fetch_remote_head(&self, token: Option<&str>) -> Result<Option<Oid>, String> {
         let branch = self.sync_branch();
         self.fetch_origin(&branch, token)?;
-        let fetch_head_path = self.repo.path().join("FETCH_HEAD");
-        let is_empty = !fetch_head_path.exists()
-            || std::fs::metadata(&fetch_head_path)
-                .map(|m| m.len() == 0)
-                .unwrap_or(true);
-        if is_empty {
-            return Ok(None);
+        let remote_ref = format!("refs/remotes/origin/{branch}");
+        match self.repo.find_reference(&remote_ref) {
+            Ok(reference) => Ok(reference.target()),
+            Err(error) if error.code() == ErrorCode::NotFound => Ok(None),
+            Err(error) => Err(format!("Failed to find remote branch {remote_ref}: {error}")),
         }
-        let fetch_head = self
-            .repo
-            .find_reference("FETCH_HEAD")
-            .map_err(|e| format!("Failed to find FETCH_HEAD: {}", e))?;
-        Ok(fetch_head.target())
     }
 
     /// Check if the repository has a remote configured.
@@ -1274,9 +1527,8 @@ impl GitEngine {
         }
     }
 
-    /// Force push the current local branch to the configured remote branch.
-    fn push(&self, token: Option<&str>) -> Result<(), String> {
-        debug_log!(" push: start, has_token={}", token.is_some());
+    fn push(&self, token: Option<&str>, force: bool) -> Result<(), String> {
+        debug_log!(" push: start, has_token={}, force={}", token.is_some(), force);
         let mut remote = self
             .repo
             .find_remote("origin")
@@ -1284,7 +1536,8 @@ impl GitEngine {
 
         let local_branch = self.current_branch()?;
         let remote_branch = self.sync_branch();
-        let refspec = format!("+refs/heads/{local_branch}:refs/heads/{remote_branch}");
+        let force_prefix = if force { "+" } else { "" };
+        let refspec = format!("{force_prefix}refs/heads/{local_branch}:refs/heads/{remote_branch}");
         debug_log!(
             " push: local_branch={}, remote_branch={}, refspec={}",
             local_branch,
@@ -1311,9 +1564,10 @@ impl GitEngine {
                 &format!("refs/remotes/origin/{remote_branch}"),
                 pushed_oid,
                 true,
-                "TokenViewer force pushed",
+                if force { "TokenViewer force pushed" } else { "TokenViewer pushed" },
             )
             .map_err(|e| format!("Failed to update remote tracking branch: {e}"))?;
+        self.ensure_upstream_tracking(&remote_branch)?;
 
         debug_log!(" push: completed");
         Ok(())
@@ -2066,7 +2320,7 @@ mod tests {
         .unwrap();
 
         let mut engine = GitEngine::open(&local).unwrap();
-        let status = engine.pull(None, None, None).unwrap();
+        let status = engine.force_pull(None, None, None).unwrap();
 
         assert_eq!(status.status, "idle");
         assert_eq!(engine.repo.state(), git2::RepositoryState::Clean);
@@ -2076,6 +2330,209 @@ mod tests {
             "# Remote\n"
         );
         assert!(!local.join("local-only-skill").exists());
+    }
+
+    #[test]
+    fn test_safe_pull_preserves_tracked_and_untracked_local_changes() {
+        let root = TempDir::new().unwrap();
+        let remote = root.path().join("remote.git");
+        let local = root.path().join("local");
+        let peer = root.path().join("peer");
+        fs::create_dir_all(&local).unwrap();
+        Command::new("git")
+            .args(["init", "--bare", remote.to_str().unwrap()])
+            .output()
+            .unwrap();
+        init_git_repo(&local);
+        Command::new("git")
+            .args(["remote", "add", "origin", remote.to_str().unwrap()])
+            .current_dir(&local)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["push", "-u", "origin", "HEAD"])
+            .current_dir(&local)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args([
+                "-c",
+                "core.autocrlf=false",
+                "clone",
+                "--branch",
+                "main",
+                remote.to_str().unwrap(),
+                peer.to_str().unwrap(),
+            ])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "user.email", "peer@test.com"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "user.name", "Peer User"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+
+        fs::write(peer.join("remote-only.txt"), "remote\n").unwrap();
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "Remote addition"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["push", "origin", "HEAD"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+
+        fs::write(local.join("README.md"), "# Local worktree\n").unwrap();
+        fs::create_dir_all(local.join("local-only-skill")).unwrap();
+        fs::write(local.join("local-only-skill/SKILL.md"), "local only\n").unwrap();
+
+        let mut engine = GitEngine::open(&local).unwrap();
+        let status = engine.pull(None, None, None).unwrap();
+
+        assert_eq!(status.status, "modified", "{:?}", status.message);
+        assert_eq!(fs::read_to_string(local.join("README.md")).unwrap(), "# Local worktree\n");
+        assert_eq!(fs::read_to_string(local.join("remote-only.txt")).unwrap(), "remote\n");
+        assert!(local.join("local-only-skill/SKILL.md").exists());
+        let mut stash_count = 0;
+        engine
+            .repo
+            .stash_foreach(|_, _, _| {
+                stash_count += 1;
+                true
+            })
+            .unwrap();
+        assert_eq!(stash_count, 0);
+    }
+
+    #[test]
+    fn test_safe_push_rebases_local_changes_and_preserves_remote_commit() {
+        let root = TempDir::new().unwrap();
+        let remote = root.path().join("remote.git");
+        let local = root.path().join("local");
+        let peer = root.path().join("peer");
+        fs::create_dir_all(&local).unwrap();
+        Command::new("git")
+            .args(["init", "--bare", remote.to_str().unwrap()])
+            .output()
+            .unwrap();
+        init_git_repo(&local);
+        Command::new("git")
+            .args(["remote", "add", "origin", remote.to_str().unwrap()])
+            .current_dir(&local)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["push", "-u", "origin", "HEAD"])
+            .current_dir(&local)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["clone", "--branch", "main", remote.to_str().unwrap(), peer.to_str().unwrap()])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "user.email", "peer@test.com"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "user.name", "Peer User"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+
+        fs::write(peer.join("remote-only.txt"), "remote\n").unwrap();
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "Remote addition"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["push", "origin", "HEAD"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+        let remote_commit = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&peer)
+            .output()
+            .unwrap();
+        let remote_commit = String::from_utf8(remote_commit.stdout).unwrap();
+
+        fs::write(local.join("README.md"), "# Local push\n").unwrap();
+        let mut engine = GitEngine::open(&local).unwrap();
+        let status = engine.stage_and_push("safe push", None, None, None).unwrap();
+
+        assert_eq!(status.status, "idle");
+        let ancestor = Command::new("git")
+            .args([
+                "--git-dir",
+                remote.to_str().unwrap(),
+                "merge-base",
+                "--is-ancestor",
+                remote_commit.trim(),
+                "refs/heads/main",
+            ])
+            .output()
+            .unwrap();
+        assert!(ancestor.status.success());
+        let remote_file = Command::new("git")
+            .args([
+                "--git-dir",
+                remote.to_str().unwrap(),
+                "show",
+                "main:remote-only.txt",
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&remote_file.stdout), "remote\n");
+    }
+
+    #[test]
+    fn test_safe_push_initializes_an_empty_remote_branch() {
+        let root = TempDir::new().unwrap();
+        let remote = root.path().join("remote.git");
+        let local = root.path().join("local");
+        Command::new("git")
+            .args(["init", "--bare", "--initial-branch", "main", remote.to_str().unwrap()])
+            .output()
+            .unwrap();
+        let mut engine = GitEngine::init(&local).unwrap();
+        engine.set_remote_url(remote.to_str().unwrap()).unwrap();
+        fs::create_dir_all(local.join("first-skill")).unwrap();
+        fs::write(local.join("first-skill/SKILL.md"), "first\n").unwrap();
+
+        let status = engine.stage_and_push("initial push", None, None, None).unwrap();
+
+        assert_eq!(status.status, "idle");
+        let remote_file = Command::new("git")
+            .args([
+                "--git-dir",
+                remote.to_str().unwrap(),
+                "show",
+                "main:first-skill/SKILL.md",
+            ])
+            .output()
+            .unwrap();
+        assert!(remote_file.status.success());
+        assert_eq!(String::from_utf8_lossy(&remote_file.stdout), "first\n");
     }
 
     #[test]

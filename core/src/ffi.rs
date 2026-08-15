@@ -487,6 +487,46 @@ pub extern "C" fn tt_cursor_access_token(db_path: *const c_char) -> *mut c_char 
     }
 }
 
+/// Kiro-specific narrow read-only helper: reports whether the Kiro CLI database
+/// contains a non-empty login token. Device registration alone is not a login.
+/// This lets UI clients avoid launching `kiro-cli /usage`, which may otherwise
+/// attempt a network request even after the user has logged out.
+///
+/// # Safety
+/// `db_path` must be a valid, non-null, NUL-terminated C string.
+#[no_mangle]
+pub extern "C" fn tt_kiro_has_login(db_path: *const c_char) -> i32 {
+    if db_path.is_null() {
+        return 0;
+    }
+    let path = match unsafe { CStr::from_ptr(db_path) }.to_str() {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    if kiro_has_login(path) {
+        1
+    } else {
+        0
+    }
+}
+
+fn kiro_has_login(db_path: &str) -> bool {
+    let conn = match rusqlite::Connection::open_with_flags(
+        db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    ) {
+        Ok(conn) => conn,
+        Err(_) => return false,
+    };
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM auth_kv WHERE key = 'kirocli:odic:token' AND trim(value) <> '')",
+        [],
+        |row| row.get::<_, i32>(0),
+    )
+    .map(|exists| exists != 0)
+    .unwrap_or(false)
+}
+
 fn read_cursor_access_token(db_path: &str) -> Option<String> {
     let conn = rusqlite::Connection::open_with_flags(
         db_path,
@@ -1146,7 +1186,7 @@ pub extern "C" fn tt_skills_remove_custom_agent(
     }
 }
 
-/// Pull (fetch + rebase) from git remote. Returns JSON GitStatusInfo.
+/// Pull safely (stash + fetch + rebase + stash apply) from git remote.
 ///
 /// # Safety
 /// `handle` must be a valid pointer from `tt_init`, or null (returns null).
@@ -1185,6 +1225,44 @@ pub extern "C" fn tt_skills_git_pull(handle: *mut CoreHandle) -> *mut c_char {
     let user_email = handle.skills.git_user_email.clone();
     match &mut handle.skills.git {
         Some(git) => match git.pull(token.as_deref(), user_name.as_deref(), user_email.as_deref()) {
+            Ok(status) => to_json_cstring(&status),
+            Err(e) => to_json_cstring(&crate::skills::models::GitStatusInfo::error(&e)),
+        },
+        None => to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git repository",
+        )),
+    }
+}
+
+/// Force pull from git remote, replacing local commits and worktree changes.
+///
+/// # Safety
+/// `handle` must be a valid pointer from `tt_init`, or null (returns null).
+#[no_mangle]
+pub extern "C" fn tt_skills_git_force_pull(handle: *mut CoreHandle) -> *mut c_char {
+    let handle = match unsafe { handle.as_mut() } {
+        Some(h) => h,
+        None => return std::ptr::null_mut(),
+    };
+    if handle.skills.git_remote_url.as_deref().unwrap_or("").trim().is_empty() {
+        return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git remote URL configured",
+        ));
+    }
+    if handle.skills.git_token.as_deref().unwrap_or("").trim().is_empty() {
+        return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git token configured",
+        ));
+    }
+    let token = handle.skills.git_token.clone();
+    let user_name = handle.skills.git_user_name.clone();
+    let user_email = handle.skills.git_user_email.clone();
+    match &mut handle.skills.git {
+        Some(git) => match git.force_pull(
+            token.as_deref(),
+            user_name.as_deref(),
+            user_email.as_deref(),
+        ) {
             Ok(status) => to_json_cstring(&status),
             Err(e) => to_json_cstring(&crate::skills::models::GitStatusInfo::error(&e)),
         },
@@ -1234,6 +1312,44 @@ pub extern "C" fn tt_skills_git_push(handle: *mut CoreHandle) -> *mut c_char {
     match &mut handle.skills.git {
         Some(git) => match git.stage_and_push(
             "skill: sync",
+            token.as_deref(),
+            user_name.as_deref(),
+            user_email.as_deref(),
+        ) {
+            Ok(status) => to_json_cstring(&status),
+            Err(e) => to_json_cstring(&crate::skills::models::GitStatusInfo::error(&e)),
+        },
+        None => to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git repository",
+        )),
+    }
+}
+
+/// Force push local Skills to the configured remote branch.
+///
+/// # Safety
+/// `handle` must be a valid pointer from `tt_init`, or null (returns null).
+#[no_mangle]
+pub extern "C" fn tt_skills_git_force_push(handle: *mut CoreHandle) -> *mut c_char {
+    let handle = match unsafe { handle.as_mut() } {
+        Some(h) => h,
+        None => return std::ptr::null_mut(),
+    };
+    if handle.skills.git_remote_url.as_deref().unwrap_or("").trim().is_empty() {
+        return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git remote URL configured",
+        ));
+    }
+    if handle.skills.git_token.as_deref().unwrap_or("").trim().is_empty() {
+        return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git token configured",
+        ));
+    }
+    let token = handle.skills.git_token.clone();
+    let user_name = handle.skills.git_user_name.clone();
+    let user_email = handle.skills.git_user_email.clone();
+    match &mut handle.skills.git {
+        Some(git) => match git.stage_and_force_push(
             token.as_deref(),
             user_name.as_deref(),
             user_email.as_deref(),
@@ -1314,6 +1430,68 @@ pub extern "C" fn tt_skills_git_push_filtered(
     match &mut handle.skills.git {
         Some(git) => match git.stage_and_push_filtered(
             "skill: sync",
+            &filter,
+            token.as_deref(),
+            user_name.as_deref(),
+            user_email.as_deref(),
+        ) {
+            Ok(status) => to_json_cstring(&status),
+            Err(e) => to_json_cstring(&crate::skills::models::GitStatusInfo::error(&e)),
+        },
+        None => to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git repository",
+        )),
+    }
+}
+
+/// Force push selected Skills. Takes the same filter JSON as `tt_skills_git_push_filtered`.
+///
+/// # Safety
+/// `handle` must be valid and `json` must be a valid NUL-terminated C string.
+#[no_mangle]
+pub extern "C" fn tt_skills_git_force_push_filtered(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let handle = match unsafe { handle.as_mut() } {
+        Some(h) => h,
+        None => return std::ptr::null_mut(),
+    };
+    if json.is_null() {
+        return to_json_cstring(&crate::skills::models::GitStatusInfo::error("Null json"));
+    }
+    if handle.skills.git_remote_url.as_deref().unwrap_or("").trim().is_empty() {
+        return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git remote URL configured",
+        ));
+    }
+    if handle.skills.git_token.as_deref().unwrap_or("").trim().is_empty() {
+        return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
+            "No git token configured",
+        ));
+    }
+
+    #[derive(serde::Deserialize)]
+    struct FilterReq {
+        #[serde(default)]
+        include_prefixes: Vec<String>,
+        #[serde(default)]
+        include_skill_ids: Vec<String>,
+    }
+
+    let req: FilterReq = match unsafe { from_cstring_json(json) } {
+        Ok(r) => r,
+        Err(e) => return to_json_cstring(&crate::skills::models::GitStatusInfo::error(&e)),
+    };
+    let filter = crate::skills::git_engine::SkillSyncFilter {
+        include_prefixes: req.include_prefixes,
+        include_skill_ids: req.include_skill_ids,
+    };
+    let token = handle.skills.git_token.clone();
+    let user_name = handle.skills.git_user_name.clone();
+    let user_email = handle.skills.git_user_email.clone();
+    match &mut handle.skills.git {
+        Some(git) => match git.stage_and_force_push_filtered(
             &filter,
             token.as_deref(),
             user_name.as_deref(),

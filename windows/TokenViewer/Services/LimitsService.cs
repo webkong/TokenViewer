@@ -228,6 +228,18 @@ public static class LimitsService
     private static async Task<AgentLimit> FetchKiroAsync()
     {
         const string name = "kiro";
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localAppData))
+        {
+            localAppData = Path.Combine(home, "AppData", "Local");
+        }
+        var dbPath = Path.Combine(localAppData, "kiro-cli", "data.sqlite3");
+        if (!File.Exists(dbPath) || !CoreBridge.HasKiroLogin(dbPath))
+        {
+            return new AgentLimit(name, null, false, null, []);
+        }
+
         var outText = RunKiroUsage();
         if (string.IsNullOrWhiteSpace(outText))
         {

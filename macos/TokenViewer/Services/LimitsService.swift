@@ -338,6 +338,13 @@ enum LimitsService {
 
     static func fetchKiro() async -> AgentLimit {
         let name = "kiro"
+        let dbPath = "\(NSHomeDirectory())/Library/Application Support/kiro-cli/data.sqlite3"
+        guard readSqliteValue(
+            dbPath,
+            sql: "SELECT 1 FROM auth_kv WHERE key='kirocli:odic:token' AND trim(value) <> '' LIMIT 1"
+        ) == "1" else {
+            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        }
         guard let out = runKiroUsage() else {
             return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
         }

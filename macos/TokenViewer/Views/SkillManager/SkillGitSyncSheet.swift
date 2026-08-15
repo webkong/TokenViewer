@@ -295,9 +295,9 @@ struct SkillGitSyncSheet: View {
         HStack(spacing: 12) {
             Button {
                 AppFocus.clear()
-                showForcePullConfirmation = true
+                performPull()
             } label: {
-                Label(l10n.gitForcePull, systemImage: "arrow.down.circle.fill")
+                Label(l10n.gitPull, systemImage: "arrow.down.circle.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -307,16 +307,58 @@ struct SkillGitSyncSheet: View {
 
             Button {
                 AppFocus.clear()
-                showForcePushConfirmation = true
+                performPush()
             } label: {
-                Label(l10n.gitForcePush, systemImage: "arrow.up.circle.fill")
+                Label(l10n.gitPush, systemImage: "arrow.up.circle.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .disabled(repoURL.isEmpty || !tokenSaved || isSyncBlocked)
             .quickHelp(l10n.gitPushTip)
+
+            Menu {
+                Button(l10n.gitForcePull, role: .destructive) {
+                    AppFocus.clear()
+                    showForcePullConfirmation = true
+                }
+                Button(l10n.gitForcePush, role: .destructive) {
+                    AppFocus.clear()
+                    showForcePushConfirmation = true
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .disabled(repoURL.isEmpty || !tokenSaved || isSyncBlocked)
+            .quickHelp(l10n.gitMoreActions)
         }
+    }
+
+    private func performPull() {
+        viewModel.pullSkills(
+            remoteURL: repoURL,
+            platform: provider.key,
+            token: currentToken,
+            gitBranch: syncGitBranch,
+            userName: storedGitUserName,
+            userEmail: storedGitUserEmail
+        )
+        checkConnectivity()
+    }
+
+    private func performPush() {
+        viewModel.pushSkills(
+            remoteURL: repoURL,
+            platform: provider.key,
+            token: currentToken,
+            gitBranch: syncGitBranch,
+            userName: storedGitUserName,
+            userEmail: storedGitUserEmail,
+            filterPayload: syncFilterPayload()
+        )
+        checkConnectivity()
     }
 
     private func performForcePull() {
@@ -326,7 +368,8 @@ struct SkillGitSyncSheet: View {
             token: currentToken,
             gitBranch: syncGitBranch,
             userName: storedGitUserName,
-            userEmail: storedGitUserEmail
+            userEmail: storedGitUserEmail,
+            force: true
         )
         checkConnectivity()
     }
@@ -339,7 +382,8 @@ struct SkillGitSyncSheet: View {
             gitBranch: syncGitBranch,
             userName: storedGitUserName,
             userEmail: storedGitUserEmail,
-            filterPayload: syncFilterPayload()
+            filterPayload: syncFilterPayload(),
+            force: true
         )
         checkConnectivity()
     }

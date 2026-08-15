@@ -112,6 +112,9 @@ public sealed class CoreBridge : ICoreBridge
     [DllImport("tokenviewer_core", CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr tt_cursor_access_token([MarshalAs(UnmanagedType.LPUTF8Str)] string dbPath);
 
+    [DllImport("tokenviewer_core", CallingConvention = CallingConvention.Cdecl)]
+    private static extern int tt_kiro_has_login([MarshalAs(UnmanagedType.LPUTF8Str)] string dbPath);
+
     /// <summary>Reads the Cursor account access token from a VS Code
     /// <c>state.vscdb</c> SQLite database via the narrow Rust helper (read-only,
     /// fixed query). Returns null when the DB/key is missing or unreadable.</summary>
@@ -128,6 +131,10 @@ public sealed class CoreBridge : ICoreBridge
             tt_free_string(ptr);
         }
     }
+
+    /// <summary>Checks the Kiro CLI database for an actual login token. A saved
+    /// device registration is intentionally not treated as a logged-in account.</summary>
+    public static bool HasKiroLogin(string dbPath) => tt_kiro_has_login(dbPath) != 0;
 
 
     [DllImport("tokenviewer_core", CallingConvention = CallingConvention.Cdecl)]

@@ -89,6 +89,7 @@ Swift wraps these in `CoreBridge`; JSON is exchanged across the boundary and dec
 - **Timezone (critical)**: `hour_start` is stored in **UTC** (`...Z`). Day/hour grouping for charts & heatmap MUST convert to local time via `strftime('%Y-%m-%d', hour_start, 'localtime')` (see `db.rs`). Range bounds (from/to) are computed in Swift from the local calendar then formatted to UTC. Don't reintroduce `substr(hour_start,1,N)` for day/hour grouping — that buckets by UTC and misattributes local early-morning usage.
 - **Idempotent parsing**: `FileCursor` (utils.rs) tracks `offsets` (byte offset for append-only jsonl), `seen_ids` (dedup, capped 50k), `snapshots` (cumulative-total deltas), `mtimes`/`dir_mtimes`/`dir_files` (skip-unchanged + glob cache). Re-running a parser must never double-count. Use `file_changed()` to skip unchanged files, `mark_seen()` to dedup, `delta()` for cumulative sources.
 - **Token estimation**: some sources (Kiro CLI) only store char counts → estimate `tokens ≈ chars / 4`.
+- **Skills Git sync safety**: normal Pull must stash tracked and untracked worktree changes, integrate the configured remote branch, then reapply and drop the stash only after a clean apply. Normal Push must integrate the latest remote history and use a non-force refspec. Keep destructive Force Pull/Force Push as separate, explicitly confirmed actions; never silently discard either side's changes.
 
 ### Kiro is special (4 data sources, all → source `"kiro"`)
 1. `…/Kiro/User/globalStorage/kiro.kiroagent/dev_data/devdata.sqlite` (IDE, stopped writing ~Feb 2026)

@@ -362,6 +362,8 @@ final class L10n: ObservableObject {
     var gitNoFilteredChanges: String { isZh ? "当前过滤规则下没有待推送变更。" : "No changes match the current sync filter." }
     func gitFilteredChangesCount(_ count: Int) -> String { isZh ? "当前过滤规则下 \(count) 个文件将被推送。" : "\(count) file(s) match the current sync filter." }
     var gitConflicts: String { isZh ? "存在冲突" : "Merge Conflicts" }
+    var gitPull: String { isZh ? "拉取" : "Pull" }
+    var gitPush: String { isZh ? "推送" : "Push" }
     var gitForcePull: String { isZh ? "强制拉取" : "Force Pull" }
     var gitForcePush: String { isZh ? "强制推送" : "Force Push" }
     var gitForcePullConfirmTitle: String { isZh ? "确认强制拉取？" : "Force Pull?" }
@@ -436,8 +438,11 @@ final class L10n: ObservableObject {
     func skillUnlinkTip(_ agent: String) -> String { isZh ? "移除 \(agent) 的此技能符号链接" : "Remove the symlink for \(agent)" }
     func skillSourceLinkTip(_ agent: String) -> String { isZh ? "此技能来源于 \(agent)，点击可为它创建共享目录链接" : "This skill originated in \(agent); click to create a shared-root link" }
     var gitDoneTip: String { isZh ? "关闭 Git 同步面板" : "Close the Git Sync panel" }
-    var gitPullTip: String { isZh ? "用远端分支强制覆盖本地技能" : "Replace local Skills with the remote branch" }
-    var gitPushTip: String { isZh ? "用本地技能强制覆盖远端分支" : "Replace the remote branch with local Skills" }
+    var gitPullTip: String { isZh ? "拉取远端更新并保留本地修改" : "Pull remote updates while preserving local changes" }
+    var gitPushTip: String { isZh ? "合并远端更新后安全推送本地修改" : "Integrate remote updates before safely pushing local changes" }
+    var gitForcePullTip: String { isZh ? "用远端分支强制覆盖本地技能" : "Replace local Skills with the remote branch" }
+    var gitForcePushTip: String { isZh ? "用本地技能强制覆盖远端分支" : "Replace the remote branch with local Skills" }
+    var gitMoreActions: String { isZh ? "更多同步操作" : "More Sync Actions" }
     var gitRefreshStatusTip: String { isZh ? "刷新当前 Git 分支和待处理变更状态" : "Refresh the current branch and pending Git changes" }
     var gitSaveConfigTip: String { isZh ? "保存 Git 远程地址、平台和访问令牌" : "Save the Git remote URL, platform, and access token" }
     var skillAgentParticipation: String { isZh ? "参与 Skills 管理的 Agent" : "Agents participating in Skills" }

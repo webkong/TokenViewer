@@ -21,12 +21,24 @@ extension CoreBridge {
         callSkills { tt_skills_git_pull($0) }
     }
 
+    func skillsGitForcePull() -> Data? {
+        callSkills { tt_skills_git_force_pull($0) }
+    }
+
     func skillsGitPush() -> Data? {
         callSkills { tt_skills_git_push($0) }
     }
 
+    func skillsGitForcePush() -> Data? {
+        callSkills { tt_skills_git_force_push($0) }
+    }
+
     func skillsGitPushFiltered(_ payload: Data) -> Data? {
         callSkillsWithJSON(payload) { tt_skills_git_push_filtered($0, $1) }
+    }
+
+    func skillsGitForcePushFiltered(_ payload: Data) -> Data? {
+        callSkillsWithJSON(payload) { tt_skills_git_force_push_filtered($0, $1) }
     }
 
     func skillsGitConnectivity() -> Data? {
