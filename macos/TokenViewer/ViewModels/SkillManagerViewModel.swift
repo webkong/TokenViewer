@@ -77,21 +77,35 @@ final class SkillManagerViewModel: ObservableObject {
     @Published var installSourceRootDisplay: String = "~/.tokenviewer/skills"
 
     private let decoder = JSONDecoder()
+    private var lastRefreshAt: Date?
+    private var refreshGeneration = 0
 
     private init() {
         decoder.keyDecodingStrategy = .convertFromSnakeCase
     }
 
+    func refreshIfNeeded(maxAge: TimeInterval = 30) {
+        if !skills.isEmpty,
+           let lastRefreshAt,
+           Date().timeIntervalSince(lastRefreshAt) < maxAge {
+            return
+        }
+        refresh()
+    }
+
     func refresh(showToast: Bool = false) {
         isLoading = true
         errorMessage = nil
+        refreshGeneration &+= 1
+        let generation = refreshGeneration
         let enabled = enabledAgentSet
-        AgentRegistry.shared.reload()
-        let agents = AgentRegistry.shared.skillAgents
+        let cachedAgents = AgentRegistry.shared.skillAgents
 
         Task.detached {
             let decoder = JSONDecoder()
             decoder.keyDecodingStrategy = .convertFromSnakeCase
+            let agentsData = CoreBridge.shared.skillsListAgents()
+            let agents = (try? decoder.decode([AgentConfig].self, from: agentsData ?? Data())) ?? cachedAgents
             let agentIDs = agents
                 .map(\.source)
                 .filter { enabled.contains($0) }
@@ -102,9 +116,12 @@ final class SkillManagerViewModel: ObservableObject {
             await SkillPreviewCache.shared.invalidate()
 
             await MainActor.run {
+                guard generation == self.refreshGeneration else { return }
                 self.isLoading = false
                 self.skills = skills
                 self.agents = agents
+                self.lastRefreshAt = Date()
+                AgentRegistry.shared.applySnapshot(agents)
                 if showToast {
                     ToastCenter.shared.success(L10n.shared.toastRefreshed)
                 }
@@ -289,27 +306,7 @@ final class SkillManagerViewModel: ObservableObject {
     }
 
     func isBuiltInSkill(_ skill: SkillEntry) -> Bool {
-        skill.isBuiltIn || isCodexSystemSkill(skill)
-    }
-
-    private func isCodexSystemSkill(_ skill: SkillEntry) -> Bool {
-        guard skillAgentIDs(for: skill).contains("codex"),
-              let codex = agents.first(where: { $0.source == "codex" }) else {
-            return false
-        }
-
-        let systemDir = URL(fileURLWithPath: standardizedPath(codex.skillsPath))
-            .appendingPathComponent(".system")
-        let marker = systemDir.appendingPathComponent(".codex-system-skills.marker")
-        guard FileManager.default.fileExists(atPath: marker.path) else {
-            return false
-        }
-
-        let systemEntry = systemDir.appendingPathComponent(skill.id).path
-        if FileManager.default.fileExists(atPath: systemEntry) {
-            return true
-        }
-        return (try? FileManager.default.destinationOfSymbolicLink(atPath: systemEntry)) != nil
+        skill.isBuiltIn
     }
 
     private func standardizedPath(_ path: String) -> String {

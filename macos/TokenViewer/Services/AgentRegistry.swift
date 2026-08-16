@@ -41,6 +41,16 @@ final class AgentRegistry: ObservableObject {
         loadIfNeeded()
     }
 
+    /// Publish an agent snapshot that was loaded off the main thread. Skills
+    /// refreshes use this path so directory detection and FFI work never block
+    /// tab transitions.
+    func applySnapshot(_ refreshedAgents: [AgentConfig]) {
+        allAgents = refreshedAgents
+        agents = Dictionary(uniqueKeysWithValues: refreshedAgents.map { ($0.source, $0) })
+        installStatus = Dictionary(uniqueKeysWithValues: refreshedAgents.map { ($0.source, $0.isInstalled) })
+        loaded = true
+    }
+
     /// Canonical list of agents that support subscription/quota tracking.
     var limitSources: [String] {
         loadedAgents.filter(\.hasLimits).map(\.source)

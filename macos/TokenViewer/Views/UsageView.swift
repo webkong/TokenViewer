@@ -50,7 +50,7 @@ struct UsageView: View {
         GeometryReader { geo in
             let wide = geo.size.width >= 760
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 20) {
                     header
 
                     rangeSelector
@@ -111,9 +111,9 @@ struct UsageView: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(l10n.usageTitle)
-                    .font(.system(size: 24, weight: .bold))
+                    .font(.system(size: 26, weight: .bold))
                 Text(l10n.usageSubtitle)
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -140,7 +140,8 @@ struct UsageView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 520)
+            .controlSize(.large)
+            .frame(width: 560)
             .onChange(of: viewModel.selectedRange) { viewModel.refresh() }
 
             if viewModel.selectedRange == .custom {
@@ -260,7 +261,7 @@ private struct SummaryCardsView: View {
     @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             MetricCard(title: l10n.usageTotalTokens, value: tvFormatTokens(summary.total_tokens),
                        icon: "number", tint: TVColor.brand)
             CostMetricCard(totalCost: summary.total_cost_usd, models: models)
@@ -382,13 +383,13 @@ private struct MetricCard: View {
     let tint: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 5) {
-                Image(systemName: icon).font(.system(size: 11)).foregroundStyle(tint)
-                Text(title).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+                Image(systemName: icon).font(.system(size: 12)).foregroundStyle(tint)
+                Text(title).font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
             }
             Text(value)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(.system(size: 25, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
@@ -396,11 +397,11 @@ private struct MetricCard: View {
                 .animation(.spring(duration: 0.4), value: value)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
+        .padding(17)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 14)
                 .fill(Color(nsColor: .controlBackgroundColor))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 0.5))
+                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.quaternary, lineWidth: 0.5))
         )
     }
 }
@@ -413,7 +414,7 @@ private struct DailyChartView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(l10n.usageDaily).font(.system(size: 15, weight: .semibold))
+            Text(l10n.usageDaily).font(.system(size: 16, weight: .semibold))
             let maxTokens = data.map(\.total_tokens).max() ?? 1
             HStack(alignment: .bottom, spacing: 3) {
                 ForEach(data) { point in
@@ -446,17 +447,17 @@ private struct ModelBreakdownView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(l10n.usageModels).font(.system(size: 15, weight: .semibold))
+            Text(l10n.usageModels).font(.system(size: 16, weight: .semibold))
             ForEach(merged.prefix(8)) { entry in
                 VStack(spacing: 5) {
                     HStack(spacing: 8) {
                         ModelProviderIcon(model: entry.model, fallbackAgentSource: entry.source, size: 14)
-                        Text(entry.model).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                        Text(entry.model).font(.system(size: 14, weight: .medium)).lineLimit(1)
                         Spacer()
                         Text(tvFormatCost(entry.total_cost_usd))
-                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+                            .font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
                         Text(tvFormatTokens(entry.total_tokens))
-                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(.primary)
+                            .font(.system(size: 12, design: .monospaced)).foregroundStyle(.primary)
                             .frame(width: 60, alignment: .trailing)
                     }
                     GeometryReader { geo in
@@ -507,13 +508,13 @@ private struct TokenTypeBar: View {
         let total = max(segments.reduce(0) { $0 + $1.2 }, 1)
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(l10n.usageTokenBreakdown).font(.system(size: 15, weight: .semibold))
+                Text(l10n.usageTokenBreakdown).font(.system(size: 16, weight: .semibold))
                 Spacer()
                 if let hr = hitRate {
                     HStack(spacing: 4) {
-                        Text(l10n.cacheHit).font(.system(size: 11)).foregroundStyle(.secondary)
+                        Text(l10n.cacheHit).font(.system(size: 12)).foregroundStyle(.secondary)
                         Text(String(format: "%.1f%%", hr))
-                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
                             .foregroundStyle(.orange)
                     }
                 }
@@ -532,8 +533,8 @@ private struct TokenTypeBar: View {
                 ForEach(segments, id: \.0) { seg in
                     HStack(spacing: 4) {
                         Circle().fill(seg.3).frame(width: 7, height: 7)
-                        Text(seg.1).font(.system(size: 11)).foregroundStyle(.secondary)
-                        Text(tvFormatTokens(seg.2)).font(.system(size: 11, weight: .medium, design: .monospaced))
+                        Text(seg.1).font(.system(size: 12)).foregroundStyle(.secondary)
+                        Text(tvFormatTokens(seg.2)).font(.system(size: 12, weight: .medium, design: .monospaced))
                     }
                 }
                 Spacer()
@@ -564,17 +565,17 @@ private struct AgentBreakdownView: View {
     var body: some View {
         let total = max(rows.reduce(0) { $0 + $1.tokens }, 1)
         VStack(alignment: .leading, spacing: 12) {
-            Text(l10n.usageAgents).font(.system(size: 15, weight: .semibold))
+            Text(l10n.usageAgents).font(.system(size: 16, weight: .semibold))
             ForEach(rows) { row in
                 VStack(spacing: 5) {
                     HStack(spacing: 8) {
                         AgentIcon(source: row.id, size: 14)
-                        Text(AgentRegistry.shared.displayName(for: row.id)).font(.system(size: 13, weight: .medium))
+                        Text(AgentRegistry.shared.displayName(for: row.id)).font(.system(size: 14, weight: .medium))
                         Spacer()
                         Text(tvFormatCost(row.cost))
-                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+                            .font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
                         Text(tvFormatTokens(row.tokens))
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(.system(size: 12, design: .monospaced))
                             .frame(width: 60, alignment: .trailing)
                     }
                     GeometryReader { geo in
@@ -671,9 +672,9 @@ private struct HeatmapView: View {
 
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(l10n.usageActivity).font(.system(size: 15, weight: .semibold))
+                Text(l10n.usageActivity).font(.system(size: 16, weight: .semibold))
                 Spacer()
-                Text(l10n.usageActiveDays(activeDays)).font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(l10n.usageActiveDays(activeDays)).font(.system(size: 12)).foregroundStyle(.secondary)
             }
 
             VStack(alignment: .leading, spacing: sp) {
@@ -738,10 +739,35 @@ private struct DailyTableView: View {
     let data: [DailyPoint]
     @ObservedObject private var l10n = L10n.shared
 
+    /// The chart uses hourly points for Today/Yesterday (`YYYY-MM-DDTHH`), while
+    /// this table always presents daily totals. Normalize both hourly and daily
+    /// query results to day keys before building the rows.
+    private var dailyData: [DailyPoint] {
+        var totals: [String: DailyPoint] = [:]
+        for point in data {
+            let dayKey = String(point.date.prefix(10))
+            guard AppTime.localDate(fromDayKey: dayKey) != nil else { continue }
+            let previous = totals[dayKey]
+            totals[dayKey] = DailyPoint(
+                date: dayKey,
+                total_tokens: (previous?.total_tokens ?? 0) + point.total_tokens,
+                total_cost_usd: (previous?.total_cost_usd ?? 0) + point.total_cost_usd,
+                input_tokens: (previous?.input_tokens ?? 0) + point.input_tokens,
+                output_tokens: (previous?.output_tokens ?? 0) + point.output_tokens,
+                cached_input_tokens: (previous?.cached_input_tokens ?? 0) + point.cached_input_tokens,
+                cache_creation_input_tokens: (previous?.cache_creation_input_tokens ?? 0) + point.cache_creation_input_tokens,
+                reasoning_output_tokens: (previous?.reasoning_output_tokens ?? 0) + point.reasoning_output_tokens,
+                conversation_count: (previous?.conversation_count ?? 0) + point.conversation_count
+            )
+        }
+        return totals.values.sorted { $0.date < $1.date }
+    }
+
     /// Build a contiguous descending date list; days without a record are nil ("—").
     private func rows() -> [(date: String, point: DailyPoint?)] {
-        let byDate = Dictionary(uniqueKeysWithValues: data.map { ($0.date, $0) })
-        guard let maxStr = data.map({ $0.date }).max(),
+        let normalized = dailyData
+        let byDate = Dictionary(uniqueKeysWithValues: normalized.map { ($0.date, $0) })
+        guard let maxStr = normalized.map({ $0.date }).max(),
               let maxDate = AppTime.localDate(fromDayKey: maxStr) else { return [] }
         let calendar = AppTime.localCalendar
         var out: [(String, DailyPoint?)] = []
@@ -758,7 +784,7 @@ private struct DailyTableView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(l10n.usageDailyDetails).font(.system(size: 15, weight: .semibold))
+            Text(l10n.usageDailyDetails).font(.system(size: 16, weight: .semibold))
             headerRow
             Divider()
             ForEach(rows(), id: \.date) { row in

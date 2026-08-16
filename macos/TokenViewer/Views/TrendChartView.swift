@@ -29,9 +29,9 @@ struct TrendChartView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(l10n.usageTrend).font(.system(size: 15, weight: .semibold))
+                Text(l10n.usageTrend).font(.system(size: 16, weight: .semibold))
                 Spacer()
-                Text(hourly ? l10n.byHour : l10n.byDay).font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(hourly ? l10n.byHour : l10n.byDay).font(.system(size: 12)).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 6) {
@@ -71,7 +71,7 @@ struct TrendChartView: View {
                         }
                     }
                 }
-                .frame(height: 160)
+                .frame(height: 180)
                 yAxisLabels(maxVal: costMax, formatter: { tvFormatCost($0) }, align: .leading)
             }
 
@@ -181,7 +181,7 @@ struct TrendChartView: View {
                 if i < 4 { Spacer() }
             }
         }
-        .frame(width: 42, height: 160)
+        .frame(width: 46, height: 180)
     }
 
     private func xAxisLabels() -> some View {
@@ -224,7 +224,7 @@ struct TrendChartView: View {
             ForEach(Array((tokenSeries + [costSeries]).enumerated()), id: \.offset) { _, s in
                 HStack(spacing: 4) {
                     Circle().fill(s.color).frame(width: 7, height: 7)
-                    Text(s.name).font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text(s.name).font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
             Spacer()

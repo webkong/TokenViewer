@@ -15,30 +15,64 @@ struct MainWindowView: View {
     @ObservedObject private var router = MainWindowRouter.shared
 
     var body: some View {
-        TabView(selection: $router.selectedTab) {
-            UsageView(viewModel: viewModel)
-                .tag("usage")
-                .tabItem { Label(l10n.usage, systemImage: "chart.bar.fill") }
-
-            LimitsView(viewModel: LimitsViewModel.shared)
-                .tag("limits")
-                .tabItem { Label(l10n.limits, systemImage: "gauge.with.dots.needle.50percent") }
-
-            SkillManagerView()
-                .tag("skills")
-                .tabItem { Label(l10n.skills, systemImage: "puzzlepiece.extension.fill") }
-
-            SettingsView()
-                .tag("settings")
-                .tabItem { Label(l10n.settings, systemImage: "gear") }
-
-            AboutView()
-                .tag("about")
-                .tabItem { Label(l10n.about, systemImage: "info.circle") }
+        VStack(spacing: 0) {
+            mainTabBar
+            Divider()
+            selectedContent
         }
         .frame(minWidth: 600, minHeight: 480)
         .clearInitialFocus(trigger: router.selectedTab)
         .clearFocusOnOutsideClick()
+    }
+
+    private var mainTabBar: some View {
+        HStack(spacing: 8) {
+            mainTab(id: "usage", title: l10n.usage, icon: "chart.bar.fill")
+            mainTab(id: "limits", title: l10n.limits, icon: "gauge.with.dots.needle.50percent")
+            mainTab(id: "skills", title: l10n.skills, icon: "puzzlepiece.extension.fill")
+            mainTab(id: "settings", title: l10n.settings, icon: "gearshape.fill")
+            mainTab(id: "about", title: l10n.about, icon: "info.circle.fill")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private func mainTab(id: String, title: String, icon: String) -> some View {
+        let selected = router.selectedTab == id
+        return Button {
+            router.selectedTab = id
+        } label: {
+            Label(title, systemImage: icon)
+                .font(.system(size: 13, weight: selected ? .semibold : .medium))
+                .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+                .padding(.horizontal, 14)
+                .frame(minHeight: 32)
+                .background(
+                    Capsule()
+                        .fill(selected ? TVColor.brand : Color.clear)
+                )
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private var selectedContent: some View {
+        switch router.selectedTab {
+        case "limits":
+            LimitsView(viewModel: LimitsViewModel.shared)
+        case "skills":
+            SkillManagerView()
+        case "settings":
+            SettingsView()
+        case "about":
+            AboutView()
+        default:
+            UsageView(viewModel: viewModel)
+        }
     }
 }
 

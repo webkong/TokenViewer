@@ -49,25 +49,12 @@ struct SettingsView: View {
             Divider()
 
             // MARK: Content
-            ScrollViewReader { proxy in
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 16) {
-                        generalSection.id("general")
-                        appearanceSection.id("appearance")
-                        menuBarSection.id("menuBar")
-                        codexHomesSection.id("chatgpt")
-                        skillsSection.id("skills")
-                        dataSection.id("data")
-                    }
-                    .padding(20)
-                }
-                .background(Color(nsColor: .windowBackgroundColor))
-                .onChange(of: selectedSection) { _, new in
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        proxy.scrollTo(new, anchor: .top)
-                    }
-                }
+            ScrollView(showsIndicators: false) {
+                selectedSettingsSection
+                    .padding(24)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
             }
+            .background(Color(nsColor: .windowBackgroundColor))
         }
         .clearInitialFocus(trigger: selectedSection)
         .onAppear {
@@ -76,7 +63,18 @@ struct SettingsView: View {
             }
             agentRegistry.loadIfNeeded()
             agentRegistry.refreshInstallStatus()
-            refreshCodexHomes(force: false)
+        }
+    }
+
+    @ViewBuilder
+    private var selectedSettingsSection: some View {
+        switch selectedSection {
+        case "appearance": appearanceSection
+        case "menuBar": menuBarSection
+        case "chatgpt": codexHomesSection
+        case "skills": skillsSection
+        case "data": dataSection
+        default: generalSection
         }
     }
 
@@ -168,6 +166,11 @@ struct SettingsView: View {
                         .padding(.vertical, 2)
                     }
                 }
+            }
+        }
+        .onAppear {
+            if codexHomes.isEmpty {
+                refreshCodexHomes(force: false)
             }
         }
     }

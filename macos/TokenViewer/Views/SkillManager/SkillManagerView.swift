@@ -33,7 +33,12 @@ struct SkillManagerView: View {
         .padding(20)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
-            viewModel.refresh()
+            // Let the tab selection render first, then refresh directory-backed
+            // data asynchronously. Cached skills stay visible during refreshes.
+            Task { @MainActor in
+                await Task.yield()
+                viewModel.refreshIfNeeded()
+            }
             if !onboardingSeen {
                 onboardingSeen = true
                 showOnboarding = true
