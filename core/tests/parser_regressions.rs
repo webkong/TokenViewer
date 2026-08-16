@@ -561,6 +561,30 @@ fn codex_isolated_home_copy_uses_rollout_identity_without_double_counting() {
 }
 
 #[test]
+fn codex_scans_flat_archived_sessions() {
+    let home = temp_home();
+    let codex_home = home.join(".codex");
+    // Codex-Manager archives sessions FLAT (no YYYY/MM/DD nesting), which the
+    // strict sessions/ walk would miss.
+    let archived = codex_home
+        .join("archived_sessions/rollout-2026-08-05T00-00-00-archived-uuid.jsonl");
+    write_text(
+        &archived,
+        concat!(
+            "{\"timestamp\":\"2026-08-05T00:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"model_provider\":\"openai\",\"model\":\"gpt-test\"}}\n",
+            "{\"timestamp\":\"2026-08-05T00:01:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":10,\"output_tokens\":20,\"cached_input_tokens\":1,\"cache_creation_input_tokens\":2,\"reasoning_output_tokens\":3}}}}"
+        ),
+    );
+
+    let homes = vec![codex_home_info(&codex_home)];
+    let (records, _) = codex::parse_with_homes(&home, None, &homes).unwrap();
+    assert_eq!(
+        records.iter().map(|record| record.total_tokens).sum::<u64>(),
+        35
+    );
+}
+
+#[test]
 fn codex_migrates_path_based_cursor_to_rollout_identity() {
     let home = temp_home();
     let codex_home = home.join(".codex");

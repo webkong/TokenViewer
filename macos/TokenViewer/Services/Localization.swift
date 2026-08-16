@@ -155,7 +155,7 @@ final class L10n: ObservableObject {
     var add: String { isZh ? "添加" : "Add" }
     var openInFinder: String { isZh ? "在 Finder 中打开" : "Open in Finder" }
     var codexHomesTitle: String { isZh ? "ChatGPT 数据目录" : "ChatGPT Data Directories" }
-    var codexHomesDescription: String { isZh ? "自动发现默认 Codex、Orca、Antigravity Cockpit 等隔离目录。自动发现不会修改目录内容；手动添加可覆盖未识别的宿主应用。" : "Discover the default Codex home and isolated directories used by Orca, Antigravity Cockpit, and other hosts. Discovery never modifies these directories; add a path for hosts that cannot be detected automatically." }
+    var codexHomesDescription: String { isZh ? "自动发现默认 Codex、Orca、Antigravity Cockpit 等隔离目录，并读取其 sessions 与 archived_sessions 下的会话记录。自动发现不会修改目录内容；若你还有其他隔离的 Codex 会话路径，可在下方手动添加与管理。" : "Automatically discovers the default Codex home plus isolated directories used by Orca, Antigravity Cockpit, and other hosts, reading session records under their sessions and archived_sessions folders. Discovery never modifies these directories; add and manage any other isolated Codex session path below." }
     var codexHomePlaceholder: String { isZh ? "添加额外 Codex Home 路径" : "Add an extra Codex Home path" }
     var codexHomesRescan: String { isZh ? "重新扫描 ChatGPT 数据目录" : "Rescan ChatGPT data directories" }
     var codexHomesEmpty: String { isZh ? "未发现 ChatGPT 数据目录" : "No ChatGPT data directories found" }

@@ -23,13 +23,17 @@ pub fn parse_with_homes(
 ) -> Result<(Vec<UsageRecord>, String), Box<dyn std::error::Error>> {
     let mut cursor = FileCursor::from_json(cursor_data);
     let mut all_records = Vec::new();
-    let mut session_bases: Vec<PathBuf> = homes
-        .iter()
-        .filter(|item| item.exists && item.has_sessions)
-        .map(|item| item.path_buf().join("sessions"))
-        .collect();
+    // Codex writes its own nested `sessions/YYYY/MM/DD/` tree, while Codex-Manager
+    // archives sessions FLAT into `archived_sessions/`. The rollout glob matches
+    // at any depth, so scanning both bases covers both layouts.
+    let mut session_bases: Vec<PathBuf> = Vec::new();
+    for item in homes.iter().filter(|item| item.exists) {
+        session_bases.push(item.path_buf().join("sessions"));
+        session_bases.push(item.path_buf().join("archived_sessions"));
+    }
     if session_bases.is_empty() {
         session_bases.push(home_dir.join(".codex/sessions"));
+        session_bases.push(home_dir.join(".codex/archived_sessions"));
     }
     scan_codex_bases(&session_bases, &mut cursor, &mut all_records, "codex");
 
