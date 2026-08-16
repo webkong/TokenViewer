@@ -386,6 +386,58 @@ pub extern "C" fn tt_query_hourly(
     }
 }
 
+/// Query daily/hourly trend data for one Agent source.
+///
+/// # Safety
+/// All pointers must be valid C strings; `handle` may be null.
+#[no_mangle]
+pub extern "C" fn tt_query_agent_trend(
+    handle: *mut CoreHandle,
+    from: *const c_char,
+    to: *const c_char,
+    source: *const c_char,
+    hourly: i32,
+) -> *mut c_char {
+    let (handle, from, to) = match unsafe { unpack_query_args(handle, from, to) } {
+        Some(v) => v,
+        None => return std::ptr::null_mut(),
+    };
+    if source.is_null() {
+        return std::ptr::null_mut();
+    }
+    let source = match unsafe { CStr::from_ptr(source) }.to_str() {
+        Ok(value) => value,
+        Err(_) => return std::ptr::null_mut(),
+    };
+    let result = if hourly != 0 {
+        handle.db.query_hourly_for_source(&from, &to, source)
+    } else {
+        handle.db.query_daily_for_source(&from, &to, source)
+    };
+    match result {
+        Ok(mut data) => {
+            if let Ok(rows) = handle.db.bucket_records(&from, &to) {
+                let mut costs: HashMap<String, f64> = HashMap::new();
+                for row in rows.iter().filter(|row| row.source == source) {
+                    let key = if hourly != 0 {
+                        local_hour(&row.hour_start)
+                    } else {
+                        local_date(&row.hour_start)
+                    };
+                    if let Some(key) = key {
+                        *costs.entry(key).or_insert(0.0) += crate::pricing::compute_row_cost(row);
+                    }
+                }
+                for point in &mut data {
+                    point.total_cost_usd = costs.get(&point.date).copied().unwrap_or(0.0);
+                }
+            }
+            to_json_cstring(&data)
+        }
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 /// Query model breakdown. Returns JSON string.
 ///
 /// # Safety

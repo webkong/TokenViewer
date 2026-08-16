@@ -210,12 +210,30 @@ impl Database {
     }
 
     pub fn query_daily(&self, from: &str, to: &str) -> SqlResult<Vec<DailyUsage>> {
-        self.query_bucketed_usage(from, to, LocalUsageBucket::Day)
+        self.query_bucketed_usage(from, to, LocalUsageBucket::Day, None)
     }
 
     /// Hourly breakdown (for single-day view). Groups by local hour (YYYY-MM-DDTHH).
     pub fn query_hourly(&self, from: &str, to: &str) -> SqlResult<Vec<DailyUsage>> {
-        self.query_bucketed_usage(from, to, LocalUsageBucket::Hour)
+        self.query_bucketed_usage(from, to, LocalUsageBucket::Hour, None)
+    }
+
+    pub fn query_daily_for_source(
+        &self,
+        from: &str,
+        to: &str,
+        source: &str,
+    ) -> SqlResult<Vec<DailyUsage>> {
+        self.query_bucketed_usage(from, to, LocalUsageBucket::Day, Some(source))
+    }
+
+    pub fn query_hourly_for_source(
+        &self,
+        from: &str,
+        to: &str,
+        source: &str,
+    ) -> SqlResult<Vec<DailyUsage>> {
+        self.query_bucketed_usage(from, to, LocalUsageBucket::Hour, Some(source))
     }
 
     fn query_bucketed_usage(
@@ -223,6 +241,7 @@ impl Database {
         from: &str,
         to: &str,
         bucket: LocalUsageBucket,
+        source: Option<&str>,
     ) -> SqlResult<Vec<DailyUsage>> {
         let sql = format!(
             "SELECT {} as bucket,
@@ -231,12 +250,13 @@ impl Database {
                 SUM(reasoning_output_tokens), SUM(conversation_count)
              FROM usage
              WHERE hour_start >= ?1 AND hour_start < ?2
+               AND (?3 = '' OR source = ?3)
              GROUP BY bucket ORDER BY bucket",
             bucket.sql_expression()
         );
         let mut stmt = self.conn.prepare(&sql)?;
 
-        let rows = stmt.query_map(params![from, to], |row| {
+        let rows = stmt.query_map(params![from, to, source.unwrap_or("")], |row| {
             Ok(DailyUsage {
                 date: row.get(0)?,
                 total_tokens: row.get::<_, i64>(1)? as u64,

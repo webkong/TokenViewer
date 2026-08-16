@@ -119,6 +119,10 @@ final class CoreBridge: @unchecked Sendable {
         call { tt_query_hourly($0, from, to) }
     }
 
+    func queryAgentTrend(from: String, to: String, source: String, hourly: Bool) -> Data? {
+        call { tt_query_agent_trend($0, from, to, source, hourly ? 1 : 0) }
+    }
+
     func queryModelBreakdown(from: String, to: String) -> Data? {
         call { tt_query_model_breakdown($0, from, to) }
     }

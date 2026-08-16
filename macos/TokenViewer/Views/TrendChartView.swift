@@ -6,6 +6,9 @@ import SwiftUI
 struct TrendChartView: View {
     let data: [DailyPoint]
     let hourly: Bool
+    @Binding var selectedAgent: String
+    let agents: [String]
+    var cardHeight: CGFloat? = nil
     @State private var hoverIndex: Int?
     @ObservedObject private var l10n = L10n.shared
 
@@ -31,6 +34,15 @@ struct TrendChartView: View {
             HStack {
                 Text(l10n.usageTrend).font(.system(size: 16, weight: .semibold))
                 Spacer()
+                Picker("", selection: $selectedAgent) {
+                    Text(l10n.allAgents).tag("")
+                    ForEach(agents, id: \.self) { source in
+                        Text(AgentRegistry.shared.displayName(for: source)).tag(source)
+                    }
+                }
+                .labelsHidden()
+                .controlSize(.small)
+                .frame(maxWidth: 155)
                 Text(hourly ? l10n.byHour : l10n.byDay).font(.system(size: 12)).foregroundStyle(.secondary)
             }
 
@@ -78,7 +90,7 @@ struct TrendChartView: View {
             xAxisLabels()
             legend()
         }
-        .tvCard()
+        .tvCard(height: cardHeight)
     }
 
     // MARK: chart paths

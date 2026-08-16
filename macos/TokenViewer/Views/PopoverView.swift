@@ -208,7 +208,12 @@ struct PopoverView: View {
                 .pickerStyle(.segmented).labelsHidden().frame(width: 220).controlSize(.mini)
                 .onChange(of: viewModel.selectedRange) { viewModel.refresh() }
             }
-            TrendChartView(data: viewModel.dailyUsage, hourly: viewModel.selectedRange == .today)
+            TrendChartView(
+                data: viewModel.dailyUsage,
+                hourly: viewModel.selectedRange == .today,
+                selectedAgent: .constant(""),
+                agents: []
+            )
         }
     }
 

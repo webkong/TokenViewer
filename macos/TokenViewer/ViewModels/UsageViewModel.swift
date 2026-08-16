@@ -104,6 +104,8 @@ class UsageViewModel: ObservableObject {
     @Published var allDailyUsage: [DailyPoint] = []
     @Published var projectUsage: [ProjectUsageEntry] = []
     @Published var modelBreakdown: [ModelEntry] = []
+    /// Empty means the aggregate trend across every Agent.
+    @Published var selectedTrendAgent = ""
     @Published var heatmap: [HeatmapPoint] = []
     @Published var panelCards: [PanelCard] = []
     @Published var isLoading = false
@@ -142,6 +144,17 @@ class UsageViewModel: ObservableObject {
         selectedRange == .today
             || selectedRange == .yesterday
             || (selectedRange == .custom && AppTime.isSameLocalDay(customFrom, customTo))
+    }
+
+    var trendAgents: [String] {
+        var sources = Set(modelBreakdown.map(\.source))
+        if !selectedTrendAgent.isEmpty {
+            sources.insert(selectedTrendAgent)
+        }
+        return Array(sources).sorted {
+            AgentRegistry.shared.displayName(for: $0)
+                .localizedCaseInsensitiveCompare(AgentRegistry.shared.displayName(for: $1)) == .orderedAscending
+        }
     }
 
     private let decoder = JSONDecoder()
@@ -198,21 +211,31 @@ class UsageViewModel: ObservableObject {
                 resolvedDefaultRange = hasData ? .today : .yesterday
             }
 
-            let (_, from, to, useHourly) = await MainActor.run { [weak self] () -> (UsageViewModel.TimeRange, String, String, Bool) in
-                guard let self else { return (.week, "", "", false) }
+            let (_, from, to, useHourly, trendAgent) = await MainActor.run { [weak self] () -> (UsageViewModel.TimeRange, String, String, Bool, String) in
+                guard let self else { return (.week, "", "", false, "") }
                 if let defaultRange = resolvedDefaultRange, !self.hasAppliedDefaultRange {
                     self.hasAppliedDefaultRange = true
                     self.selectedRange = defaultRange
                 }
                 let range = self.selectedRange
                 let (from, to) = self.dateRange(for: range)
-                return (range, from, to, self.isHourlyView)
+                return (range, from, to, self.isHourlyView, self.selectedTrendAgent)
             }
 
             let summaryData = CoreBridge.shared.querySummary(from: from, to: to)
-            let dailyData = useHourly
-                ? CoreBridge.shared.queryHourly(from: from, to: to)
-                : CoreBridge.shared.queryDaily(from: from, to: to)
+            let dailyData: Data?
+            if trendAgent.isEmpty {
+                dailyData = useHourly
+                    ? CoreBridge.shared.queryHourly(from: from, to: to)
+                    : CoreBridge.shared.queryDaily(from: from, to: to)
+            } else {
+                dailyData = CoreBridge.shared.queryAgentTrend(
+                    from: from,
+                    to: to,
+                    source: trendAgent,
+                    hourly: useHourly
+                )
+            }
             let modelData = CoreBridge.shared.queryModelBreakdown(from: from, to: to)
             let allRange = AppTime.allUsage()
             let allDailyData = CoreBridge.shared.queryDaily(from: allRange.from, to: allRange.to)

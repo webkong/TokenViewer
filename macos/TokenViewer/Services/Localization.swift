@@ -46,6 +46,8 @@ final class L10n: ObservableObject {
     var rangeCustom: String { isZh ? "自定义" : "Custom" }
     var rangeFrom: String { isZh ? "起始" : "From" }
     var rangeTo: String { isZh ? "结束" : "To" }
+    var rangeSelectTitle: String { isZh ? "选择日期范围" : "Select date range" }
+    var rangeSelectHint: String { isZh ? "依次点击开始和结束日期" : "Click a start date, then an end date" }
     var today: String { isZh ? "今天" : "Today" }
     var sevenDays: String { isZh ? "7 天" : "7 Days" }
     var thirtyDays: String { isZh ? "30 天" : "30 Days" }
@@ -62,6 +64,9 @@ final class L10n: ObservableObject {
 
     // MARK: - Trend Chart
     var usageTrend: String { isZh ? "用量趋势" : "Usage Trend" }
+    var allAgents: String { isZh ? "全部 Agent" : "All Agents" }
+    var showAll: String { isZh ? "显示全部" : "Show All" }
+    var showLess: String { isZh ? "收起" : "Show Less" }
     var byDay: String { isZh ? "按天" : "by day" }
     var byHour: String { isZh ? "按小时" : "by hour" }
     var input: String { isZh ? "输入" : "Input" }
@@ -183,6 +188,7 @@ final class L10n: ObservableObject {
     var resetSettingsConfirm: String { isZh ? "确认重置设置？" : "Reset Settings?" }
     var resetSettingsConfirmMessage: String { isZh ? "这会恢复应用偏好设置，但不会删除用量数据、skills 文件、Git 配置或 Keychain 令牌。" : "This restores app preferences without deleting usage data, skills files, Git config, or Keychain tokens." }
     var cancel: String { isZh ? "取消" : "Cancel" }
+    var apply: String { isZh ? "应用" : "Apply" }
     var about: String { isZh ? "关于" : "About" }
     var aboutSupportedAgents: String { isZh ? "支持的 Agent" : "Supported Agents" }
     func aboutAgentCount(_ n: Int) -> String { isZh ? "\(n) 个 AI 编程工具" : "\(n) AI coding tools" }

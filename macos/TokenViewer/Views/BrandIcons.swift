@@ -2,10 +2,12 @@ import SwiftUI
 
 /// Shared rounded-card background used across dashboard sections.
 struct CardBackground: ViewModifier {
+    var height: CGFloat?
+
     func body(content: Content) -> some View {
         content
             .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 14)
                     .fill(Color(nsColor: .controlBackgroundColor))
@@ -13,7 +15,11 @@ struct CardBackground: ViewModifier {
             )
     }
 }
-extension View { func tvCard() -> some View { modifier(CardBackground()) } }
+extension View {
+    func tvCard(height: CGFloat? = nil) -> some View {
+        modifier(CardBackground(height: height))
+    }
+}
 
 /// Renders a coding-agent product logo.
 struct AgentIcon: View {

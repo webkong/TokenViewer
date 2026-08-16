@@ -16,6 +16,7 @@ char* _Nullable tt_get_provider_status(CoreHandle* _Nullable handle);
 char* _Nullable tt_query_summary(CoreHandle* _Nullable handle, const char* _Nonnull from, const char* _Nonnull to);
 char* _Nullable tt_query_daily(CoreHandle* _Nullable handle, const char* _Nonnull from, const char* _Nonnull to);
 char* _Nullable tt_query_hourly(CoreHandle* _Nullable handle, const char* _Nonnull from, const char* _Nonnull to);
+char* _Nullable tt_query_agent_trend(CoreHandle* _Nullable handle, const char* _Nonnull from, const char* _Nonnull to, const char* _Nonnull source, int32_t hourly);
 char* _Nullable tt_query_model_breakdown(CoreHandle* _Nullable handle, const char* _Nonnull from, const char* _Nonnull to);
 char* _Nullable tt_query_project_usage(CoreHandle* _Nullable handle);
 char* _Nullable tt_query_heatmap(CoreHandle* _Nullable handle, int32_t weeks);

@@ -40,11 +40,6 @@ struct UsageView: View {
     @ObservedObject var viewModel: UsageViewModel
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var currency = CurrencyStore.shared
-    /// Measured height of the Custom date-range capsule (padding included), used
-    /// to size the segmented range Picker to match exactly — otherwise the two
-    /// controls have slightly different total heights and the row visibly jumps
-    /// when Custom is toggled on/off.
-    @State private var customPickerHeight: CGFloat = 38
 
     var body: some View {
         GeometryReader { geo in
@@ -56,32 +51,7 @@ struct UsageView: View {
                     rangeSelector
 
                     if let s = viewModel.summary {
-                        // Overview
-                        SummaryCardsView(summary: s, models: viewModel.modelBreakdown)
-                        TokenTypeBar(summary: s)
-
-                        // Trend (hero, full width)
-                        if !viewModel.dailyUsage.isEmpty {
-                            TrendChartView(data: viewModel.dailyUsage, hourly: viewModel.isHourlyView)
-                        }
-                        if !viewModel.heatmap.isEmpty {
-                            // geo.size.width is the ScrollView content width; subtract the
-                            // VStack's outer padding(20) and tvCard()'s inner padding(16),
-                            // both applied on each side, to get the card's real inner width.
-                            HeatmapView(points: viewModel.heatmap, availableWidth: geo.size.width - 72)
-                        }
-
-                        // Composition: agents + models side-by-side when wide
-                        if !viewModel.modelBreakdown.isEmpty {
-                            pair(wide,
-                                 AgentBreakdownView(models: viewModel.modelBreakdown),
-                                 ModelBreakdownView(models: viewModel.modelBreakdown))
-                        }
-
-                        // Detail
-                        if !viewModel.allDailyUsage.isEmpty || !viewModel.projectUsage.isEmpty {
-                            UsageDetailsView(daily: viewModel.allDailyUsage, projects: viewModel.projectUsage)
-                        }
+                        dashboardModules(summary: s, width: geo.size.width - 40, wide: wide)
                     } else {
                         ProgressView().frame(maxWidth: .infinity, minHeight: 200)
                     }
@@ -93,18 +63,72 @@ struct UsageView: View {
         .onAppear { viewModel.sync() }
     }
 
-    /// Lay two cards side-by-side (top-aligned) when wide, else stacked.
     @ViewBuilder
-    private func pair<A: View, B: View>(_ wide: Bool, _ a: A, _ b: B) -> some View {
+    private func dashboardModules(summary: UsageSummary, width: CGFloat, wide: Bool) -> some View {
         if wide {
+            let side = (width - 16) * 0.30
+            let main = width - 16 - side
             HStack(alignment: .top, spacing: 16) {
-                a.frame(maxWidth: .infinity, alignment: .topLeading)
-                b.frame(maxWidth: .infinity, alignment: .topLeading)
+                SummaryCardsView(summary: summary, models: viewModel.modelBreakdown, compact: true)
+                    .frame(width: main)
+                TokenTypeBar(summary: summary, cardHeight: 130)
+                    .frame(width: side)
+            }
+
+            HStack(alignment: .top, spacing: 16) {
+                if !viewModel.dailyUsage.isEmpty {
+                    trendChart(cardHeight: 330).frame(width: main)
+                }
+                if !viewModel.modelBreakdown.isEmpty {
+                    AgentBreakdownView(models: viewModel.modelBreakdown, compact: true, cardHeight: 330)
+                        .frame(width: side)
+                }
+            }
+
+            HStack(alignment: .top, spacing: 16) {
+                if !viewModel.heatmap.isEmpty {
+                    HeatmapView(points: viewModel.heatmap, availableWidth: main - 36, cardHeight: 250)
+                        .frame(width: main)
+                }
+                if !viewModel.modelBreakdown.isEmpty {
+                    ModelBreakdownView(
+                        models: viewModel.modelBreakdown,
+                        limit: 4,
+                        compact: true,
+                        cardHeight: 250
+                    )
+                    .frame(width: side)
+                }
+            }
+            if !viewModel.allDailyUsage.isEmpty || !viewModel.projectUsage.isEmpty {
+                UsageDetailsView(daily: viewModel.allDailyUsage, projects: viewModel.projectUsage)
             }
         } else {
-            a
-            b
+            SummaryCardsView(summary: summary, models: viewModel.modelBreakdown)
+            TokenTypeBar(summary: summary)
+            if !viewModel.dailyUsage.isEmpty { trendChart() }
+            if !viewModel.modelBreakdown.isEmpty {
+                AgentBreakdownView(models: viewModel.modelBreakdown)
+                ModelBreakdownView(models: viewModel.modelBreakdown)
+            }
+            if !viewModel.heatmap.isEmpty {
+                HeatmapView(points: viewModel.heatmap, availableWidth: width - 36)
+            }
+            if !viewModel.allDailyUsage.isEmpty || !viewModel.projectUsage.isEmpty {
+                UsageDetailsView(daily: viewModel.allDailyUsage, projects: viewModel.projectUsage)
+            }
         }
+    }
+
+    private func trendChart(cardHeight: CGFloat? = nil) -> some View {
+        TrendChartView(
+            data: viewModel.dailyUsage,
+            hourly: viewModel.isHourlyView,
+            selectedAgent: $viewModel.selectedTrendAgent,
+            agents: viewModel.trendAgents,
+            cardHeight: cardHeight
+        )
+        .onChange(of: viewModel.selectedTrendAgent) { viewModel.refresh() }
     }
 
     private var header: some View {
@@ -141,127 +165,239 @@ struct UsageView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .controlSize(.large)
-            .frame(width: 560)
+            .frame(maxWidth: 560)
             .onChange(of: viewModel.selectedRange) { viewModel.refresh() }
 
             if viewModel.selectedRange == .custom {
-                customDateRangePicker
+                CustomRangePicker(
+                    from: $viewModel.customFrom,
+                    to: $viewModel.customTo,
+                    onApply: viewModel.refresh
+                )
                     .transition(.opacity.combined(with: .move(edge: .leading)))
             }
 
             Spacer(minLength: 0)
         }
-        // Pin the row to the custom picker's height so toggling Custom on/off
-        // never changes the row height (the custom capsule is taller than the
-        // segmented picker). The height is measured from an always-present
-        // hidden copy below — not the animated live one — so the measurement
-        // is stable and doesn't jitter during the show/hide transition.
-        .frame(height: customPickerHeight)
-        .background(
-            customDateRangeVisual
-                .hidden()
-                .fixedSize()
-                .allowsHitTesting(false)
-                .background(GeometryReader { g in
-                    Color.clear.preference(key: CustomPickerHeightKey.self, value: g.size.height)
-                }),
-            alignment: .leading
-        )
-        .onPreferenceChange(CustomPickerHeightKey.self) { customPickerHeight = $0 }
         .animation(.easeInOut(duration: 0.18), value: viewModel.selectedRange)
     }
-
-    private var customDateRangeVisual: some View {
-        HStack(spacing: 8) {
-            UsageDateField(
-                title: l10n.rangeFrom,
-                selection: $viewModel.customFrom,
-                range: ...viewModel.customTo
-            )
-
-            Image(systemName: "arrow.right")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.tertiary)
-
-            UsageDateField(
-                title: l10n.rangeTo,
-                selection: $viewModel.customTo,
-                range: viewModel.customFrom...Date()
-            )
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color(nsColor: .controlBackgroundColor), in: Capsule())
-        .overlay(Capsule().strokeBorder(.quaternary, lineWidth: 0.5))
-    }
-
-    private var customDateRangePicker: some View {
-        customDateRangeVisual
-            .onChange(of: viewModel.customFrom) { viewModel.refresh() }
-            .onChange(of: viewModel.customTo) { viewModel.refresh() }
-    }
 }
 
-private struct UsageDateField: View {
-    let title: String
-    @Binding var selection: Date
-    let range: PartialRangeThrough<Date>?
-    let closedRange: ClosedRange<Date>?
+private struct CustomRangePicker: View {
+    @Binding var from: Date
+    @Binding var to: Date
+    let onApply: () -> Void
+    @ObservedObject private var l10n = L10n.shared
+    @State private var isPresented = false
+    @State private var visibleMonth = Date()
+    @State private var draftFrom = Date()
+    @State private var draftTo = Date()
+    @State private var selectingEnd = false
 
-    init(title: String, selection: Binding<Date>, range: PartialRangeThrough<Date>) {
-        self.title = title
-        self._selection = selection
-        self.range = range
-        self.closedRange = nil
-    }
-
-    init(title: String, selection: Binding<Date>, range: ClosedRange<Date>) {
-        self.title = title
-        self._selection = selection
-        self.range = nil
-        self.closedRange = range
-    }
+    private var calendar: Calendar { AppTime.localCalendar }
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
 
     var body: some View {
-        HStack(spacing: 5) {
-            Text(title)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
+        Button {
+            prepareSelection()
+            isPresented = true
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "calendar.badge.clock").foregroundStyle(TVColor.brand)
+                Text(rangeLabel)
+                    .font(.system(size: 12, weight: .medium))
+                    .monospacedDigit()
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 11)
+            .frame(height: 30)
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary, lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPresented, arrowEdge: .top) {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(l10n.rangeSelectTitle)
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(l10n.rangeSelectHint)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
 
-            if let range {
-                DatePicker("", selection: $selection, in: range, displayedComponents: .date)
-                    .datePickerStyle(.compact)
-                    .labelsHidden()
-            } else if let closedRange {
-                DatePicker("", selection: $selection, in: closedRange, displayedComponents: .date)
-                    .datePickerStyle(.compact)
-                    .labelsHidden()
+                calendarHeader
+                weekdayHeader
+                calendarGrid
+
+                Divider()
+
+                HStack {
+                    Text(draftRangeLabel)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(l10n.cancel) { isPresented = false }
+                    Button(l10n.apply) { applySelection() }
+                        .buttonStyle(.borderedProminent)
+                        .tint(TVColor.brand)
+                }
+            }
+            .padding(16)
+            .frame(width: 340)
+        }
+    }
+
+    private var rangeLabel: String { "\(shortDate(from)) – \(shortDate(to))" }
+
+    private var draftRangeLabel: String {
+        "\(shortDate(draftFrom)) – \(shortDate(draftTo))"
+    }
+
+    private var calendarHeader: some View {
+        HStack {
+            Button { moveMonth(by: -1) } label: {
+                Image(systemName: "chevron.left")
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+            Text(visibleMonth.formatted(.dateTime.year().month(.wide)))
+                .font(.system(size: 13, weight: .semibold))
+            Spacer()
+
+            Button { moveMonth(by: 1) } label: {
+                Image(systemName: "chevron.right")
+            }
+            .buttonStyle(.plain)
+            .disabled(!canMoveToNextMonth)
+        }
+        .frame(height: 24)
+    }
+
+    private var weekdayHeader: some View {
+        LazyVGrid(columns: columns, spacing: 4) {
+            ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { _, symbol in
+                Text(symbol)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
             }
         }
-        .font(.system(size: 11))
-        .controlSize(.small)
-        .padding(.leading, 8)
-        .padding(.trailing, 2)
-        .padding(.vertical, 3)
-        .background(Color(nsColor: .textBackgroundColor).opacity(0.75), in: Capsule())
-        .overlay(Capsule().strokeBorder(.quaternary.opacity(0.7), lineWidth: 0.5))
+    }
+
+    private var calendarGrid: some View {
+        LazyVGrid(columns: columns, spacing: 4) {
+            ForEach(calendarDays, id: \.self) { day in
+                dayButton(day)
+            }
+        }
+    }
+
+    private func dayButton(_ day: Date) -> some View {
+        let isEndpoint = calendar.isDate(day, inSameDayAs: draftFrom)
+            || calendar.isDate(day, inSameDayAs: draftTo)
+        let isInRange = day >= draftFrom && day <= draftTo
+        let isCurrentMonth = calendar.isDate(day, equalTo: visibleMonth, toGranularity: .month)
+        let isFuture = day > calendar.startOfDay(for: Date())
+
+        return Button { select(day) } label: {
+            Text("\(calendar.component(.day, from: day))")
+                .font(.system(size: 11, weight: isEndpoint ? .semibold : .regular))
+                .foregroundStyle(isEndpoint ? Color.white : (isCurrentMonth ? Color.primary : Color.secondary))
+                .frame(maxWidth: .infinity, minHeight: 28)
+                .background {
+                    if isEndpoint {
+                        Circle().fill(TVColor.brand)
+                    } else if isInRange {
+                        RoundedRectangle(cornerRadius: 5).fill(TVColor.brand.opacity(0.13))
+                    } else if calendar.isDateInToday(day) {
+                        Circle().strokeBorder(TVColor.brand.opacity(0.65), lineWidth: 1)
+                    }
+                }
+                .opacity(isFuture ? 0.3 : 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(isFuture)
+    }
+
+    private func shortDate(_ date: Date) -> String {
+        date.formatted(.dateTime.year().month(.abbreviated).day())
+    }
+
+    private var weekdaySymbols: [String] {
+        let symbols = calendar.veryShortStandaloneWeekdaySymbols
+        let offset = max(0, calendar.firstWeekday - 1)
+        return Array(symbols[offset...] + symbols[..<offset])
+    }
+
+    private var calendarDays: [Date] {
+        guard let monthStart = calendar.date(
+            from: calendar.dateComponents([.year, .month], from: visibleMonth)
+        ) else { return [] }
+        let weekday = calendar.component(.weekday, from: monthStart)
+        let leadingDays = (weekday - calendar.firstWeekday + 7) % 7
+        guard let gridStart = calendar.date(byAdding: .day, value: -leadingDays, to: monthStart) else {
+            return []
+        }
+        return (0..<42).compactMap { calendar.date(byAdding: .day, value: $0, to: gridStart) }
+    }
+
+    private func prepareSelection() {
+        draftFrom = calendar.startOfDay(for: min(from, to))
+        draftTo = calendar.startOfDay(for: max(from, to))
+        visibleMonth = draftTo
+        selectingEnd = false
+    }
+
+    private func select(_ date: Date) {
+        let day = calendar.startOfDay(for: date)
+        if !selectingEnd {
+            draftFrom = day
+            draftTo = day
+            selectingEnd = true
+        } else {
+            draftFrom = min(draftFrom, day)
+            draftTo = max(draftTo, day)
+            selectingEnd = false
+        }
+    }
+
+    private func moveMonth(by value: Int) {
+        guard let month = calendar.date(byAdding: .month, value: value, to: visibleMonth) else { return }
+        visibleMonth = month
+    }
+
+    private var canMoveToNextMonth: Bool {
+        guard let next = calendar.date(byAdding: .month, value: 1, to: visibleMonth) else { return false }
+        return next <= Date()
+    }
+
+    private func applySelection() {
+        from = draftFrom
+        to = draftTo
+        isPresented = false
+        onApply()
     }
 }
 
-private struct CustomPickerHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 38
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-}
 
 // MARK: - Summary Cards
 
 private struct SummaryCardsView: View {
     let summary: UsageSummary
     let models: [ModelEntry]
+    var compact = false
     @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
-        HStack(spacing: 14) {
+        LazyVGrid(
+            columns: compact
+                ? Array(repeating: GridItem(.flexible(), spacing: 14), count: 4)
+                : [GridItem(.adaptive(minimum: 145), spacing: 14)],
+            spacing: 14
+        ) {
             MetricCard(title: l10n.usageTotalTokens, value: tvFormatTokens(summary.total_tokens),
                        icon: "number", tint: TVColor.brand)
             CostMetricCard(totalCost: summary.total_cost_usd, models: models)
@@ -398,6 +534,7 @@ private struct MetricCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(17)
+        .frame(height: 130, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 14)
                 .fill(Color(nsColor: .controlBackgroundColor))
@@ -441,21 +578,30 @@ private struct DailyChartView: View {
 
 private struct ModelBreakdownView: View {
     let models: [ModelEntry]
+    var limit = 8
+    var compact = false
+    var cardHeight: CGFloat? = nil
     @ObservedObject private var l10n = L10n.shared
+    @State private var isExpanded = false
 
     private var merged: [ModelEntry] { mergedByModel(models) }
+    private var visibleModels: [ModelEntry] {
+        isExpanded ? merged : Array(merged.prefix(limit))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(l10n.usageModels).font(.system(size: 16, weight: .semibold))
-            ForEach(merged.prefix(8)) { entry in
+            ForEach(visibleModels) { entry in
                 VStack(spacing: 5) {
                     HStack(spacing: 8) {
                         ModelProviderIcon(model: entry.model, fallbackAgentSource: entry.source, size: 14)
                         Text(entry.model).font(.system(size: 14, weight: .medium)).lineLimit(1)
                         Spacer()
-                        Text(tvFormatCost(entry.total_cost_usd))
-                            .font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+                        if !compact {
+                            Text(tvFormatCost(entry.total_cost_usd))
+                                .font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+                        }
                         Text(tvFormatTokens(entry.total_tokens))
                             .font(.system(size: 12, design: .monospaced)).foregroundStyle(.primary)
                             .frame(width: 60, alignment: .trailing)
@@ -470,13 +616,28 @@ private struct ModelBreakdownView: View {
                     .frame(height: 5)
                 }
             }
+
+            if merged.count > limit {
+                expandButton
+            }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(nsColor: .controlBackgroundColor))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 0.5))
-        )
+        .tvCard(height: isExpanded ? nil : cardHeight)
+    }
+
+    private var expandButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+        } label: {
+            HStack(spacing: 5) {
+                Text(isExpanded ? l10n.showLess : l10n.showAll)
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(TVColor.brand)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -485,6 +646,7 @@ private struct ModelBreakdownView: View {
 
 private struct TokenTypeBar: View {
     let summary: UsageSummary
+    var cardHeight: CGFloat? = nil
     @ObservedObject private var l10n = L10n.shared
 
     /// (stable key, localized label, tokens, color). The key is used as the
@@ -529,7 +691,7 @@ private struct TokenTypeBar: View {
                 .clipShape(RoundedRectangle(cornerRadius: 4))
             }
             .frame(height: 12)
-            HStack(spacing: 14) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), alignment: .leading)], alignment: .leading, spacing: 7) {
                 ForEach(segments, id: \.0) { seg in
                     HStack(spacing: 4) {
                         Circle().fill(seg.3).frame(width: 7, height: 7)
@@ -537,10 +699,9 @@ private struct TokenTypeBar: View {
                         Text(tvFormatTokens(seg.2)).font(.system(size: 12, weight: .medium, design: .monospaced))
                     }
                 }
-                Spacer()
             }
         }
-        .tvCard()
+        .tvCard(height: cardHeight)
     }
 }
 
@@ -548,7 +709,10 @@ private struct TokenTypeBar: View {
 
 private struct AgentBreakdownView: View {
     let models: [ModelEntry]
+    var compact = false
+    var cardHeight: CGFloat? = nil
     @ObservedObject private var l10n = L10n.shared
+    @State private var isExpanded = false
 
     private struct Row: Identifiable { let id: String; let tokens: UInt64; let cost: Double }
 
@@ -562,18 +726,24 @@ private struct AgentBreakdownView: View {
             .sorted { $0.tokens > $1.tokens }
     }
 
+    private var visibleRows: [Row] {
+        isExpanded ? rows : Array(rows.prefix(6))
+    }
+
     var body: some View {
         let total = max(rows.reduce(0) { $0 + $1.tokens }, 1)
         VStack(alignment: .leading, spacing: 12) {
             Text(l10n.usageAgents).font(.system(size: 16, weight: .semibold))
-            ForEach(rows) { row in
+            ForEach(visibleRows) { row in
                 VStack(spacing: 5) {
                     HStack(spacing: 8) {
                         AgentIcon(source: row.id, size: 14)
                         Text(AgentRegistry.shared.displayName(for: row.id)).font(.system(size: 14, weight: .medium))
                         Spacer()
-                        Text(tvFormatCost(row.cost))
-                            .font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+                        if !compact {
+                            Text(tvFormatCost(row.cost))
+                                .font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+                        }
                         Text(tvFormatTokens(row.tokens))
                             .font(.system(size: 12, design: .monospaced))
                             .frame(width: 60, alignment: .trailing)
@@ -588,8 +758,28 @@ private struct AgentBreakdownView: View {
                     .frame(height: 5)
                 }
             }
+
+            if rows.count > 6 {
+                expandButton
+            }
         }
-        .tvCard()
+        .tvCard(height: isExpanded ? nil : cardHeight)
+    }
+
+    private var expandButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+        } label: {
+            HStack(spacing: 5) {
+                Text(isExpanded ? l10n.showLess : l10n.showAll)
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(TVColor.brand)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -604,6 +794,7 @@ private struct HeatmapView: View {
     /// converge, which is why the grid used to either leave a gap on the right
     /// or shrink the visible week range to fit.
     let availableWidth: CGFloat
+    var cardHeight: CGFloat? = nil
     @ObservedObject private var l10n = L10n.shared
 
     private func color(_ level: UInt8) -> Color {
@@ -723,7 +914,7 @@ private struct HeatmapView: View {
             .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .tvCard()
+        .tvCard(height: cardHeight)
     }
 
     private func helpText(_ cell: Cell) -> String {
@@ -903,42 +1094,38 @@ private struct DailyTableView: View {
 
     private var headerRow: some View {
         HStack(spacing: 0) {
-            cell(l10n.usageColDate, width: nil, align: .leading, header: true)
-            cell(l10n.usageColTotal, width: col, align: .trailing, header: true)
-            cell(l10n.usageColInput, width: col, align: .trailing, header: true)
-            cell(l10n.usageColOutput, width: col, align: .trailing, header: true)
-            cell(l10n.usageColCache, width: col, align: .trailing, header: true)
-            cell(l10n.usageColReason, width: col, align: .trailing, header: true)
-            cell(l10n.usageColConvs, width: convCol, align: .trailing, header: true)
+            cell(l10n.usageColDate, align: .leading, header: true)
+            cell(l10n.usageColTotal, align: .trailing, header: true)
+            cell(l10n.usageColInput, align: .trailing, header: true)
+            cell(l10n.usageColOutput, align: .trailing, header: true)
+            cell(l10n.usageColCache, align: .trailing, header: true)
+            cell(l10n.usageColReason, align: .trailing, header: true)
+            cell(l10n.usageColConvs, align: .trailing, header: true)
         }
     }
 
     private func dataRow(_ date: String, _ p: DailyPoint?) -> some View {
         HStack(spacing: 0) {
-            cell(date, width: nil, align: .leading)
-            cell(num(p?.total_tokens), width: col, align: .trailing)
-            cell(num(p?.input_tokens), width: col, align: .trailing)
-            cell(num(p?.output_tokens), width: col, align: .trailing)
-            cell(p.map { num(cacheTotal($0)) } ?? "—", width: col, align: .trailing)
-            cell(num(p?.reasoning_output_tokens), width: col, align: .trailing)
-            cell(p.map { "\($0.conversation_count)" } ?? "—", width: convCol, align: .trailing)
+            cell(date, align: .leading)
+            cell(num(p?.total_tokens), align: .trailing)
+            cell(num(p?.input_tokens), align: .trailing)
+            cell(num(p?.output_tokens), align: .trailing)
+            cell(p.map { num(cacheTotal($0)) } ?? "—", align: .trailing)
+            cell(num(p?.reasoning_output_tokens), align: .trailing)
+            cell(p.map { "\($0.conversation_count)" } ?? "—", align: .trailing)
         }
     }
-
-    private let col: CGFloat = 78
-    private let convCol: CGFloat = 52
 
     private func num(_ v: UInt64?) -> String {
         guard let v else { return "—" }
         return v.formatted(.number.grouping(.automatic))
     }
 
-    private func cell(_ text: String, width: CGFloat?, align: Alignment, header: Bool = false) -> some View {
+    private func cell(_ text: String, align: Alignment, header: Bool = false) -> some View {
         Text(text)
             .font(.system(size: header ? 11 : 12, weight: header ? .medium : .regular, design: header ? .default : .monospaced))
             .foregroundStyle(header ? AnyShapeStyle(.secondary) : (text == "—" ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary)))
             .lineLimit(1)
-            .frame(width: width, alignment: align)
-            .frame(maxWidth: width == nil ? .infinity : nil, alignment: align)
+            .frame(maxWidth: .infinity, alignment: align)
     }
 }
