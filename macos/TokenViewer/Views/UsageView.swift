@@ -79,8 +79,8 @@ struct UsageView: View {
                         }
 
                         // Detail
-                        if !viewModel.dailyUsage.isEmpty {
-                            DailyTableView(data: viewModel.dailyUsage)
+                        if !viewModel.allDailyUsage.isEmpty || !viewModel.projectUsage.isEmpty {
+                            UsageDetailsView(daily: viewModel.allDailyUsage, projects: viewModel.projectUsage)
                         }
                     } else {
                         ProgressView().frame(maxWidth: .infinity, minHeight: 200)
@@ -733,7 +733,122 @@ private struct HeatmapView: View {
     }
 }
 
-// MARK: - Daily details table
+// MARK: - All-time daily / project details
+
+private struct UsageDetailsView: View {
+    private enum Tab: String, CaseIterable { case daily, projects }
+
+    let daily: [DailyPoint]
+    let projects: [ProjectUsageEntry]
+    @ObservedObject private var l10n = L10n.shared
+    @State private var tab: Tab = .daily
+    @State private var projectLimit = 10
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Picker("", selection: $tab) {
+                    Text(l10n.usageDailyDetails).tag(Tab.daily)
+                    Text(l10n.usageProjectDetails).tag(Tab.projects)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+
+                Spacer()
+
+                if tab == .projects {
+                    Picker("", selection: $projectLimit) {
+                        ForEach([3, 6, 10], id: \.self) { count in
+                            Text(l10n.usageProjectTop(count)).tag(count)
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
+            }
+
+            if tab == .daily {
+                DailyTableView(data: daily)
+            } else {
+                ProjectUsageList(entries: Array(projects.prefix(projectLimit)))
+            }
+        }
+        .tvCard()
+    }
+}
+
+private struct ProjectUsageList: View {
+    let entries: [ProjectUsageEntry]
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        if entries.isEmpty {
+            Text(l10n.usageProjectEmpty)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, minHeight: 70, alignment: .center)
+        } else {
+            let maximum = entries.map(\.total_tokens).max() ?? 1
+            VStack(spacing: 4) {
+                ForEach(entries) { entry in
+                    projectRow(entry, maximum: maximum)
+                }
+            }
+        }
+    }
+
+    private func projectRow(_ entry: ProjectUsageEntry, maximum: UInt64) -> some View {
+        let parts = entry.project_key.split(separator: "/", maxSplits: 1).map(String.init)
+        let owner = parts.count > 1 ? parts[0] : ""
+        let repo = parts.count > 1 ? parts[1] : (parts.first ?? entry.project_key)
+        let fraction = maximum > 0 ? CGFloat(entry.total_tokens) / CGFloat(maximum) : 0
+
+        return HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9).fill(Color(nsColor: .controlColor))
+                Text(repo.prefix(1).uppercased())
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 38, height: 38)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 0) {
+                    if !owner.isEmpty {
+                        Text("\(owner)/").foregroundStyle(.tertiary)
+                    }
+                    Text(repo).foregroundStyle(.primary)
+                }
+                .font(.system(size: 13, weight: .medium))
+                .lineLimit(1)
+
+                HStack(spacing: 4) {
+                    ForEach(entry.sources.prefix(5), id: \.self) { source in
+                        AgentIcon(source: source, size: 13)
+                    }
+                }
+            }
+
+            Spacer(minLength: 16)
+
+            VStack(alignment: .trailing, spacing: 6) {
+                Text(tvFormatTokens(entry.total_tokens))
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.secondary.opacity(0.10))
+                        Capsule().fill(TVColor.brand)
+                            .frame(width: max(entry.total_tokens > 0 ? 3 : 0, geometry.size.width * fraction))
+                    }
+                }
+                .frame(width: 120, height: 4)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+}
 
 private struct DailyTableView: View {
     let data: [DailyPoint]
@@ -763,35 +878,27 @@ private struct DailyTableView: View {
         return totals.values.sorted { $0.date < $1.date }
     }
 
-    /// Build a contiguous descending date list; days without a record are nil ("—").
+    /// Every day with recorded usage, newest first. This list intentionally uses
+    /// the all-time query and is independent of the dashboard range selector.
     private func rows() -> [(date: String, point: DailyPoint?)] {
-        let normalized = dailyData
-        let byDate = Dictionary(uniqueKeysWithValues: normalized.map { ($0.date, $0) })
-        guard let maxStr = normalized.map({ $0.date }).max(),
-              let maxDate = AppTime.localDate(fromDayKey: maxStr) else { return [] }
-        let calendar = AppTime.localCalendar
-        var out: [(String, DailyPoint?)] = []
-        var d = maxDate
-        for _ in 0..<14 {
-            let key = AppTime.localDayKey(for: d)
-            out.append((key, byDate[key]))
-            d = calendar.date(byAdding: .day, value: -1, to: d)!
-        }
-        return out
+        dailyData.sorted { $0.date > $1.date }.map { ($0.date, Optional($0)) }
     }
 
     private func cacheTotal(_ p: DailyPoint) -> UInt64 { p.cached_input_tokens + p.cache_creation_input_tokens }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(l10n.usageDailyDetails).font(.system(size: 16, weight: .semibold))
             headerRow
             Divider()
-            ForEach(rows(), id: \.date) { row in
-                dataRow(row.date, row.point)
+            ScrollView(showsIndicators: true) {
+                LazyVStack(spacing: 7) {
+                    ForEach(rows(), id: \.date) { row in
+                        dataRow(row.date, row.point)
+                    }
+                }
             }
+            .frame(maxHeight: 380)
         }
-        .tvCard()
     }
 
     private var headerRow: some View {

@@ -1028,6 +1028,8 @@ mod tests {
             hour_start: String::new(),
             source: "opencode".to_string(),
             model: "deepseek-v4-pro".to_string(),
+            project_key: String::new(),
+            project_ref: String::new(),
             input_tokens: 1_000_000,
             output_tokens: 1_000_000,
             cached_input_tokens: 0,

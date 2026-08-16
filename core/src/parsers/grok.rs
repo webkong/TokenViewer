@@ -100,6 +100,8 @@ pub fn parse(
                 hour_start,
                 source: "grok".to_string(),
                 model: "grok-build".to_string(),
+                project_key: String::new(),
+                project_ref: String::new(),
                 input_tokens: input,
                 output_tokens: output,
                 cached_input_tokens: 0,

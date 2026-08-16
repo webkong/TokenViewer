@@ -29,6 +29,15 @@ fn parse_claude_line(v: &Value, source: &str) -> Option<UsageRecord> {
         .and_then(|m| m.as_str())
         .unwrap_or("claude-unknown")
         .to_string();
+    let cwd = v
+        .get("cwd")
+        .or_else(|| v.pointer("/message/cwd"))
+        .and_then(Value::as_str);
+    let git_url = v
+        .pointer("/git/repository_url")
+        .or_else(|| v.pointer("/message/git/repository_url"))
+        .and_then(Value::as_str);
+    let (project_key, project_ref) = project_identity(cwd, git_url);
 
     let input = usage
         .get("input_tokens")
@@ -57,6 +66,8 @@ fn parse_claude_line(v: &Value, source: &str) -> Option<UsageRecord> {
         hour_start,
         source: source.to_string(),
         model,
+        project_key,
+        project_ref,
         input_tokens: input,
         output_tokens: output,
         cached_input_tokens: cache_read,
@@ -204,6 +215,8 @@ pub fn parse_claude_format(
                             hour_start,
                             source: source.to_string(),
                             model: record.model.clone(),
+                            project_key: record.project_key.clone(),
+                            project_ref: record.project_ref.clone(),
                             input_tokens: 0,
                             output_tokens: 0,
                             cached_input_tokens: 0,

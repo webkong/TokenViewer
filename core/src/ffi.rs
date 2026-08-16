@@ -436,6 +436,20 @@ pub extern "C" fn tt_query_model_breakdown(
     }
 }
 
+/// Query all-time project usage. Project details intentionally ignore the
+/// dashboard's selected date range, matching the all-days daily details view.
+#[no_mangle]
+pub extern "C" fn tt_query_project_usage(handle: *mut CoreHandle) -> *mut c_char {
+    let handle = match unsafe { handle.as_ref() } {
+        Some(handle) => handle,
+        None => return std::ptr::null_mut(),
+    };
+    match handle.db.query_project_usage() {
+        Ok(entries) => to_json_cstring(&entries),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 /// Query heatmap data. Returns JSON string.
 ///
 /// # Safety

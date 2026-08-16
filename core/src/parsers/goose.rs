@@ -91,6 +91,8 @@ pub fn parse(
             hour_start,
             source: "goose".to_string(),
             model,
+            project_key: String::new(),
+            project_ref: String::new(),
             input_tokens: d_in,
             output_tokens: d_out,
             cached_input_tokens: 0,

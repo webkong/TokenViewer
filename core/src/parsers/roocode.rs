@@ -107,6 +107,8 @@ pub fn parse_ui_messages(
                 hour_start: bucket,
                 source: source.to_string(),
                 model,
+                project_key: String::new(),
+                project_ref: String::new(),
                 input_tokens: input,
                 output_tokens: output,
                 cached_input_tokens: cached,

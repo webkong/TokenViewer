@@ -8,6 +8,69 @@ use serde_json::Value;
 
 use crate::models::UsageRecord;
 
+/// Resolve a stable, display-friendly project identity from session metadata.
+/// Git remotes become `owner/repo`; local-only projects use their directory name.
+pub fn project_identity(cwd: Option<&str>, git_url: Option<&str>) -> (String, String) {
+    let cwd = cwd.map(str::trim).filter(|value| !value.is_empty());
+    let discovered_remote = cwd.and_then(git_remote_for_cwd);
+    let remote = git_url
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or(discovered_remote.as_deref());
+
+    if let Some(remote) = remote {
+        if let Some(key) = project_key_from_git_url(remote) {
+            return (key, remote.to_string());
+        }
+    }
+    if let Some(cwd) = cwd {
+        let key = Path::new(cwd)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+        return (key, cwd.to_string());
+    }
+    (String::new(), String::new())
+}
+
+fn project_key_from_git_url(url: &str) -> Option<String> {
+    let path = if let Some((_, path)) = url.rsplit_once(':').filter(|_| url.starts_with("git@")) {
+        path
+    } else if let Some(scheme) = url.find("://") {
+        url[scheme + 3..].split_once('/')?.1
+    } else {
+        return None;
+    };
+    let clean = path.trim_matches('/').trim_end_matches(".git");
+    let mut parts = clean.rsplit('/');
+    let repo = parts.next()?.trim();
+    let owner = parts.next()?.trim();
+    (!owner.is_empty() && !repo.is_empty()).then(|| format!("{owner}/{repo}"))
+}
+
+fn git_remote_for_cwd(cwd: &str) -> Option<String> {
+    let mut dir = Path::new(cwd);
+    loop {
+        let config = dir.join(".git/config");
+        if config.is_file() {
+            let content = fs::read_to_string(config).ok()?;
+            let mut in_origin = false;
+            for line in content.lines() {
+                let line = line.trim();
+                if line.starts_with('[') {
+                    in_origin = line == "[remote \"origin\"]";
+                } else if in_origin {
+                    if let Some(value) = line.strip_prefix("url").and_then(|v| v.split_once('=')) {
+                        return Some(value.1.trim().to_string());
+                    }
+                }
+            }
+        }
+        dir = dir.parent()?;
+    }
+}
+
 /// Round a UTC timestamp down to the nearest 30-minute bucket.
 pub fn bucket_30min(ts: DateTime<Utc>) -> String {
     let minute = if ts.minute() < 30 { 0 } else { 30 };
@@ -139,6 +202,11 @@ pub struct FileCursor {
     /// metadata across incremental reads.
     #[serde(default)]
     pub last_providers: HashMap<String, String>,
+    /// Per-file project identity retained across append-only incremental reads.
+    #[serde(default)]
+    pub last_project_keys: HashMap<String, String>,
+    #[serde(default)]
+    pub last_project_refs: HashMap<String, String>,
     /// Claude user-prompt buckets waiting for the following assistant usage
     /// record to provide the actual model. Persisted across incremental syncs.
     #[serde(default)]
@@ -351,16 +419,23 @@ impl Iterator for OffsetLineReader {
     }
 }
 
-/// Aggregate records by (hour_start, source, model) key.
+/// Aggregate records by (hour_start, source, model, project) key.
 pub fn aggregate_records(records: Vec<UsageRecord>) -> Vec<UsageRecord> {
-    let mut map: HashMap<(String, String, String), UsageRecord> = HashMap::new();
+    let mut map: HashMap<(String, String, String, String), UsageRecord> = HashMap::new();
     for r in records {
-        let key = (r.hour_start.clone(), r.source.clone(), r.model.clone());
+        let key = (
+            r.hour_start.clone(),
+            r.source.clone(),
+            r.model.clone(),
+            r.project_key.clone(),
+        );
         let entry = map.entry(key).or_insert_with(|| UsageRecord {
             id: None,
             hour_start: r.hour_start.clone(),
             source: r.source.clone(),
             model: r.model.clone(),
+            project_key: r.project_key.clone(),
+            project_ref: r.project_ref.clone(),
             input_tokens: 0,
             output_tokens: 0,
             cached_input_tokens: 0,

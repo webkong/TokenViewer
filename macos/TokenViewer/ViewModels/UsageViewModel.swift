@@ -48,6 +48,14 @@ struct ModelEntry: Codable, Identifiable {
     let percentage: Double
 }
 
+struct ProjectUsageEntry: Codable, Identifiable {
+    var id: String { project_key }
+    let project_key: String
+    let project_ref: String
+    let total_tokens: UInt64
+    let sources: [String]
+}
+
 /// Merge ModelEntry list by model name (ignoring source), recalculating percentages.
 func mergedByModel(_ entries: [ModelEntry]) -> [ModelEntry] {
     var map: [(String, UInt64, Double)] = [] // (model, tokens, cost)
@@ -92,6 +100,9 @@ class UsageViewModel: ObservableObject {
 
     @Published var summary: UsageSummary?
     @Published var dailyUsage: [DailyPoint] = []
+    /// Daily details always cover the complete local history, independent of the range selector.
+    @Published var allDailyUsage: [DailyPoint] = []
+    @Published var projectUsage: [ProjectUsageEntry] = []
     @Published var modelBreakdown: [ModelEntry] = []
     @Published var heatmap: [HeatmapPoint] = []
     @Published var panelCards: [PanelCard] = []
@@ -203,6 +214,9 @@ class UsageViewModel: ObservableObject {
                 ? CoreBridge.shared.queryHourly(from: from, to: to)
                 : CoreBridge.shared.queryDaily(from: from, to: to)
             let modelData = CoreBridge.shared.queryModelBreakdown(from: from, to: to)
+            let allRange = AppTime.allUsage()
+            let allDailyData = CoreBridge.shared.queryDaily(from: allRange.from, to: allRange.to)
+            let projectData = CoreBridge.shared.queryProjectUsage()
             let heatmapData = CoreBridge.shared.queryHeatmap(weeks: 53)
             let cards = Self.fetchPanelCards()
             await MainActor.run { [weak self] in
@@ -211,6 +225,8 @@ class UsageViewModel: ObservableObject {
                 guard token == self.refreshToken else { return }
                 if let d = summaryData { self.summary = try? self.decoder.decode(UsageSummary.self, from: d) }
                 if let d = dailyData { self.dailyUsage = (try? self.decoder.decode([DailyPoint].self, from: d)) ?? [] }
+                if let d = allDailyData { self.allDailyUsage = (try? self.decoder.decode([DailyPoint].self, from: d)) ?? [] }
+                if let d = projectData { self.projectUsage = (try? self.decoder.decode([ProjectUsageEntry].self, from: d)) ?? [] }
                 if let d = modelData { self.modelBreakdown = (try? self.decoder.decode([ModelEntry].self, from: d)) ?? [] }
                 if let d = heatmapData { self.heatmap = (try? self.decoder.decode([HeatmapPoint].self, from: d)) ?? [] }
                 self.panelCards = cards

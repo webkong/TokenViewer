@@ -7,6 +7,12 @@ pub struct UsageRecord {
     pub hour_start: String,
     pub source: String,
     pub model: String,
+    /// Local project identity. Empty for agents whose logs do not expose a cwd/repository.
+    #[serde(default)]
+    pub project_key: String,
+    /// Local cwd or git remote used to derive `project_key`; never leaves the device.
+    #[serde(default)]
+    pub project_ref: String,
     pub input_tokens: u64,
     pub output_tokens: u64,
     pub cached_input_tokens: u64,
@@ -14,6 +20,15 @@ pub struct UsageRecord {
     pub reasoning_output_tokens: u64,
     pub total_tokens: u64,
     pub conversation_count: u32,
+}
+
+/// Usage aggregated by project across all dates.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectUsageEntry {
+    pub project_key: String,
+    pub project_ref: String,
+    pub total_tokens: u64,
+    pub sources: Vec<String>,
 }
 
 /// 定价条目（USD per million tokens）

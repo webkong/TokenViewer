@@ -135,6 +135,16 @@ fn scan_codex_bases(
             .get(&logical_key)
             .cloned()
             .unwrap_or_default();
+        let mut last_project_key = cursor
+            .last_project_keys
+            .get(&logical_key)
+            .cloned()
+            .unwrap_or_default();
+        let mut last_project_ref = cursor
+            .last_project_refs
+            .get(&logical_key)
+            .cloned()
+            .unwrap_or_default();
         let reader = match OffsetLineReader::new(&file, start_offset) {
             Ok(r) => r,
             Err(_) => continue,
@@ -199,6 +209,17 @@ fn scan_codex_bases(
                 }
                 if let Some(model) = model_from_value(payload) {
                     last_model = model.to_string();
+                }
+                let cwd = payload.get("cwd").and_then(Value::as_str);
+                let git_url = payload
+                    .pointer("/git/repository_url")
+                    .and_then(Value::as_str);
+                if cwd.is_some() || git_url.is_some() {
+                    let identity = project_identity(cwd, git_url);
+                    if !identity.0.is_empty() {
+                        last_project_key = identity.0;
+                        last_project_ref = identity.1;
+                    }
                 }
             } else if payload.get("type").and_then(Value::as_str) == Some("thread_settings_applied")
             {
@@ -309,6 +330,8 @@ fn scan_codex_bases(
                 hour_start,
                 source: source.to_string(),
                 model: reported_model,
+                project_key: last_project_key.clone(),
+                project_ref: last_project_ref.clone(),
                 input_tokens: fi,
                 output_tokens: fo,
                 cached_input_tokens: fc_read,
@@ -327,6 +350,14 @@ fn scan_codex_bases(
             cursor
                 .last_providers
                 .insert(logical_key.clone(), last_provider);
+        }
+        if !last_project_key.is_empty() {
+            cursor
+                .last_project_keys
+                .insert(logical_key.clone(), last_project_key);
+            cursor
+                .last_project_refs
+                .insert(logical_key.clone(), last_project_ref);
         }
     }
 }

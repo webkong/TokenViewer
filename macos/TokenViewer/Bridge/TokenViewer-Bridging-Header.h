@@ -17,6 +17,7 @@ char* _Nullable tt_query_summary(CoreHandle* _Nullable handle, const char* _Nonn
 char* _Nullable tt_query_daily(CoreHandle* _Nullable handle, const char* _Nonnull from, const char* _Nonnull to);
 char* _Nullable tt_query_hourly(CoreHandle* _Nullable handle, const char* _Nonnull from, const char* _Nonnull to);
 char* _Nullable tt_query_model_breakdown(CoreHandle* _Nullable handle, const char* _Nonnull from, const char* _Nonnull to);
+char* _Nullable tt_query_project_usage(CoreHandle* _Nullable handle);
 char* _Nullable tt_query_heatmap(CoreHandle* _Nullable handle, int32_t weeks);
 void tt_free_string(char* _Nullable ptr);
 void tt_destroy(CoreHandle* _Nullable handle);

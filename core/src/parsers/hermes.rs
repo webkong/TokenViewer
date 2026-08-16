@@ -72,6 +72,8 @@ pub fn parse(
             hour_start,
             source: "hermes".to_string(),
             model: model_name,
+            project_key: String::new(),
+            project_ref: String::new(),
             input_tokens: d_in,
             output_tokens: d_out,
             cached_input_tokens: d_cr,

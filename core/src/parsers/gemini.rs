@@ -92,6 +92,8 @@ pub fn parse(
                 hour_start,
                 source: "gemini".to_string(),
                 model,
+                project_key: String::new(),
+                project_ref: String::new(),
                 input_tokens: d[0],
                 output_tokens: d[1],
                 cached_input_tokens: d[2],

@@ -210,7 +210,9 @@ final class L10n: ObservableObject {
     var skillFilter: String { isZh ? "筛选" : "Filter" }
     var skillFetch: String { isZh ? "刷新" : "Fetch" }
     var skillOrganize: String { isZh ? "整理" : "Organize" }
+    var skillOrganizeAll: String { isZh ? "整理当前结果" : "Organize Current Results" }
     var skillRestore: String { isZh ? "还原" : "Restore" }
+    var skillRestoreAll: String { isZh ? "还原当前结果" : "Restore Current Results" }
     var skillDelete: String { isZh ? "删除" : "Delete" }
     var skillInstall: String { isZh ? "安装" : "Install" }
     var skillAgents: String { isZh ? "代理" : "Agents" }
@@ -219,6 +221,18 @@ final class L10n: ObservableObject {
     var skillColumnAgents: String { isZh ? "Agent" : "Agents" }
     var skillSync: String { isZh ? "同步" : "Sync" }
     var skillSettings: String { isZh ? "设置" : "Settings" }
+    var skillMoreActions: String { isZh ? "更多功能" : "More Actions" }
+    var skillManageAgentsTip: String { isZh ? "前往设置添加或移除参与 Skills 管理的 Agent" : "Open Settings to add or remove Agents from Skills management" }
+    var skillDetails: String { isZh ? "Skill 详情" : "Skill Details" }
+    var skillSelectForDetails: String { isZh ? "展开分组并选择一个 Skill 查看详情" : "Expand a group and select a Skill to view details" }
+    var skillLocation: String { isZh ? "位置" : "Location" }
+    var skillStatus: String { isZh ? "状态" : "Status" }
+    var skillReady: String { isZh ? "已就绪" : "Ready" }
+    var skillAgentAssignments: String { isZh ? "同步到 Agent" : "Sync to Agents" }
+    var skillAgentAssignmentsHint: String { isZh ? "点击即可更新" : "Click to update" }
+    var skillSourceAgent: String { isZh ? "来源" : "Source" }
+    var skillPreview: String { isZh ? "查看内容" : "View Content" }
+    func skillResultCount(_ count: Int) -> String { isZh ? "\(count) 个 Skill" : "\(count) Skills" }
     var skillAll: String { isZh ? "全部" : "All" }
     var skillGlobal: String { isZh ? "全局" : "Global" }
     var skillOperationFailed: String { isZh ? "技能操作失败" : "Skill operation failed" }
@@ -464,6 +478,9 @@ final class L10n: ObservableObject {
     var usageAgents: String { isZh ? "Agent" : "Agents" }
     var usageActivity: String { isZh ? "活跃度" : "Activity" }
     var usageDailyDetails: String { isZh ? "每日明细" : "Daily Details" }
+    var usageProjectDetails: String { isZh ? "项目用量" : "Project Usage" }
+    func usageProjectTop(_ count: Int) -> String { isZh ? "前 \(count) 名" : "Top \(count)" }
+    var usageProjectEmpty: String { isZh ? "暂无可归属到项目的用量数据" : "No project-attributed usage yet" }
     var usageTotalTokens: String { isZh ? "总 Token 数" : "Total Tokens" }
     var usageConversations: String { isZh ? "对话数" : "Conversations" }
     var usageActiveDaysTitle: String { isZh ? "活跃天数" : "Active Days" }

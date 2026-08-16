@@ -91,6 +91,8 @@ fn parse_kimi_line(v: &Value, cursor: &mut FileCursor) -> Option<UsageRecord> {
         hour_start: bucket,
         source: "kimi".to_string(),
         model: "kimi-for-coding".to_string(),
+        project_key: String::new(),
+        project_ref: String::new(),
         input_tokens: input,
         output_tokens: output,
         cached_input_tokens: cached,

@@ -128,6 +128,8 @@ pub fn parse(
                 hour_start,
                 source: "workbuddy".to_string(),
                 model,
+                project_key: String::new(),
+                project_ref: String::new(),
                 input_tokens: input,
                 output_tokens: output,
                 cached_input_tokens: cache_read,

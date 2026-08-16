@@ -123,6 +123,10 @@ final class CoreBridge: @unchecked Sendable {
         call { tt_query_model_breakdown($0, from, to) }
     }
 
+    func queryProjectUsage() -> Data? {
+        call { tt_query_project_usage($0) }
+    }
+
     func queryHeatmap(weeks: Int32 = 52) -> Data? {
         call { tt_query_heatmap($0, weeks) }
     }
