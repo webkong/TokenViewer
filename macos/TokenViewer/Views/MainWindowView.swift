@@ -5,6 +5,7 @@ final class MainWindowRouter: ObservableObject {
     static let shared = MainWindowRouter()
 
     @Published var selectedTab = "usage"
+    @Published var settingsSection = "general"
 
     private init() {}
 }
@@ -20,7 +21,7 @@ struct MainWindowView: View {
             Divider()
             selectedContent
         }
-        .frame(minWidth: 600, minHeight: 480)
+        .frame(minWidth: 900, minHeight: 640)
         .clearInitialFocus(trigger: router.selectedTab)
         .clearFocusOnOutsideClick()
     }
@@ -33,8 +34,9 @@ struct MainWindowView: View {
             mainTab(id: "settings", title: l10n.settings, icon: "gearshape.fill")
             mainTab(id: "about", title: l10n.about, icon: "info.circle.fill")
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 20)
         .padding(.vertical, 9)
+        .frame(minHeight: 54)
         .frame(maxWidth: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
     }
@@ -45,10 +47,10 @@ struct MainWindowView: View {
             router.selectedTab = id
         } label: {
             Label(title, systemImage: icon)
-                .font(.system(size: 13, weight: selected ? .semibold : .medium))
+                .font(.system(size: 14, weight: selected ? .semibold : .medium))
                 .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
-                .padding(.horizontal, 14)
-                .frame(minHeight: 32)
+                .padding(.horizontal, 18)
+                .frame(minHeight: 36)
                 .background(
                     Capsule()
                         .fill(selected ? TVColor.brand : Color.clear)

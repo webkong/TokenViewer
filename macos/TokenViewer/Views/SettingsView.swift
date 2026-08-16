@@ -22,6 +22,7 @@ struct SettingsView: View {
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var viewModel = UsageViewModel.shared
     @ObservedObject private var agentRegistry = AgentRegistry.shared
+    @ObservedObject private var router = MainWindowRouter.shared
 
     private let dataDir: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -58,11 +59,15 @@ struct SettingsView: View {
         }
         .clearInitialFocus(trigger: selectedSection)
         .onAppear {
+            selectedSection = router.settingsSection
             if #available(macOS 13.0, *) {
                 launchAtLogin = SMAppService.mainApp.status == .enabled
             }
             agentRegistry.loadIfNeeded()
             agentRegistry.refreshInstallStatus()
+        }
+        .onChange(of: router.settingsSection) { _, section in
+            selectedSection = section
         }
     }
 

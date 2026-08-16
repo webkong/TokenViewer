@@ -5,48 +5,19 @@ struct SkillListView: View {
     @ObservedObject var viewModel: SkillManagerViewModel
     @ObservedObject private var l10n = L10n.shared
     @State private var preview: SkillMarkdownPreview?
-
-    private let horizontalPadding: CGFloat = 30
+    @State private var selectedSkillID: String?
 
     var body: some View {
-        let groups = skillGroups
-        VStack(spacing: 0) {
-            SkillListHeader(viewModel: viewModel)
-                .padding(.horizontal, horizontalPadding)
-
-            Divider()
-                .padding(.horizontal, horizontalPadding)
-
-            ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
-                        if group.isContainer {
-                            SkillDirectoryGroupView(
-                                group: group,
-                                viewModel: viewModel,
-                                horizontalPadding: horizontalPadding
-                            ) { skill in
-                                preview = viewModel.skillMarkdownPreview(for: skill)
-                            }
-                        } else if let skill = group.skills.first {
-                            SkillRowView(skill: skill, viewModel: viewModel) {
-                                preview = viewModel.skillMarkdownPreview(for: skill)
-                            }
-                                .padding(.vertical, 2)
-                                .padding(.horizontal, horizontalPadding)
-                                .transition(.skillListRow)
-                        }
-
-                        if index < groups.count - 1 {
-                            Divider()
-                                .padding(.horizontal, horizontalPadding)
-                                .transition(.opacity)
-                        }
-                    }
-                }
-                .animation(.easeInOut(duration: 0.18), value: groups.map(\.id))
+        SkillWorkspaceView(
+            groups: skillGroups,
+            selectedSkillID: $selectedSkillID,
+            viewModel: viewModel,
+            onPreview: { skill in
+                preview = viewModel.skillMarkdownPreview(for: skill)
             }
-        }
+        )
+        .onAppear(perform: ensureSelection)
+        .onChange(of: filteredSkills.map(\.id)) { _, _ in ensureSelection() }
         .sheet(item: $preview) { preview in
             SkillMarkdownPreviewSheet(preview: preview)
         }
@@ -92,6 +63,14 @@ struct SkillListView: View {
                 Text(l10n.skillBuiltInOrganizeWarning(alert.skillName, alert.agentName))
             }
         }
+    }
+
+    private func ensureSelection() {
+        if let selectedSkillID,
+           filteredSkills.contains(where: { $0.id == selectedSkillID }) {
+            return
+        }
+        selectedSkillID = skillGroups.first(where: { !$0.isContainer })?.skills.first?.id
     }
 
     private var filteredSkills: [SkillEntry] {
@@ -146,6 +125,479 @@ struct SkillListView: View {
             .sorted {
                 $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
             }
+    }
+}
+
+private struct SkillWorkspaceView: View {
+    let groups: [SkillListGroup]
+    @Binding var selectedSkillID: String?
+    @ObservedObject var viewModel: SkillManagerViewModel
+    let onPreview: (SkillEntry) -> Void
+    @State private var expandedGroupIDs: Set<String> = []
+
+    private var skills: [SkillEntry] {
+        groups.flatMap(\.skills)
+    }
+
+    private var selectedSkill: SkillEntry? {
+        guard let selectedSkillID else { return nil }
+        return skills.first(where: { $0.id == selectedSkillID })
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                HStack {
+                    Text(L10n.shared.skillColumnSkill)
+                    Spacer()
+                    Text(L10n.shared.skillColumnAgents)
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .padding(.horizontal, 16)
+                .frame(height: 40)
+                .background(Color(nsColor: .controlBackgroundColor).opacity(0.55))
+
+                Divider()
+
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+                            if group.isContainer {
+                                SkillCompactGroupRow(
+                                    group: group,
+                                    isExpanded: expandedGroupIDs.contains(group.id),
+                                    viewModel: viewModel
+                                ) {
+                                    withAnimation(.easeInOut(duration: 0.18)) {
+                                        if expandedGroupIDs.contains(group.id) {
+                                            expandedGroupIDs.remove(group.id)
+                                        } else {
+                                            expandedGroupIDs.insert(group.id)
+                                        }
+                                    }
+                                }
+
+                                if expandedGroupIDs.contains(group.id) {
+                                    ForEach(group.skills) { skill in
+                                        SkillCompactRow(
+                                            skill: skill,
+                                            isSelected: selectedSkill?.id == skill.id,
+                                            isChild: true,
+                                            viewModel: viewModel
+                                        ) {
+                                            selectedSkillID = skill.id
+                                        }
+                                        .transition(.opacity.combined(with: .move(edge: .top)))
+                                    }
+                                }
+                            } else if let skill = group.skills.first {
+                                SkillCompactRow(
+                                    skill: skill,
+                                    isSelected: selectedSkill?.id == skill.id,
+                                    viewModel: viewModel
+                                ) {
+                                    selectedSkillID = skill.id
+                                }
+                            }
+
+                            if index < groups.count - 1 {
+                                Divider().padding(.leading, 62)
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(minWidth: 430, maxWidth: .infinity)
+
+            Divider()
+
+            Group {
+                if let selectedSkill {
+                    SkillDetailPanel(
+                        skill: selectedSkill,
+                        viewModel: viewModel,
+                        onPreview: { onPreview(selectedSkill) }
+                    )
+                    .id(selectedSkill.id)
+                } else {
+                    VStack(spacing: 10) {
+                        Image(systemName: "sidebar.right")
+                            .font(.system(size: 24))
+                            .foregroundStyle(.tertiary)
+                        Text(L10n.shared.skillSelectForDetails)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .frame(minWidth: 320, idealWidth: 360, maxWidth: 410, maxHeight: .infinity)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.28))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color(nsColor: .separatorColor).opacity(0.65), lineWidth: 1)
+        }
+    }
+}
+
+private struct SkillCompactRow: View {
+    let skill: SkillEntry
+    let isSelected: Bool
+    var isChild = false
+    @ObservedObject var viewModel: SkillManagerViewModel
+    let onSelect: () -> Void
+
+    private var activeAgents: [AgentConfig] {
+        let ids = viewModel.skillAgentIDs(for: skill)
+        return viewModel.visibleAgents.filter { ids.contains($0.source) }
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "puzzlepiece.extension.fill")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(TVColor.brand)
+                .frame(width: 36, height: 36)
+                .background(TVColor.brand.opacity(0.1), in: RoundedRectangle(cornerRadius: 9))
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(skill.manifest.name)
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(1)
+
+                    if viewModel.isInSourceRoot(skill) {
+                        compactBadge(L10n.shared.skillGlobalBadge, color: TVColor.brand)
+                    } else if let source = viewModel.sourceAgent(for: skill) {
+                        compactBadge(AgentRegistry.shared.displayName(for: source), color: AgentRegistry.shared.brandColor(for: source))
+                    }
+
+                    if viewModel.isBuiltInSkill(skill) {
+                        compactBadge(L10n.shared.skillBuiltIn, color: .orange)
+                    }
+                }
+
+                Text(skill.manifest.description)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: -6) {
+                ForEach(Array(activeAgents.prefix(3))) { agent in
+                    AgentIcon(source: agent.source, size: 18)
+                        .frame(width: 24, height: 24)
+                        .background(Color(nsColor: .controlBackgroundColor), in: Circle())
+                        .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
+                }
+                if activeAgents.count > 3 {
+                    Text("+\(activeAgents.count - 3)")
+                        .font(.system(size: 9, weight: .semibold))
+                        .frame(width: 24, height: 24)
+                        .background(.quaternary, in: Circle())
+                        .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
+                }
+            }
+            .frame(minWidth: 58, alignment: .trailing)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.leading, isChild ? 38 : 14)
+        .padding(.trailing, 14)
+        .padding(.vertical, 12)
+        .background(isSelected ? TVColor.brand.opacity(0.09) : Color.clear)
+        .overlay(alignment: .leading) {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(TVColor.brand)
+                    .frame(width: 3)
+                    .padding(.vertical, 8)
+            }
+        }
+        .overlay(alignment: .leading) {
+            if isChild {
+                Rectangle()
+                    .fill(TVColor.brand.opacity(0.2))
+                    .frame(width: 2)
+                    .padding(.leading, 22)
+                    .padding(.vertical, 5)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onSelect)
+    }
+
+    private func compactBadge(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.1), in: Capsule())
+    }
+}
+
+private struct SkillCompactGroupRow: View {
+    let group: SkillListGroup
+    let isExpanded: Bool
+    @ObservedObject var viewModel: SkillManagerViewModel
+    let onToggle: () -> Void
+
+    private var activeAgents: [AgentConfig] {
+        let ids = group.skills.reduce(into: Set<String>()) { result, skill in
+            result.formUnion(viewModel.skillAgentIDs(for: skill))
+        }
+        return viewModel.visibleAgents.filter { ids.contains($0.source) }
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "folder.fill")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(TVColor.brand)
+                .frame(width: 36, height: 36)
+                .background(TVColor.brand.opacity(0.1), in: RoundedRectangle(cornerRadius: 9))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(group.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(1)
+                Text(L10n.shared.skillChildCount(group.skills.count))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: -6) {
+                ForEach(Array(activeAgents.prefix(3))) { agent in
+                    AgentIcon(source: agent.source, size: 18)
+                        .frame(width: 24, height: 24)
+                        .background(Color(nsColor: .controlBackgroundColor), in: Circle())
+                        .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
+                }
+                if activeAgents.count > 3 {
+                    Text("+\(activeAgents.count - 3)")
+                        .font(.system(size: 9, weight: .semibold))
+                        .frame(width: 24, height: 24)
+                        .background(.quaternary, in: Circle())
+                        .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
+                }
+            }
+            .frame(minWidth: 58, alignment: .trailing)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .rotationEffect(.degrees(isExpanded ? 90 : 0))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onToggle)
+    }
+}
+
+private struct SkillDetailPanel: View {
+    let skill: SkillEntry
+    @ObservedObject var viewModel: SkillManagerViewModel
+    let onPreview: () -> Void
+    @ObservedObject private var l10n = L10n.shared
+    @State private var showDeleteConfirm = false
+
+    private var activeAgentIDs: Set<String> {
+        viewModel.skillAgentIDs(for: skill)
+    }
+
+    private var sourceAgent: String? {
+        viewModel.sourceAgent(for: skill)
+    }
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(l10n.skillDetails)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(TVColor.brand)
+                    .textCase(.uppercase)
+
+                Text(skill.manifest.name)
+                    .font(.system(size: 21, weight: .semibold))
+                    .lineLimit(2)
+                    .padding(.top, 7)
+
+                Text(skill.manifest.description)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(4)
+                    .padding(.top, 5)
+
+                VStack(spacing: 10) {
+                    detailLine(l10n.skillLocation, value: abbreviatedPath(skill.sourceDir))
+                    detailLine(l10n.skillStatus, value: l10n.skillReady, valueColor: TVColor.brand)
+                    if let sourceAgent {
+                        detailLine(l10n.skillSourceAgent, value: AgentRegistry.shared.displayName(for: sourceAgent))
+                    }
+                }
+                .padding(.vertical, 16)
+
+                Divider()
+
+                HStack {
+                    Text(l10n.skillAgentAssignments)
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                    Text(l10n.skillAgentAssignmentsHint)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.top, 17)
+                .padding(.bottom, 9)
+
+                if viewModel.visibleAgents.isEmpty {
+                    Text(l10n.skillNoAgentsEnabled)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 7) {
+                        ForEach(viewModel.visibleAgents) { agent in
+                            agentAssignment(agent)
+                        }
+                    }
+                }
+
+                Divider().padding(.vertical, 18)
+
+                Button(action: onPreview) {
+                    Label(l10n.skillPreview, systemImage: "doc.text.magnifyingglass")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+
+                HStack(spacing: 8) {
+                    if !viewModel.isInSourceRoot(skill), let sourceAgent {
+                        Button {
+                            organize(from: sourceAgent)
+                        } label: {
+                            Label(l10n.skillOrganize, systemImage: "arrow.triangle.swap")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else if viewModel.isInSourceRoot(skill), let sourceAgent {
+                        Button {
+                            viewModel.restore(skill: skill, agentID: sourceAgent)
+                        } label: {
+                            Label(l10n.skillRestore, systemImage: "arrow.uturn.backward")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .frame(width: 24)
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .controlSize(.regular)
+                .padding(.top, 9)
+            }
+            .padding(20)
+        }
+        .alert(l10n.skillDelete, isPresented: $showDeleteConfirm) {
+            Button(l10n.cancel, role: .cancel) {}
+            Button(l10n.skillDelete, role: .destructive) {
+                viewModel.delete(skill: skill)
+            }
+        } message: {
+            Text(l10n.skillDeleteConfirm)
+        }
+    }
+
+    private func detailLine(_ label: String, value: String, valueColor: Color = .primary) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(label)
+                .foregroundStyle(.secondary)
+                .frame(width: 48, alignment: .leading)
+            Text(value)
+                .foregroundStyle(valueColor)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 11))
+    }
+
+    private func agentAssignment(_ agent: AgentConfig) -> some View {
+        let isActive = activeAgentIDs.contains(agent.source)
+        let isLinked = viewModel.isSkillLinked(skillID: skill.id, agentID: agent.source)
+        let isPhysicalSource = sourceAgent == agent.source && !isLinked
+
+        return Button {
+            if isLinked {
+                viewModel.unlinkSkill(skillID: skill.id, agentID: agent.source)
+            } else if viewModel.requiresCompatibilityConfirmation(skillID: skill.id, agentID: agent.source) {
+                viewModel.compatibilityAlert = CompatibilityAlert(
+                    skillID: skill.id,
+                    agentID: agent.source,
+                    skillName: skill.manifest.name,
+                    agentName: agent.displayName
+                )
+            } else {
+                viewModel.linkSkill(skillID: skill.id, agentID: agent.source)
+            }
+        } label: {
+            HStack(spacing: 9) {
+                AgentIcon(source: agent.source, size: 17)
+                Text(agent.displayName)
+                    .font(.system(size: 12, weight: .medium))
+                Spacer()
+                if isPhysicalSource {
+                    Text(l10n.skillSourceAgent)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+                Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isActive ? TVColor.brand : Color.secondary)
+            }
+            .padding(.horizontal, 10)
+            .frame(minHeight: 36)
+            .background(
+                isActive ? TVColor.brand.opacity(0.08) : Color(nsColor: .controlBackgroundColor),
+                in: RoundedRectangle(cornerRadius: 8)
+            )
+        }
+        .buttonStyle(.plain)
+        .quickHelp(isLinked ? l10n.skillUnlinkTip(agent.displayName) : l10n.skillLinkTip(agent.displayName))
+    }
+
+    private func organize(from sourceAgent: String) {
+        if viewModel.isBuiltInSkill(skill) {
+            viewModel.builtInOrganizeAlert = BuiltInOrganizeAlert(
+                skillID: skill.id,
+                agentID: sourceAgent,
+                skillName: skill.manifest.name,
+                agentName: AgentRegistry.shared.displayName(for: sourceAgent)
+            )
+        } else {
+            viewModel.organize(skill: skill, agentID: sourceAgent)
+        }
+    }
+
+    private func abbreviatedPath(_ path: String) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        guard path.hasPrefix(home) else { return path }
+        return "~" + path.dropFirst(home.count)
     }
 }
 

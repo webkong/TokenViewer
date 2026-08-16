@@ -12,7 +12,7 @@ struct SkillManagerView: View {
     @AppStorage("skillsOnboardingSeen") private var onboardingSeen = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 18) {
             header
             agentFilterBar
 
@@ -30,7 +30,8 @@ struct SkillManagerView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(20)
+        .padding(.horizontal, 30)
+        .padding(.vertical, 26)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             // Let the tab selection render first, then refresh directory-backed
@@ -82,153 +83,171 @@ struct SkillManagerView: View {
     }
 
     private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(L10n.shared.skills)
-                    .font(.system(size: 24, weight: .bold))
-                Text(L10n.shared.skillsSubtitle)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 28, weight: .semibold))
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    Text(L10n.shared.skillsSubtitle)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+
+                    Button {
+                        showOnboarding = true
+                    } label: {
+                        Image(systemName: "questionmark.circle")
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+                    .quickHelp(L10n.shared.skillOnboardingShowHelpTip)
+                }
             }
             Spacer()
-            Button {
-                showOnboarding = true
-            } label: {
-                Image(systemName: "questionmark.circle")
-                    .font(.system(size: 14))
-            }
-            .buttonStyle(.borderless)
-            .quickHelp(L10n.shared.skillOnboardingShowHelpTip)
-
             Button {
                 showInstallSheet = true
             } label: {
                 Label(L10n.shared.skillInstall, systemImage: "plus")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
             }
             .buttonStyle(.borderedProminent)
-            .controlSize(.small)
+            .controlSize(.regular)
             .quickHelp(L10n.shared.skillInstallTip)
 
-            Button {
-                showEnvironmentSheet = true
-            } label: {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 13, weight: .semibold))
-            }
-            .buttonStyle(.borderless)
-            .quickHelp(L10n.shared.skillEnvironmentManageTip)
-
             Button { viewModel.refresh(showToast: true) } label: {
-                Image(systemName: "arrow.triangle.2.circlepath")
+                Label(L10n.shared.skillFetch, systemImage: "arrow.triangle.2.circlepath")
                     .font(.system(size: 13, weight: .semibold))
-                    .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
-                    .animation(viewModel.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
             .disabled(viewModel.isLoading)
             .quickHelp(L10n.shared.skillRefreshTip)
+
+            Menu {
+                Button {
+                    viewModel.refreshGitStatus()
+                    showSyncSheet = true
+                } label: {
+                    Label(L10n.shared.skillSync, systemImage: "arrow.triangle.merge")
+                }
+
+                Button {
+                    showEnvironmentSheet = true
+                } label: {
+                    Label(L10n.shared.skillEnvironmentManageTitle, systemImage: "gearshape")
+                }
+
+                Divider()
+
+                Button {
+                    AppFocus.clear()
+                    showOrganizeAllConfirm = true
+                } label: {
+                    Label(L10n.shared.skillOrganizeAll, systemImage: "arrow.triangle.swap")
+                }
+                .disabled(viewModel.isLoading)
+
+                Button {
+                    AppFocus.clear()
+                    showRestoreAllConfirm = true
+                } label: {
+                    Label(L10n.shared.skillRestoreAll, systemImage: "arrow.uturn.backward")
+                }
+                .disabled(viewModel.isLoading)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 24, height: 22)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .quickHelp(L10n.shared.skillMoreActions)
         }
     }
 
     // MARK: - Agent Filter Bar
 
     private var agentFilterBar: some View {
-        HStack(alignment: .top, spacing: 12) {
-            filterChips
-                .layoutPriority(1)
+        VStack(spacing: 9) {
+            HStack(spacing: 10) {
+                HStack(spacing: 7) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.tertiary)
+                    TextField(L10n.shared.skillSearchPlaceholder, text: $viewModel.searchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                    if !viewModel.searchText.isEmpty {
+                        Button {
+                            viewModel.searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.tertiary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 11)
+                .frame(minWidth: 240, maxWidth: .infinity, minHeight: 36)
+                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary, lineWidth: 0.5))
 
-            Spacer(minLength: 0)
-
-            filterActions
-                .fixedSize()
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary, lineWidth: 0.5))
-    }
-
-    private var filterChips: some View {
-        FlowLayout(itemSpacing: 6, rowSpacing: 6) {
-            FilterChip(
-                icon: "square.grid.2x2",
-                label: L10n.shared.skillAll,
-                isSelected: viewModel.selectedFilter == SkillManagerViewModel.allFilter,
-                tooltip: L10n.shared.skillAllFilterTip,
-                action: { viewModel.selectedFilter = SkillManagerViewModel.allFilter }
-            )
-
-            FilterChip(
-                icon: "globe",
-                label: L10n.shared.skillGlobal,
-                isSelected: viewModel.selectedFilter == SkillManagerViewModel.globalFilter,
-                tooltip: L10n.shared.skillGlobalFilterTip,
-                action: { viewModel.selectedFilter = SkillManagerViewModel.globalFilter }
-            )
-
-            ForEach(viewModel.visibleAgents) { p in
-                FilterChip(
-                    icon: nil,
-                    agentIcon: p.source,
-                    label: p.displayName,
-                    isSelected: viewModel.selectedFilter == p.source,
-                    tooltip: L10n.shared.skillAgentFilterTip(p.displayName),
-                    action: { viewModel.selectedFilter = p.source }
-                )
-            }
-        }
-    }
-
-    private var filterActions: some View {
-        HStack(spacing: 8) {
-            // Search field
-            HStack(spacing: 4) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-                TextField(L10n.shared.skillSearchPlaceholder, text: $viewModel.searchText)
-                    .help(L10n.shared.skillSearchPlaceholder)
-                    .textFieldStyle(.plain)
+                Toggle(L10n.shared.skillShowBuiltIn, isOn: $viewModel.showBuiltInSkills)
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
                     .font(.system(size: 12))
-                    .frame(width: 120)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(.quinary, in: RoundedRectangle(cornerRadius: 6))
 
-            Button {
-                AppFocus.clear()
-                showOrganizeAllConfirm = true
-            } label: {
-                Image(systemName: "arrow.triangle.swap")
-                    .font(.system(size: 12, weight: .medium))
+                Text(L10n.shared.skillResultCount(viewModel.filteredSkills.count))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(minWidth: 64, alignment: .trailing)
             }
-            .buttonStyle(.borderless)
-            .disabled(viewModel.isLoading)
-            .quickHelp(L10n.shared.skillOrganizeAllTip)
 
-            Button {
-                AppFocus.clear()
-                showRestoreAllConfirm = true
-            } label: {
-                Image(systemName: "arrow.uturn.backward")
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .buttonStyle(.borderless)
-            .disabled(viewModel.isLoading)
-            .quickHelp(L10n.shared.skillRestoreAllTip)
+            HStack(spacing: 8) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        FilterChip(
+                            icon: "square.grid.2x2",
+                            label: L10n.shared.skillAll,
+                            isSelected: viewModel.selectedFilter == SkillManagerViewModel.allFilter,
+                            tooltip: L10n.shared.skillAllFilterTip,
+                            action: { viewModel.selectedFilter = SkillManagerViewModel.allFilter }
+                        )
+                        FilterChip(
+                            icon: "globe",
+                            label: L10n.shared.skillGlobal,
+                            isSelected: viewModel.selectedFilter == SkillManagerViewModel.globalFilter,
+                            tooltip: L10n.shared.skillGlobalFilterTip,
+                            action: { viewModel.selectedFilter = SkillManagerViewModel.globalFilter }
+                        )
+                        ForEach(viewModel.visibleAgents) { agent in
+                            FilterChip(
+                                icon: nil,
+                                agentIcon: agent.source,
+                                label: agent.displayName,
+                                isSelected: viewModel.selectedFilter == agent.source,
+                                tooltip: L10n.shared.skillAgentFilterTip(agent.displayName),
+                                action: { viewModel.selectedFilter = agent.source }
+                            )
+                        }
+                    }
+                }
 
-            // Sync button
-            Button {
-                viewModel.refreshGitStatus()
-                showSyncSheet = true
-            } label: {
-                Image(systemName: "arrow.triangle.merge")
-                    .font(.system(size: 12, weight: .medium))
+                Divider().frame(height: 22)
+
+                Button {
+                    MainWindowRouter.shared.settingsSection = "skills"
+                    MainWindowRouter.shared.selectedTab = "settings"
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 28, height: 24)
+                }
+                .buttonStyle(.plain)
+                .quickHelp(L10n.shared.skillManageAgentsTip)
             }
-            .buttonStyle(.borderless)
-            .quickHelp(L10n.shared.skillGitSyncTip)
         }
     }
 

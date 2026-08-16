@@ -143,15 +143,24 @@ final class StatusBarController {
             return
         }
 
+        let visibleFrame = NSScreen.main?.visibleFrame
+        let initialSize = NSSize(
+            width: min(1180, (visibleFrame?.width ?? 1280) * 0.92),
+            height: min(820, (visibleFrame?.height ?? 900) * 0.92)
+        )
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 900, height: 680),
+            contentRect: NSRect(origin: .zero, size: initialSize),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Token Viewer"
-        window.minSize = NSSize(width: 700, height: 500)
-        window.center()
+        window.minSize = NSSize(width: 900, height: 640)
+        let frameName = NSWindow.FrameAutosaveName("TokenViewerMainWindow")
+        if !window.setFrameUsingName(frameName) {
+            window.center()
+        }
+        window.setFrameAutosaveName(frameName)
         window.contentView = NSHostingView(rootView: MainWindowView())
         window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)
