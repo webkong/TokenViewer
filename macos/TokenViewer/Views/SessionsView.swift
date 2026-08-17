@@ -311,7 +311,7 @@ struct SessionsView: View {
                     .lineLimit(1)
                     .frame(minWidth: yolo ? 138 : 84)
             }
-            .tvActionButton(.primary)
+            .tvActionButton(yolo ? .warning : .primary)
             .disabled(!supported)
             .help(launchHelp(session, adapter: adapter, installed: installReady))
         }

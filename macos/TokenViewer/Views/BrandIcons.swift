@@ -78,6 +78,7 @@ struct TVSegmentedPicker<Value: Hashable>: View {
 enum TVActionButtonRole: Equatable {
     case primary
     case secondary
+    case warning
     case destructive
 }
 
@@ -109,6 +110,7 @@ struct TVActionButtonStyle: ButtonStyle {
         switch role {
         case .primary: TVColor.brand
         case .secondary: Color(nsColor: .controlBackgroundColor)
+        case .warning: Color(red: 0.92, green: 0.35, blue: 0.05) // #EA580C orange-red
         case .destructive: .red
         }
     }
