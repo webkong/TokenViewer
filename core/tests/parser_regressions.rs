@@ -599,6 +599,10 @@ fn codex_migrates_path_based_cursor_to_rollout_identity() {
     let homes = vec![codex_home_info(&codex_home)];
     let (_, cursor_json) = codex::parse_with_homes(&home, None, &homes).unwrap();
     let mut cursor = FileCursor::from_json(Some(&cursor_json));
+    // Force a re-read on the second parse. File mtime resolution is coarse on
+    // Windows, so the rewrite below may not advance the mtime past the value
+    // cached by the first parse, which would skip the file and return no records.
+    cursor.mtimes.clear();
     let logical_key = format!("rollout:{rollout_name}");
     let legacy_key = file.to_string_lossy().to_string();
     let legacy_offset = cursor.offsets.remove(&logical_key).unwrap();
