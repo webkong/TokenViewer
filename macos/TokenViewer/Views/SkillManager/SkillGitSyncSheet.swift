@@ -300,8 +300,7 @@ struct SkillGitSyncSheet: View {
                 Label(l10n.gitPull, systemImage: "arrow.down.circle.fill")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .tvActionButton(.secondary)
             .disabled(repoURL.isEmpty || !tokenSaved || isSyncBlocked)
             .quickHelp(l10n.gitPullTip)
 
@@ -312,8 +311,7 @@ struct SkillGitSyncSheet: View {
                 Label(l10n.gitPush, systemImage: "arrow.up.circle.fill")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .tvActionButton(.primary)
             .disabled(repoURL.isEmpty || !tokenSaved || isSyncBlocked)
             .quickHelp(l10n.gitPushTip)
 
@@ -799,7 +797,7 @@ struct SkillAuthSheet: View {
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+                .tvActionButton(.primary)
                 .disabled(currentTokenBinding.wrappedValue.isEmpty)
             }
         }

@@ -29,6 +29,7 @@ struct MainWindowView: View {
     private var mainTabBar: some View {
         HStack(spacing: 8) {
             mainTab(id: "usage", title: l10n.usage, icon: "chart.bar.fill")
+            mainTab(id: "sessions", title: l10n.sessions, icon: "bubble.left.and.bubble.right.fill")
             mainTab(id: "limits", title: l10n.limits, icon: "gauge.with.dots.needle.50percent")
             mainTab(id: "skills", title: l10n.skills, icon: "puzzlepiece.extension.fill")
             mainTab(id: "settings", title: l10n.settings, icon: "gearshape.fill")
@@ -64,6 +65,8 @@ struct MainWindowView: View {
     @ViewBuilder
     private var selectedContent: some View {
         switch router.selectedTab {
+        case "sessions":
+            SessionsView()
         case "limits":
             LimitsView(viewModel: LimitsViewModel.shared)
         case "skills":

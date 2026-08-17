@@ -46,4 +46,10 @@ char* _Nullable tt_skills_get_config(CoreHandle* _Nullable handle);
 char* _Nullable tt_skills_set_git_config(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_detect_installed(CoreHandle* _Nullable handle);
 
+char* _Nullable tt_sessions_scan(CoreHandle* _Nullable handle);
+char* _Nullable tt_sessions_list(CoreHandle* _Nullable handle, const char* _Nonnull source, int32_t offset, int32_t limit);
+char* _Nullable tt_sessions_count(CoreHandle* _Nullable handle, const char* _Nonnull source);
+char* _Nullable tt_sessions_sources(CoreHandle* _Nullable handle);
+char* _Nullable tt_sessions_rename(CoreHandle* _Nullable handle, const char* _Nonnull session_id, const char* _Nonnull title);
+
 #endif

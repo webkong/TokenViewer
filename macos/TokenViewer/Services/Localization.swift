@@ -30,6 +30,7 @@ final class L10n: ObservableObject {
 
     // MARK: - Tabs
     var usage: String { isZh ? "用量" : "Usage" }
+    var sessions: String { isZh ? "会话" : "Sessions" }
     var limits: String { isZh ? "限额" : "Limits" }
     var settings: String { isZh ? "设置" : "Settings" }
 
@@ -51,6 +52,8 @@ final class L10n: ObservableObject {
     var today: String { isZh ? "今天" : "Today" }
     var sevenDays: String { isZh ? "7 天" : "7 Days" }
     var thirtyDays: String { isZh ? "30 天" : "30 Days" }
+    var ninetyDays: String { isZh ? "90 天" : "90 Days" }
+    var allTime: String { isZh ? "全部时间" : "All Time" }
     var total: String { isZh ? "总计" : "Total" }
     var active: String { isZh ? "活跃" : "active" }
     var perDay: String { isZh ? "/天" : "/day" }
@@ -100,6 +103,51 @@ final class L10n: ObservableObject {
     var openSettings: String { isZh ? "打开设置" : "Open Settings" }
     var heatmapLess: String { isZh ? "少" : "Less" }
     var heatmapMore: String { isZh ? "多" : "More" }
+
+    // MARK: - Sessions
+    var sessionsTitle: String { isZh ? "会话" : "Sessions" }
+    var sessionsSubtitle: String { isZh ? "浏览并恢复各 Agent 的历史会话" : "Browse and resume past agent sessions" }
+    var sessionsRefresh: String { isZh ? "重新扫描会话" : "Rescan sessions" }
+    var sessionAll: String { isZh ? "全部" : "All" }
+    var sessionsEmpty: String { isZh ? "暂无会话" : "No sessions yet" }
+    var sessionsEmptyHint: String { isZh ? "使用支持的 Agent 后，点击右上角刷新即可发现会话。" : "Use a supported agent, then refresh to discover sessions." }
+    var sessionLaunch: String { isZh ? "启动会话" : "Launch Session" }
+    var sessionLaunchHelp: String { isZh ? "在外部终端恢复此会话" : "Resume this session in a terminal" }
+    var sessionRename: String { isZh ? "重命名" : "Rename" }
+    var sessionRenameTitle: String { isZh ? "重命名会话" : "Rename Session" }
+    var sessionRenamePlaceholder: String { isZh ? "输入新标题" : "Enter a new title" }
+    var sessionRenameHint: String { isZh ? "留空可恢复自动生成的标题。" : "Leave empty to restore the auto-generated title." }
+    var sessionRenameFailed: String { isZh ? "重命名失败" : "Rename failed" }
+    var sessionRenamed: String { isZh ? "已重命名" : "Renamed" }
+    var sessionJustNow: String { isZh ? "刚刚" : "just now" }
+    func sessionMinutesAgo(_ n: Int) -> String { isZh ? "\(n) 分钟前" : "\(n)m ago" }
+    func sessionHoursAgo(_ n: Int) -> String { isZh ? "\(n) 小时前" : "\(n)h ago" }
+    func sessionDaysAgo(_ n: Int) -> String { isZh ? "\(n) 天前" : "\(n)d ago" }
+    func sessionUnsupportedAgent(_ name: String) -> String { isZh ? "\(name) 暂不支持恢复" : "\(name) doesn't support resume" }
+    func sessionInvalidID(_ id: String) -> String { isZh ? "会话 ID 无效：\(id)" : "Invalid session id: \(id)" }
+    func sessionInvalidCWD(_ cwd: String) -> String { isZh ? "工作目录无效：\(cwd)" : "Invalid working directory: \(cwd)" }
+    var sessionAllProjects: String { isZh ? "所有项目" : "All Projects" }
+    var sessionSearchPlaceholder: String { isZh ? "搜索标题、项目、模型或 ID…" : "Search title, project, model, or ID…" }
+    var sessionTokens: String { isZh ? "Token 数" : "Tokens" }
+    var sessionTurns: String { isZh ? "轮次" : "Turns" }
+    var sessionEdits: String { isZh ? "编辑" : "Edits" }
+    func sessionDurationMinutes(_ minutes: Int) -> String { isZh ? "\(minutes) 分" : "\(minutes)m" }
+    func sessionDurationHours(_ hours: Int, _ minutes: Int) -> String {
+        isZh ? "\(hours) 时 \(minutes) 分" : "\(hours)h \(minutes)m"
+    }
+    func sessionAgentNotInstalled(_ name: String) -> String { isZh ? "未检测到 \(name)" : "\(name) is not installed" }
+    func sessionTerminalLaunchFailed(_ detail: String) -> String { isZh ? "启动终端失败：\(detail)" : "Failed to launch Terminal: \(detail)" }
+    // Session launch permission mode (per-agent YOLO)
+    var sessionYoloListTitle: String { isZh ? "YOLO 启动参数" : "YOLO Launch Arguments" }
+    var sessionYoloListDesc: String { isZh ? "为每个 Agent 单独配置 YOLO 参数，并可单独开启或关闭。" : "Configure YOLO arguments per agent and enable them individually." }
+    var sessionYoloArgsPlaceholder: String { isZh ? "YOLO 参数（空格分隔）" : "YOLO flags (space-separated)" }
+    var sessionYoloToggleHelp: String { isZh ? "为当前 Agent 启用 YOLO" : "Enable YOLO for this agent" }
+    var sessionYoloConfirmTitle: String { isZh ? "开启 YOLO 模式？" : "Enable YOLO mode?" }
+    var sessionYoloConfirmMessage: String { isZh ? "YOLO 会自动批准所有权限请求并跳过安全确认，可能导致不可逆的操作。确认开启？" : "YOLO auto-approves every permission request and skips safety checks, which can cause irreversible actions. Enable it?" }
+    var sessionYoloConfirmButton: String { isZh ? "仍然开启 YOLO" : "Enable YOLO" }
+    var sessionInstalledGroup: String { isZh ? "已安装" : "Installed" }
+    var sessionNotInstalledGroup: String { isZh ? "未安装" : "Not installed" }
+    var sessionYoloUnsupported: String { isZh ? "不支持 YOLO 参数" : "No YOLO flag" }
 
     // MARK: - Settings
     var settingsTitle: String { isZh ? "设置" : "Settings" }

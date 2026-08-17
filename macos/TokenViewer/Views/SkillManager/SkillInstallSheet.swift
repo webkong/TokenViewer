@@ -94,7 +94,7 @@ struct SkillInstallSheet: View {
                 TextField(placeholder, text: $viewModel.installSelectedPath)
                     .textFieldStyle(.roundedBorder)
                 Button(buttonTitle, action: action)
-                    .controlSize(.small)
+                    .tvActionButton(.secondary)
             }
         }
     }
@@ -102,8 +102,7 @@ struct SkillInstallSheet: View {
     private var destinationInfo: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: "folder")
-                    .foregroundStyle(.secondary)
+                TVSymbol(name: "folder")
                 Text(l10n.skillsSourceRoot)
                     .font(.system(size: 12, weight: .semibold))
                 Text(viewModel.installSourceRootDisplay)
@@ -126,6 +125,7 @@ struct SkillInstallSheet: View {
             Button(l10n.cancel) {
                 dismiss()
             }
+            .tvActionButton(.secondary)
             .disabled(viewModel.installIsInstalling)
 
             Button {
@@ -138,7 +138,7 @@ struct SkillInstallSheet: View {
                     Text(viewModel.installCandidates.isEmpty ? l10n.skillInstall : l10n.skillInstallSelected)
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .tvActionButton(.primary)
             .disabled(viewModel.installIsInstalling || !canInstall)
         }
     }

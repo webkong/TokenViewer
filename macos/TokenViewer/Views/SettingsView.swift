@@ -11,6 +11,8 @@ struct SettingsView: View {
     @AppStorage("showDockIcon") private var showDockIcon = false
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @AppStorage("limitsVisibleSources") private var limitsVisibleSources = LimitsVisibilityStore.defaultsValue
+    @AppStorage("sessionYoloConfirmed") private var sessionYoloConfirmed = false
+    @State private var pendingYoloSource: String? = nil
     @State private var launchAtLogin = false
     @State private var showRebuildAlert = false
     @State private var showResetSettingsAlert = false
@@ -23,6 +25,7 @@ struct SettingsView: View {
     @ObservedObject private var viewModel = UsageViewModel.shared
     @ObservedObject private var agentRegistry = AgentRegistry.shared
     @ObservedObject private var router = MainWindowRouter.shared
+    @ObservedObject private var sessionYoloStore = SessionYoloStore.shared
 
     private let dataDir: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -39,6 +42,7 @@ struct SettingsView: View {
                     sidebarItem(id: "general", title: l10n.general, icon: "gear")
                     sidebarItem(id: "appearance", title: l10n.appearance, icon: "paintpalette")
                     sidebarItem(id: "menuBar", title: l10n.menuBarSectionTitle, icon: "menubar.rectangle")
+                    sidebarItem(id: "sessions", title: l10n.sessions, icon: "bubble.left.and.bubble.right")
                     sidebarItem(id: "chatgpt", title: l10n.codexHomesTitle, icon: "terminal")
                     sidebarItem(id: "skills", title: l10n.skills, icon: "puzzlepiece.extension")
                     sidebarItem(id: "data", title: l10n.dataManagement, icon: "externaldrive")
@@ -76,6 +80,7 @@ struct SettingsView: View {
         switch selectedSection {
         case "appearance": appearanceSection
         case "menuBar": menuBarSection
+        case "sessions": sessionsSection
         case "chatgpt": codexHomesSection
         case "skills": skillsSection
         case "data": dataSection
@@ -97,17 +102,16 @@ struct SettingsView: View {
                 Button(l10n.skillInstallChooseFolder) {
                     chooseCodexHome()
                 }
-                .font(.system(size: 11))
+                .tvActionButton(.secondary)
                 Button(l10n.add) {
                     addCodexHome()
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
+                .tvActionButton(.primary)
                 .disabled(newCodexHome.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 Button {
                     refreshCodexHomes(force: true)
                 } label: {
-                    Image(systemName: "arrow.triangle.2.circlepath")
+                    TVSymbol(name: "arrow.triangle.2.circlepath")
                         .rotationEffect(.degrees(isScanningCodexHomes ? 360 : 0))
                         .animation(
                             isScanningCodexHomes
@@ -116,7 +120,7 @@ struct SettingsView: View {
                             value: isScanningCodexHomes
                         )
                 }
-                .buttonStyle(.borderless)
+                .tvIconButton()
                 .disabled(isScanningCodexHomes)
                 .help(l10n.codexHomesRescan)
             }
@@ -153,18 +157,18 @@ struct SettingsView: View {
                                 Button {
                                     NSWorkspace.shared.open(URL(fileURLWithPath: item.path))
                                 } label: {
-                                    Image(systemName: "folder")
+                                    TVSymbol(name: "folder")
                                 }
-                                .buttonStyle(.borderless)
+                                .tvIconButton()
                                 .help(l10n.openInFinder)
                             }
                             if item.isUserConfigured {
                                 Button(role: .destructive) {
                                     removeCodexHome(item.path)
                                 } label: {
-                                    Image(systemName: "trash")
+                                    TVSymbol(name: "trash", color: .red)
                                 }
-                                .buttonStyle(.borderless)
+                                .tvIconButton()
                                 .help(l10n.skillDelete)
                             }
                         }
@@ -247,12 +251,15 @@ struct SettingsView: View {
             HStack {
                 Text(l10n.theme).font(.system(size: 13))
                 Spacer()
-                Picker("", selection: $theme.theme) {
-                    Text(l10n.themeLight).tag(AppTheme.light.rawValue)
-                    Text(l10n.themeDark).tag(AppTheme.dark.rawValue)
-                    Text(l10n.themeSystem).tag(AppTheme.system.rawValue)
-                }
-                .pickerStyle(.segmented).labelsHidden().frame(width: 200)
+                TVSegmentedPicker(
+                    selection: $theme.theme,
+                    options: [
+                        (AppTheme.light.rawValue, l10n.themeLight),
+                        (AppTheme.dark.rawValue, l10n.themeDark),
+                        (AppTheme.system.rawValue, l10n.themeSystem),
+                    ],
+                    itemWidth: 72
+                )
             }
             Divider()
             HStack {
@@ -269,7 +276,8 @@ struct SettingsView: View {
                         Text("\(c.code) \(c.symbol)").tag(c.code)
                     }
                 }
-                .pickerStyle(.menu).labelsHidden().frame(width: 120)
+                .pickerStyle(.menu)
+                .tvSelect(width: 120)
             }
             Divider()
             HStack {
@@ -280,7 +288,8 @@ struct SettingsView: View {
                         Text(lang.displayName).tag(lang)
                     }
                 }
-                .pickerStyle(.menu).labelsHidden().frame(width: 120)
+                .pickerStyle(.menu)
+                .tvSelect(width: 120)
             }
         }
     }
@@ -326,6 +335,144 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    // MARK: Sessions
+
+    private struct YoloAgentRow: Identifiable {
+        let source: String
+        let displayName: String
+        let isInstalled: Bool
+        let supportsYolo: Bool
+        var id: String { source }
+    }
+
+    /// Union of Orca's YOLO flag map and TokenViewer's own agent registry, so
+    /// both agents that support YOLO params and those that don't are shown.
+    private var yoloAgentRows: [YoloAgentRow] {
+        var rows: [String: YoloAgentRow] = [:]
+        for (source, args) in SessionCommandRegistry.yoloArgsBySource {
+            rows[source] = YoloAgentRow(
+                source: source,
+                displayName: AgentRegistry.shared.displayName(for: source),
+                isInstalled: AgentRegistry.shared.isInstalled(for: source),
+                supportsYolo: !args.isEmpty
+            )
+        }
+        for agent in AgentRegistry.shared.allAgents {
+            if rows[agent.source] == nil {
+                rows[agent.source] = YoloAgentRow(
+                    source: agent.source,
+                    displayName: agent.displayName,
+                    isInstalled: agent.isInstalled,
+                    supportsYolo: false
+                )
+            }
+        }
+        return rows.values.sorted {
+            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+        }
+    }
+
+    private var installedYoloAgents: [YoloAgentRow] { yoloAgentRows.filter(\.isInstalled) }
+    private var notInstalledYoloAgents: [YoloAgentRow] { yoloAgentRows.filter { !$0.isInstalled } }
+
+    private var sessionsSection: some View {
+        SettingsCard(title: l10n.sessions) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(l10n.sessionYoloListTitle).font(.system(size: 13, weight: .medium))
+                Text(l10n.sessionYoloListDesc)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Divider()
+            if !installedYoloAgents.isEmpty {
+                yoloGroupHeader(l10n.sessionInstalledGroup)
+                VStack(spacing: 8) {
+                    ForEach(installedYoloAgents) { sessionYoloRow($0) }
+                }
+            }
+            if !installedYoloAgents.isEmpty && !notInstalledYoloAgents.isEmpty {
+                Divider()
+            }
+            if !notInstalledYoloAgents.isEmpty {
+                yoloGroupHeader(l10n.sessionNotInstalledGroup)
+                VStack(spacing: 8) {
+                    ForEach(notInstalledYoloAgents) { sessionYoloRow($0) }
+                }
+            }
+        }
+        .alert(l10n.sessionYoloConfirmTitle, isPresented: yoloConfirmBinding) {
+            Button(l10n.cancel, role: .cancel) { pendingYoloSource = nil }
+            Button(l10n.sessionYoloConfirmButton, role: .destructive) {
+                sessionYoloConfirmed = true
+                if let source = pendingYoloSource {
+                    sessionYoloStore.setEnabled(source, true)
+                }
+                pendingYoloSource = nil
+            }
+        } message: {
+            Text(l10n.sessionYoloConfirmMessage)
+        }
+    }
+
+    private func yoloGroupHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+    }
+
+    private func sessionYoloRow(_ agent: YoloAgentRow) -> some View {
+        HStack(spacing: 10) {
+            AgentIcon(source: agent.source, size: 16)
+                .opacity(agent.isInstalled ? 1 : 0.45)
+            Text(agent.displayName)
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 120, alignment: .leading)
+                .lineLimit(1)
+            if agent.supportsYolo {
+                TextField(l10n.sessionYoloArgsPlaceholder, text: yoloArgsBinding(agent.source))
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 11, design: .monospaced))
+                    .disabled(!(sessionYoloStore.config(for: agent.source)?.enabled ?? false))
+                Toggle("", isOn: yoloEnabledBinding(agent.source))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .help(l10n.sessionYoloToggleHelp)
+            } else {
+                Text(l10n.sessionYoloUnsupported)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                Spacer()
+            }
+        }
+    }
+
+    private func yoloEnabledBinding(_ source: String) -> Binding<Bool> {
+        Binding(
+            get: { sessionYoloStore.config(for: source)?.enabled ?? false },
+            set: { newValue in
+                if newValue && !sessionYoloConfirmed {
+                    pendingYoloSource = source
+                } else {
+                    sessionYoloStore.setEnabled(source, newValue)
+                }
+            }
+        )
+    }
+
+    private func yoloArgsBinding(_ source: String) -> Binding<String> {
+        Binding(
+            get: { sessionYoloStore.config(for: source)?.args ?? "" },
+            set: { sessionYoloStore.setArgs(source, $0) }
+        )
+    }
+
+    private var yoloConfirmBinding: Binding<Bool> {
+        Binding(
+            get: { pendingYoloSource != nil },
+            set: { if !$0 { pendingYoloSource = nil } }
+        )
     }
 
     // MARK: General
@@ -390,21 +537,21 @@ struct SettingsView: View {
                     Text(l10n.sync1hour).tag(60)
                     Text(l10n.manual).tag(0)
                 }
-                .pickerStyle(.menu).labelsHidden().frame(width: 100)
+                .pickerStyle(.menu)
+                .tvSelect(width: 112)
                 .onChange(of: syncFrequency) { UsageViewModel.shared.startAutoSync() }
                 Spacer()
                 Button(action: {
                     AppSyncCoordinator.shared.syncAll()
                     ToastCenter.shared.success(l10n.toastSynced)
                 }) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .font(.system(size: 13))
+                    TVSymbol(name: "arrow.triangle.2.circlepath")
                         .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
                         .animation(viewModel.isLoading
                             ? .linear(duration: 1).repeatForever(autoreverses: false)
                             : .default, value: viewModel.isLoading)
                 }
-                .buttonStyle(.plain)
+                .tvIconButton()
                 .disabled(viewModel.isLoading)
                 .help(l10n.syncNow)
             }
@@ -425,7 +572,7 @@ struct SettingsView: View {
                     Button(l10n.openInFinder) {
                         NSWorkspace.shared.open(URL(fileURLWithPath: dataDir))
                     }
-                    .font(.system(size: 13))
+                    .tvActionButton(.secondary)
                 }
 
                 Divider()
@@ -434,8 +581,7 @@ struct SettingsView: View {
                     Text(l10n.rebuildData).font(.system(size: 13))
                     Spacer()
                     Button(l10n.rebuildData) { showRebuildAlert = true }
-                        .font(.system(size: 13))
-                        .buttonStyle(.borderedProminent)
+                        .tvActionButton(.primary)
                         .disabled(viewModel.isLoading)
                 }
                 Text(l10n.rebuildDataHint)
@@ -458,8 +604,7 @@ struct SettingsView: View {
                     Button(l10n.resetSettings, role: .destructive) {
                         showResetSettingsAlert = true
                     }
-                    .font(.system(size: 13))
-                    .buttonStyle(.bordered)
+                    .tvActionButton(.destructive)
                 }
             }
             .alert(l10n.rebuildConfirm, isPresented: $showRebuildAlert) {
@@ -493,6 +638,8 @@ struct SettingsView: View {
         StatusBarController.shared.setMenuBarIconVisible(true)
         NSApp.setActivationPolicy(.accessory)
         limitsVisibleSources = LimitsVisibilityStore.defaultsValue
+        sessionYoloConfirmed = false
+        sessionYoloStore.reset()
         enabledAgentsJSON = AgentRegistry.defaultAgentSourcesJSON
 
         theme.theme = AppTheme.system.rawValue
@@ -613,7 +760,7 @@ struct SettingsView: View {
                     Button(l10n.openInFinder) {
                         openSkillsSourceRootInFinder()
                     }
-                    .font(.system(size: 11))
+                    .tvActionButton(.secondary)
                     Button(l10n.save) {
                         AppFocus.clear()
                         let trimmedPath = skillsSourceRoot.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -627,8 +774,7 @@ struct SettingsView: View {
                             saveSkillsSourceRoot(trimmedPath)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    .tvActionButton(.primary)
                 }
             }
             .padding(.bottom, 6)
@@ -963,8 +1109,7 @@ struct SettingsCard<Content: View>: View {
                         linkType = "Directory"
                         onReset(agent.source)
                     }
-                    .controlSize(.small)
-                    .font(.system(size: 10))
+                    .tvActionButton(.secondary)
                     .disabled(skillsPath == agent.skillsPath && linkType == "Directory")
 
                     Button(l10n.save) {
@@ -974,9 +1119,7 @@ struct SettingsCard<Content: View>: View {
                         let ltVal: String? = linkType == "Directory" ? nil : linkType
                         onSave(agent.source, pathVal, ltVal)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .font(.system(size: 10))
+                    .tvActionButton(.primary)
                 }
             }
             .onAppear {

@@ -96,10 +96,9 @@ struct SkillManagerView: View {
                     Button {
                         showOnboarding = true
                     } label: {
-                        Image(systemName: "questionmark.circle")
-                            .font(.system(size: 13, weight: .medium))
+                        TVSymbol(name: "questionmark.circle")
                     }
-                    .buttonStyle(.plain)
+                    .tvIconButton()
                     .quickHelp(L10n.shared.skillOnboardingShowHelpTip)
                 }
             }
@@ -108,18 +107,14 @@ struct SkillManagerView: View {
                 showInstallSheet = true
             } label: {
                 Label(L10n.shared.skillInstall, systemImage: "plus")
-                    .font(.system(size: 13, weight: .semibold))
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
+            .tvActionButton(.primary)
             .quickHelp(L10n.shared.skillInstallTip)
 
             Button { viewModel.refresh(showToast: true) } label: {
                 Label(L10n.shared.skillFetch, systemImage: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 13, weight: .semibold))
             }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
+            .tvActionButton(.secondary)
             .disabled(viewModel.isLoading)
             .quickHelp(L10n.shared.skillRefreshTip)
 
@@ -155,12 +150,20 @@ struct SkillManagerView: View {
                 }
                 .disabled(viewModel.isLoading)
             } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 24, height: 22)
+                TVSymbol(name: "ellipsis")
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
+            .frame(width: 34, height: 34)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.7)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 10))
             .fixedSize()
             .quickHelp(L10n.shared.skillMoreActions)
         }
@@ -172,9 +175,7 @@ struct SkillManagerView: View {
         VStack(spacing: 9) {
             HStack(spacing: 10) {
                 HStack(spacing: 7) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.tertiary)
+                    TVSymbol(name: "magnifyingglass", size: 12)
                     TextField(L10n.shared.skillSearchPlaceholder, text: $viewModel.searchText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 13))
@@ -182,8 +183,7 @@ struct SkillManagerView: View {
                         Button {
                             viewModel.searchText = ""
                         } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.tertiary)
+                            TVSymbol(name: "xmark.circle.fill", size: 12)
                         }
                         .buttonStyle(.plain)
                     }
@@ -401,8 +401,7 @@ struct FilterChip: View {
                 if let name = agentIcon {
                     AgentIcon(source: name, size: 14)
                 } else if let icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 11, weight: .medium))
+                    TVSymbol(name: icon, size: 11, weight: .medium, color: isSelected ? .white : .secondary)
                 }
                 Text(label)
                     .font(.system(size: 11, weight: .medium))
@@ -412,10 +411,10 @@ struct FilterChip: View {
             .padding(.vertical, 5)
             .background(
                 Capsule()
-                    .fill(isSelected ? Color.accentColor : Color(nsColor: .controlBackgroundColor))
+                    .fill(isSelected ? TVColor.brand : Color(nsColor: .controlBackgroundColor))
                     .overlay(
                         Capsule()
-                            .strokeBorder(isSelected ? Color.accentColor.opacity(0.3) : Color.secondary.opacity(0.15), lineWidth: 0.75)
+                            .strokeBorder(isSelected ? TVColor.brand.opacity(0.3) : Color.secondary.opacity(0.15), lineWidth: 0.75)
                     )
             )
             .foregroundStyle(isSelected ? .white : .primary)

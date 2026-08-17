@@ -145,12 +145,11 @@ struct UsageView: View {
                 AppSyncCoordinator.shared.syncAll()
                 ToastCenter.shared.success(l10n.toastSynced)
             }) {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 13, weight: .semibold))
+                TVSymbol(name: "arrow.triangle.2.circlepath")
                     .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
                     .animation(viewModel.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading)
             }
-            .buttonStyle(.borderless)
+            .tvIconButton()
             .help(l10n.syncNow)
         }
     }
@@ -239,9 +238,9 @@ private struct CustomRangePicker: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button(l10n.cancel) { isPresented = false }
+                        .tvActionButton(.secondary)
                     Button(l10n.apply) { applySelection() }
-                        .buttonStyle(.borderedProminent)
-                        .tint(TVColor.brand)
+                        .tvActionButton(.primary)
                 }
             }
             .padding(16)
@@ -938,13 +937,14 @@ private struct UsageDetailsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Picker("", selection: $tab) {
-                    Text(l10n.usageDailyDetails).tag(Tab.daily)
-                    Text(l10n.usageProjectDetails).tag(Tab.projects)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+                TVSegmentedPicker(
+                    selection: $tab,
+                    options: [
+                        (.daily, l10n.usageDailyDetails),
+                        (.projects, l10n.usageProjectDetails),
+                    ],
+                    itemWidth: 112
+                )
 
                 Spacer()
 
@@ -954,8 +954,8 @@ private struct UsageDetailsView: View {
                             Text(l10n.usageProjectTop(count)).tag(count)
                         }
                     }
-                    .labelsHidden()
-                    .fixedSize()
+                    .pickerStyle(.menu)
+                    .tvSelect(width: 108)
                 }
             }
 

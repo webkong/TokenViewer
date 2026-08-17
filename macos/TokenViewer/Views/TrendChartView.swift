@@ -40,9 +40,8 @@ struct TrendChartView: View {
                         Text(AgentRegistry.shared.displayName(for: source)).tag(source)
                     }
                 }
-                .labelsHidden()
-                .controlSize(.small)
-                .frame(maxWidth: 155)
+                .pickerStyle(.menu)
+                .tvSelect(width: 155)
                 Text(hourly ? l10n.byHour : l10n.byDay).font(.system(size: 12)).foregroundStyle(.secondary)
             }
 

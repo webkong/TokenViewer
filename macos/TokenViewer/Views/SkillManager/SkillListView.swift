@@ -478,8 +478,7 @@ private struct SkillDetailPanel: View {
                     Label(l10n.skillPreview, systemImage: "doc.text.magnifyingglass")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
+                .tvActionButton(.secondary)
 
                 HStack(spacing: 8) {
                     if !viewModel.isInSourceRoot(skill), let sourceAgent {
@@ -489,7 +488,7 @@ private struct SkillDetailPanel: View {
                             Label(l10n.skillOrganize, systemImage: "arrow.triangle.swap")
                                 .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .tvActionButton(.primary)
                     } else if viewModel.isInSourceRoot(skill), let sourceAgent {
                         Button {
                             viewModel.restore(skill: skill, agentID: sourceAgent)
@@ -497,18 +496,16 @@ private struct SkillDetailPanel: View {
                             Label(l10n.skillRestore, systemImage: "arrow.uturn.backward")
                                 .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .tvActionButton(.primary)
                     }
 
                     Button(role: .destructive) {
                         showDeleteConfirm = true
                     } label: {
-                        Image(systemName: "trash")
-                            .frame(width: 24)
+                        TVSymbol(name: "trash", color: .red)
                     }
-                    .buttonStyle(.bordered)
+                    .tvActionButton(.destructive)
                 }
-                .controlSize(.regular)
                 .padding(.top, 9)
             }
             .padding(20)

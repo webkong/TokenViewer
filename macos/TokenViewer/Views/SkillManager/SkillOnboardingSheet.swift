@@ -51,8 +51,7 @@ struct SkillOnboardingSheet: View {
                 Button(l10n.skillOnboardingGotIt) {
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
+                .tvActionButton(.primary)
             }
         }
         .padding(22)

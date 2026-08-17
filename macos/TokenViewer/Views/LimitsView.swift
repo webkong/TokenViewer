@@ -62,12 +62,11 @@ struct LimitsView: View {
             Button(action: {
                 viewModel.refresh(force: true, showToast: true)
             }) {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 13, weight: .semibold))
+                TVSymbol(name: "arrow.triangle.2.circlepath")
                     .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
                     .animation(viewModel.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading)
             }
-            .buttonStyle(.borderless)
+            .tvIconButton()
             .help(viewModel.isLoading ? l10n.refreshingLimits : l10n.refreshLimits)
         }
     }

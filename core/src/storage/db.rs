@@ -2,11 +2,11 @@ use rusqlite::{params, Connection, Result as SqlResult};
 use std::path::Path;
 
 use crate::models::{
-    DailyUsage, HeatmapPoint, ModelBreakdownEntry, ProjectUsageEntry, SyncCursor, UsageRecord,
-    UsageSummary,
+    DailyUsage, HeatmapPoint, ModelBreakdownEntry, ProjectUsageEntry, Session, SyncCursor,
+    UsageRecord, UsageSummary,
 };
 
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 4;
 
 #[derive(Clone, Copy)]
 enum LocalUsageBucket {
@@ -121,6 +121,38 @@ impl Database {
                  CREATE INDEX idx_usage_source ON usage(source);
                  CREATE INDEX idx_usage_project ON usage(project_key);
                  DELETE FROM sync_cursors WHERE source IN ('claude', 'codex', 'everycode');",
+            )?;
+        }
+
+        if version < 3 {
+            self.conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS sessions (
+                    id TEXT PRIMARY KEY,
+                    source TEXT NOT NULL,
+                    cwd TEXT NOT NULL DEFAULT '',
+                    project TEXT NOT NULL DEFAULT '',
+                    title TEXT NOT NULL DEFAULT '',
+                    custom_title TEXT,
+                    first_user_message TEXT NOT NULL DEFAULT '',
+                    started_at TEXT NOT NULL DEFAULT '',
+                    last_active_at TEXT NOT NULL DEFAULT '',
+                    file_path TEXT NOT NULL DEFAULT '',
+                    codex_home TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT DEFAULT (datetime('now'))
+                );
+                CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source);
+                CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at);",
+            )?;
+        }
+
+        if version < 4 {
+            self.conn.execute_batch(
+                "ALTER TABLE sessions ADD COLUMN model TEXT NOT NULL DEFAULT '';
+                 ALTER TABLE sessions ADD COLUMN total_tokens INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE sessions ADD COLUMN total_cost_usd REAL NOT NULL DEFAULT 0;
+                 ALTER TABLE sessions ADD COLUMN turn_count INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE sessions ADD COLUMN edit_count INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE sessions ADD COLUMN duration_seconds INTEGER NOT NULL DEFAULT 0;",
             )?;
         }
 
@@ -561,5 +593,163 @@ impl Database {
                 value TEXT NOT NULL
             );",
         )
+    }
+
+    // --- Sessions ---
+
+    /// Upsert a discovered session. `custom_title` is deliberately NOT
+    /// overwritten on conflict so a user's rename survives rescans.
+    pub fn upsert_session(&self, session: &Session) -> SqlResult<()> {
+        self.conn.execute(
+            "INSERT INTO sessions (
+                id, source, cwd, project, title, custom_title, first_user_message,
+                started_at, last_active_at, file_path, codex_home, model,
+                total_tokens, total_cost_usd, turn_count, edit_count,
+                duration_seconds, updated_at
+             )
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
+                     ?12, ?13, ?14, ?15, ?16, ?17, datetime('now'))
+             ON CONFLICT(id) DO UPDATE SET
+                cwd = excluded.cwd,
+                project = excluded.project,
+                title = excluded.title,
+                first_user_message = excluded.first_user_message,
+                started_at = excluded.started_at,
+                last_active_at = excluded.last_active_at,
+                file_path = excluded.file_path,
+                codex_home = excluded.codex_home,
+                model = excluded.model,
+                total_tokens = excluded.total_tokens,
+                total_cost_usd = excluded.total_cost_usd,
+                turn_count = excluded.turn_count,
+                edit_count = excluded.edit_count,
+                duration_seconds = excluded.duration_seconds,
+                updated_at = datetime('now')",
+            params![
+                session.id,
+                session.source,
+                session.cwd,
+                session.project,
+                session.title,
+                session.custom_title,
+                session.first_user_message,
+                session.started_at,
+                session.last_active_at,
+                session.file_path,
+                session.codex_home,
+                session.model,
+                session.total_tokens,
+                session.total_cost_usd,
+                session.turn_count,
+                session.edit_count,
+                session.duration_seconds,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// List sessions for a source (empty source = all), newest first.
+    pub fn list_sessions(
+        &self,
+        source: Option<&str>,
+        offset: i64,
+        limit: i64,
+    ) -> SqlResult<Vec<Session>> {
+        let limit = limit.clamp(1, 500);
+        let offset = offset.max(0);
+        let mut stmt = self.conn.prepare(
+            "SELECT id, source, cwd, project, title, custom_title, first_user_message,
+                    started_at, last_active_at, file_path, codex_home, model,
+                    total_tokens, total_cost_usd, turn_count, edit_count,
+                    duration_seconds
+             FROM sessions
+             WHERE (?1 = '' OR source = ?1)
+             ORDER BY last_active_at DESC, id
+             LIMIT ?2 OFFSET ?3",
+        )?;
+        let rows = stmt.query_map(params![source.unwrap_or(""), limit, offset], |row| {
+            Ok(Session {
+                id: row.get(0)?,
+                source: row.get(1)?,
+                cwd: row.get(2)?,
+                project: row.get(3)?,
+                title: row.get(4)?,
+                custom_title: row.get(5)?,
+                first_user_message: row.get(6)?,
+                started_at: row.get(7)?,
+                last_active_at: row.get(8)?,
+                file_path: row.get(9)?,
+                codex_home: row.get(10)?,
+                model: row.get(11)?,
+                total_tokens: row.get::<_, i64>(12)?.max(0) as u64,
+                total_cost_usd: row.get(13)?,
+                turn_count: row.get::<_, i64>(14)?.max(0) as u32,
+                edit_count: row.get::<_, i64>(15)?.max(0) as u32,
+                duration_seconds: row.get::<_, i64>(16)?.max(0) as u64,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn count_sessions(&self, source: Option<&str>) -> SqlResult<i64> {
+        self.conn.query_row(
+            "SELECT COUNT(*) FROM sessions WHERE (?1 = '' OR source = ?1)",
+            params![source.unwrap_or("")],
+            |row| row.get(0),
+        )
+    }
+
+    /// Distinct agent sources present in the sessions table.
+    pub fn list_session_sources(&self) -> SqlResult<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT DISTINCT source FROM sessions ORDER BY source")?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        rows.collect()
+    }
+
+    /// Persist a user-assigned title override for a session.
+    pub fn rename_session(&self, id: &str, title: &str) -> SqlResult<()> {
+        self.conn.execute(
+            "UPDATE sessions SET custom_title = ?2, updated_at = datetime('now') WHERE id = ?1",
+            params![id, title],
+        )?;
+        Ok(())
+    }
+
+    /// Delete sessions owned by `sources` whose id is no longer present on disk.
+    pub fn prune_sessions(&self, sources: &[&str], current_ids: &[String]) -> SqlResult<()> {
+        let current: std::collections::HashSet<&str> =
+            current_ids.iter().map(String::as_str).collect();
+        // A missing/locked/corrupt source can otherwise look identical to an
+        // intentionally empty source and erase the cache. Only prune sources
+        // for which this scan successfully discovered at least one session.
+        let discovered_sources: std::collections::HashSet<&str> = current_ids
+            .iter()
+            .filter_map(|id| id.split_once(':').map(|(source, _)| source))
+            .collect();
+        let sources: Vec<&str> = sources
+            .iter()
+            .copied()
+            .filter(|source| discovered_sources.contains(source))
+            .collect();
+        if sources.is_empty() {
+            return Ok(());
+        }
+        let source_ph = sources.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!("SELECT id FROM sessions WHERE source IN ({source_ph})");
+        let source_params: Vec<&dyn rusqlite::ToSql> =
+            sources.iter().map(|source| source as &dyn rusqlite::ToSql).collect();
+        let mut stmt = self.conn.prepare(&sql)?;
+        let stored = stmt
+            .query_map(source_params.as_slice(), |row| row.get::<_, String>(0))?
+            .collect::<SqlResult<Vec<_>>>()?;
+        drop(stmt);
+
+        for id in stored.into_iter().filter(|id| !current.contains(id.as_str())) {
+            self.conn
+                .execute("DELETE FROM sessions WHERE id = ?1", params![id])?;
+        }
+        Ok(())
     }
 }

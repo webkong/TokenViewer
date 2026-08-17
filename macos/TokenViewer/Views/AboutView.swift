@@ -179,8 +179,10 @@ struct AboutView: View {
                 .controlSize(.small)
         case .available:
             Button(l10n.download) { updater.install() }
+                .tvActionButton(.primary)
         default:
             Button(updater.busy ? l10n.checkingUpdates : l10n.checkNow) { updater.check() }
+                .tvActionButton(.secondary)
                 .disabled(updater.busy)
         }
     }

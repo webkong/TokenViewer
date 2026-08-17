@@ -135,6 +135,33 @@ final class CoreBridge: @unchecked Sendable {
         call { tt_query_heatmap($0, weeks) }
     }
 
+    // MARK: Sessions
+
+    func sessionsScan() -> Data? {
+        call { tt_sessions_scan($0) }
+    }
+
+    func sessionsList(source: String, offset: Int32, limit: Int32) -> Data? {
+        call { tt_sessions_list($0, source, offset, limit) }
+    }
+
+    func sessionsCount(source: String) -> Int {
+        guard let data = call({ tt_sessions_count($0, source) }) else { return 0 }
+        struct Count: Codable { let count: Int }
+        return (try? JSONDecoder().decode(Count.self, from: data))?.count ?? 0
+    }
+
+    func sessionsSources() -> [String] {
+        guard let data = call({ tt_sessions_sources($0) }) else { return [] }
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+    }
+
+    func sessionsRename(id: String, title: String) -> Bool {
+        guard let data = call({ tt_sessions_rename($0, id, title) }) else { return false }
+        struct RenameResult: Codable { let ok: Bool }
+        return (try? JSONDecoder().decode(RenameResult.self, from: data))?.ok ?? false
+    }
+
     /// Run an FFI call on the serial queue, copy the returned C string into Data,
     /// and free it. Returns nil if the handle is gone or the call returns null.
     func call(_ body: (OpaquePointer) -> UnsafeMutablePointer<CChar>?) -> Data? {

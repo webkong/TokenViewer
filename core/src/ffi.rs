@@ -1803,6 +1803,132 @@ pub extern "C" fn tt_skills_detect_installed(handle: *mut CoreHandle) -> *mut c_
     to_json_cstring(&map)
 }
 
+// --- Sessions FFI ---
+
+/// Scan all session sources on disk and persist them. Returns JSON
+/// `{"ok": true, "count": N}`. Incremental — unchanged files are skipped via
+/// stored mtimes.
+///
+/// # Safety
+/// `handle` must be a valid pointer from `tt_init`, or null.
+#[no_mangle]
+pub extern "C" fn tt_sessions_scan(handle: *mut CoreHandle) -> *mut c_char {
+    let handle = match unsafe { handle.as_ref() } {
+        Some(h) => h,
+        None => return to_json_cstring(&serde_json::json!({"ok": false, "error": "Null handle"})),
+    };
+    match crate::sessions::scan_and_store(&handle.db, &handle.home_dir) {
+        Ok(count) => to_json_cstring(&serde_json::json!({"ok": true, "count": count})),
+        Err(e) => to_json_cstring(&serde_json::json!({"ok": false, "error": e})),
+    }
+}
+
+/// List sessions, optionally filtered by source (empty = all), paginated.
+/// Returns a JSON array of `Session`.
+///
+/// # Safety
+/// `handle` must be valid; `source` must be a valid NUL-terminated C string or null.
+#[no_mangle]
+pub extern "C" fn tt_sessions_list(
+    handle: *mut CoreHandle,
+    source: *const c_char,
+    offset: i32,
+    limit: i32,
+) -> *mut c_char {
+    let handle = match unsafe { handle.as_ref() } {
+        Some(h) => h,
+        None => return std::ptr::null_mut(),
+    };
+    let source = if source.is_null() {
+        String::new()
+    } else {
+        match unsafe { CStr::from_ptr(source) }.to_str() {
+            Ok(s) => s.to_string(),
+            Err(_) => String::new(),
+        }
+    };
+    match handle
+        .db
+        .list_sessions(Some(&source), offset as i64, limit as i64)
+    {
+        Ok(sessions) => to_json_cstring(&sessions),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Count sessions for a source (empty = all). Returns `{"count": N}`.
+///
+/// # Safety
+/// `handle` must be valid; `source` must be a valid NUL-terminated C string or null.
+#[no_mangle]
+pub extern "C" fn tt_sessions_count(handle: *mut CoreHandle, source: *const c_char) -> *mut c_char {
+    let handle = match unsafe { handle.as_ref() } {
+        Some(h) => h,
+        None => return std::ptr::null_mut(),
+    };
+    let source = if source.is_null() {
+        String::new()
+    } else {
+        match unsafe { CStr::from_ptr(source) }.to_str() {
+            Ok(s) => s.to_string(),
+            Err(_) => String::new(),
+        }
+    };
+    match handle.db.count_sessions(Some(&source)) {
+        Ok(count) => to_json_cstring(&serde_json::json!({"count": count})),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// List the distinct agent sources present in the sessions table. Returns a
+/// JSON array of strings. Drives the dynamic agent filter (never hardcoded).
+///
+/// # Safety
+/// `handle` must be a valid pointer from `tt_init`, or null.
+#[no_mangle]
+pub extern "C" fn tt_sessions_sources(handle: *mut CoreHandle) -> *mut c_char {
+    let handle = match unsafe { handle.as_ref() } {
+        Some(h) => h,
+        None => return std::ptr::null_mut(),
+    };
+    match handle.db.list_session_sources() {
+        Ok(sources) => to_json_cstring(&sources),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Persist a user-assigned session title override. `title` may be empty to
+/// clear the override. Returns `{"ok": true}` or `{"ok": false, "error": ...}`.
+///
+/// # Safety
+/// `handle`, `session_id`, and `title` must be valid NUL-terminated C strings.
+#[no_mangle]
+pub extern "C" fn tt_sessions_rename(
+    handle: *mut CoreHandle,
+    session_id: *const c_char,
+    title: *const c_char,
+) -> *mut c_char {
+    let handle = match unsafe { handle.as_ref() } {
+        Some(h) => h,
+        None => return to_json_cstring(&serde_json::json!({"ok": false, "error": "Null handle"})),
+    };
+    if session_id.is_null() || title.is_null() {
+        return to_json_cstring(&serde_json::json!({"ok": false, "error": "Null argument"}));
+    }
+    let id = match unsafe { CStr::from_ptr(session_id) }.to_str() {
+        Ok(s) => s,
+        Err(_) => return to_json_cstring(&serde_json::json!({"ok": false, "error": "Invalid id"})),
+    };
+    let title = match unsafe { CStr::from_ptr(title) }.to_str() {
+        Ok(s) => s,
+        Err(_) => return to_json_cstring(&serde_json::json!({"ok": false, "error": "Invalid title"})),
+    };
+    match handle.db.rename_session(id, title) {
+        Ok(()) => to_json_cstring(&serde_json::json!({"ok": true})),
+        Err(e) => to_json_cstring(&serde_json::json!({"ok": false, "error": e.to_string()})),
+    }
+}
+
 // --- Helpers ---
 
 #[derive(serde::Deserialize, serde::Serialize)]

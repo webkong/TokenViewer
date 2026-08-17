@@ -22,6 +22,54 @@ pub struct UsageRecord {
     pub conversation_count: u32,
 }
 
+/// A resumable coding-agent session (conversation) discovered on disk.
+///
+/// `id` is the stable composite key `"<source>:<raw_session_id>"` so that
+/// sessions from different agents can never collide. The raw per-agent session
+/// id is recovered by stripping the `"<source>:"` prefix.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Session {
+    pub id: String,
+    /// Agent source id, e.g. `"claude"`, `"codex"`, `"grok"`.
+    pub source: String,
+    /// Working directory the session was started in (may be empty).
+    pub cwd: String,
+    /// Human-friendly project label derived from `cwd` (its directory name).
+    pub project: String,
+    /// Auto-derived display title (agent title → first user task → project+time).
+    pub title: String,
+    /// User-assigned override; when present it wins over `title`.
+    pub custom_title: Option<String>,
+    /// First valid user prompt, cleaned for display/title fallback.
+    pub first_user_message: String,
+    /// UTC ISO-8601 timestamp of the first activity seen.
+    pub started_at: String,
+    /// UTC ISO-8601 timestamp of the last activity (derived from file mtime).
+    pub last_active_at: String,
+    /// Source file the session was parsed from (may be empty for archived rows).
+    pub file_path: String,
+    /// Codex home root this session belongs to; empty for the default `~/.codex`.
+    pub codex_home: String,
+    /// Model observed in the session log, when available.
+    #[serde(default)]
+    pub model: String,
+    /// Total tokens consumed by this session.
+    #[serde(default)]
+    pub total_tokens: u64,
+    /// Locally computed USD cost using TokenViewer pricing.
+    #[serde(default)]
+    pub total_cost_usd: f64,
+    /// Number of user turns observed in the session.
+    #[serde(default)]
+    pub turn_count: u32,
+    /// Number of edit/write tool calls observed in the session.
+    #[serde(default)]
+    pub edit_count: u32,
+    /// Active duration in seconds, excluding gaps longer than 30 minutes.
+    #[serde(default)]
+    pub duration_seconds: u64,
+}
+
 /// Usage aggregated by project across all dates.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectUsageEntry {
