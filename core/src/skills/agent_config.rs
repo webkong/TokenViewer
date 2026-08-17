@@ -384,6 +384,16 @@ fn agent_presence_paths(agent: &AgentConfig, home: &Path) -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
     match agent.source.as_str() {
+        "claude" => {
+            paths.push(home.join(".claude/projects"));
+            paths.push(home.join(".claude/history.jsonl"));
+            paths.push(home.join(".claude/settings.json"));
+        }
+        "codex" => {
+            paths.push(home.join(".codex/sessions"));
+            paths.push(home.join(".codex/archived_sessions"));
+            paths.push(home.join(".codex/config.toml"));
+        }
         "codebuddy" => {
             if let Ok(custom_home) = std::env::var("CODEBUDDY_HOME") {
                 paths.push(PathBuf::from(custom_home));
@@ -452,6 +462,10 @@ fn agent_presence_paths(agent: &AgentConfig, home: &Path) -> Vec<PathBuf> {
 
 /// Check if a command exists on PATH with a 3-second timeout.
 fn is_command_on_path(cmd: &str) -> bool {
+    if command_exists_in_search_paths(cmd) {
+        return true;
+    }
+
     let mut child = match std::process::Command::new("which")
         .arg(cmd)
         .stdout(std::process::Stdio::null())
@@ -485,11 +499,53 @@ fn is_command_on_path(cmd: &str) -> bool {
     }
 }
 
+/// GUI apps launched by Finder inherit a minimal PATH that excludes Homebrew
+/// and user-local bin directories. Search those deterministic locations before
+/// falling back to `which`, so release builds detect the same CLIs as a shell.
+fn command_exists_in_search_paths(cmd: &str) -> bool {
+    let mut directories: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|path| std::env::split_paths(&path).collect())
+        .unwrap_or_default();
+    directories.extend([
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+    ]);
+    if let Some(home) = dirs::home_dir() {
+        directories.extend([
+            home.join(".local/bin"),
+            home.join(".npm-global/bin"),
+            home.join(".bun/bin"),
+            home.join("Library/pnpm"),
+        ]);
+    }
+
+    directories.sort();
+    directories.dedup();
+    directories
+        .into_iter()
+        .map(|directory| directory.join(cmd))
+        .any(|candidate| is_executable_file(&candidate))
+}
+
+#[cfg(unix)]
+fn is_executable_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    path.metadata()
+        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_executable_file(path: &Path) -> bool {
+    path.is_file()
+}
+
 // ── Install status cache ──
 
 /// Cache TTL in seconds (1 hour).
 const INSTALL_CACHE_TTL_SECS: u64 = 3600;
-const INSTALL_CACHE_VERSION: u32 = 4;
+const INSTALL_CACHE_VERSION: u32 = 5;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct InstallStatusCache {
@@ -918,6 +974,34 @@ mod tests {
         fs::create_dir_all(home.path().join(".pi/agent/sessions")).unwrap();
         assert!(is_agent_present_in_home(&omp, home.path()));
         assert!(is_agent_present_in_home(&pi, home.path()));
+    }
+
+    #[test]
+    fn test_claude_and_codex_runtime_data_count_as_installation() {
+        let home = TempDir::new().unwrap();
+        let claude = AgentConfig::custom(
+            "claude",
+            "Claude Code",
+            "~/.claude/skills",
+            LinkType::Directory,
+        );
+        let codex = AgentConfig::custom(
+            "codex",
+            "ChatGPT",
+            "~/.codex/skills",
+            LinkType::Directory,
+        );
+
+        // A skills destination alone is not installation evidence.
+        fs::create_dir_all(home.path().join(".claude/skills")).unwrap();
+        fs::create_dir_all(home.path().join(".codex/skills")).unwrap();
+        assert!(!is_agent_present_in_home(&claude, home.path()));
+        assert!(!is_agent_present_in_home(&codex, home.path()));
+
+        fs::create_dir_all(home.path().join(".claude/projects")).unwrap();
+        fs::create_dir_all(home.path().join(".codex/sessions")).unwrap();
+        assert!(is_agent_present_in_home(&claude, home.path()));
+        assert!(is_agent_present_in_home(&codex, home.path()));
     }
 
     #[test]
