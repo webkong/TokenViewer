@@ -502,7 +502,7 @@ private struct SkillDetailPanel: View {
                     Button(role: .destructive) {
                         showDeleteConfirm = true
                     } label: {
-                        TVSymbol(name: "trash", color: .red)
+                        TVSymbol(name: "trash", color: .white)
                     }
                     .tvActionButton(.destructive)
                 }

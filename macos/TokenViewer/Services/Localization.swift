@@ -112,6 +112,7 @@ final class L10n: ObservableObject {
     var sessionsEmpty: String { isZh ? "暂无会话" : "No sessions yet" }
     var sessionsEmptyHint: String { isZh ? "使用支持的 Agent 后，点击右上角刷新即可发现会话。" : "Use a supported agent, then refresh to discover sessions." }
     var sessionLaunch: String { isZh ? "启动会话" : "Launch Session" }
+    var sessionLaunchYolo: String { isZh ? "启动会话 (YOLO)" : "Launch Session (YOLO)" }
     var sessionLaunchHelp: String { isZh ? "在外部终端恢复此会话" : "Resume this session in a terminal" }
     var sessionRename: String { isZh ? "重命名" : "Rename" }
     var sessionRenameTitle: String { isZh ? "重命名会话" : "Rename Session" }
@@ -136,8 +137,12 @@ final class L10n: ObservableObject {
         isZh ? "\(hours) 时 \(minutes) 分" : "\(hours)h \(minutes)m"
     }
     func sessionAgentNotInstalled(_ name: String) -> String { isZh ? "未检测到 \(name)" : "\(name) is not installed" }
-    func sessionTerminalLaunchFailed(_ detail: String) -> String { isZh ? "启动终端失败：\(detail)" : "Failed to launch Terminal: \(detail)" }
+    func sessionTerminalLaunchFailed(_ detail: String) -> String { isZh ? "启动应用失败：\(detail)" : "Failed to launch terminal: \(detail)" }
     // Session launch permission mode (per-agent YOLO)
+    var sessionLaunchApplication: String { isZh ? "默认启动应用" : "Default Terminal" }
+    var sessionLaunchApplicationDesc: String { isZh ? "启动 Session 时使用的终端或工作台" : "Terminal or workspace used to launch sessions" }
+    var sessionLaunchApplicationNotInstalled: String { isZh ? "未安装" : "Not installed" }
+    var sessionCmuxAccessRequired: String { isZh ? "cmux 阻止了外部进程访问。请在 cmux 设置中允许本机进程使用 Socket API。" : "cmux blocked external access. Allow local processes to use the Socket API in cmux settings." }
     var sessionYoloListTitle: String { isZh ? "YOLO 启动参数" : "YOLO Launch Arguments" }
     var sessionYoloListDesc: String { isZh ? "为每个 Agent 单独配置 YOLO 参数，并可单独开启或关闭。" : "Configure YOLO arguments per agent and enable them individually." }
     var sessionYoloArgsPlaceholder: String { isZh ? "YOLO 参数（空格分隔）" : "YOLO flags (space-separated)" }

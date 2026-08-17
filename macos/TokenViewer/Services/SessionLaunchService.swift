@@ -1,6 +1,44 @@
 import AppKit
 import Foundation
 
+enum SessionLaunchApplication: String, CaseIterable, Identifiable {
+    static let storageKey = "sessionLaunchApplication"
+
+    case terminal
+    case iTerm2
+    case ghostty
+    case cmux
+    case orca
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .terminal: "Terminal"
+        case .iTerm2: "iTerm2"
+        case .ghostty: "Ghostty"
+        case .cmux: "cmux"
+        case .orca: "Orca"
+        }
+    }
+
+    var isInstalled: Bool {
+        switch self {
+        case .terminal:
+            true
+        case .iTerm2:
+            NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.googlecode.iterm2") != nil
+        case .ghostty:
+            NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.mitchellh.ghostty") != nil
+                || FileManager.default.fileExists(atPath: "/Applications/Ghostty.app")
+        case .cmux:
+            SessionLaunchService.firstExecutable(in: SessionLaunchService.cmuxExecutablePaths) != nil
+        case .orca:
+            SessionLaunchService.firstExecutable(in: SessionLaunchService.orcaExecutablePaths) != nil
+        }
+    }
+}
+
 /// Describes how to resume a session for one agent. Adapters are pure data
 /// (binary + argv builders) so the set can grow without touching launch logic.
 struct SessionCommandAdapter {
@@ -125,6 +163,18 @@ enum SessionLaunchError: LocalizedError {
 final class SessionLaunchService {
     static let shared = SessionLaunchService()
 
+    static let cmuxExecutablePaths = [
+        "/usr/local/bin/cmux",
+        "/opt/homebrew/bin/cmux",
+        "/Applications/cmux.app/Contents/Resources/bin/cmux",
+    ]
+
+    static let orcaExecutablePaths = [
+        "/usr/local/bin/orca",
+        "/opt/homebrew/bin/orca",
+        "/Applications/Orca.app/Contents/Resources/bin/orca",
+    ]
+
     private let registry = SessionCommandRegistry.shared
 
     /// Shell-safe session id: alphanumeric + a narrow punctuation set only.
@@ -175,7 +225,17 @@ final class SessionLaunchService {
 
         let command = prefix + argv.map(shellQuote).joined(separator: " ")
         let shellCommand = cwd.isEmpty ? command : "cd \(shellQuote(cwd)) && \(command)"
-        try runInTerminal(shellCommand)
+        let storedApplication = UserDefaults.standard.string(forKey: SessionLaunchApplication.storageKey)
+        let application = SessionLaunchApplication(rawValue: storedApplication ?? "") ?? .terminal
+        let title = session.displayTitle
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        try run(
+            shellCommand,
+            cwd: cwd.isEmpty ? FileManager.default.homeDirectoryForCurrentUser.path : cwd,
+            title: String(title.prefix(80)),
+            in: application
+        )
     }
 
     /// POSIX single-quote a string so it survives shell parsing unchanged.
@@ -183,21 +243,77 @@ final class SessionLaunchService {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
-    /// Launch Terminal.app and run the command in a fresh window at cwd.
-    private func runInTerminal(_ shellCommand: String) throws {
+    /// Launch the selected terminal and run the command in a fresh window.
+    private func run(
+        _ shellCommand: String,
+        cwd: String,
+        title: String,
+        in application: SessionLaunchApplication
+    ) throws {
+        switch application {
+        case .cmux:
+            try runCLI(
+                named: "cmux",
+                executablePaths: Self.cmuxExecutablePaths,
+                arguments: ["new-workspace", "--name", title, "--cwd", cwd, "--command", shellCommand],
+                workingDirectory: cwd
+            )
+            activateApplication(bundleIdentifier: nil, fallbackPath: "/Applications/cmux.app")
+            return
+        case .orca:
+            try runCLI(
+                named: "Orca",
+                executablePaths: Self.orcaExecutablePaths,
+                arguments: ["terminal", "create", "--title", title, "--command", shellCommand, "--json"],
+                workingDirectory: cwd
+            )
+            activateApplication(bundleIdentifier: "com.stablyai.orca", fallbackPath: "/Applications/Orca.app")
+            return
+        case .terminal, .iTerm2, .ghostty:
+            break
+        }
+
         // Pass the command as argv rather than interpolating it into AppleScript.
         // This keeps quotes, newlines and project names from becoming script code.
-        let script = """
-        on run argv
-            tell application "Terminal"
-                activate
-                do script (item 1 of argv)
-            end tell
-        end run
-        """
+        let script: String
+        switch application {
+        case .terminal:
+            script = """
+            on run argv
+                tell application "Terminal"
+                    activate
+                    do script (item 1 of argv)
+                end tell
+            end run
+            """
+        case .iTerm2:
+            script = """
+            on run argv
+                tell application "iTerm2"
+                    activate
+                    set newWindow to (create window with default profile)
+                    tell current session of newWindow to write text (item 1 of argv)
+                end tell
+            end run
+            """
+        case .ghostty:
+            script = """
+            on run argv
+                tell application "Ghostty"
+                    activate
+                    set cfg to new surface configuration
+                    set initial working directory of cfg to (item 2 of argv)
+                    set initial input of cfg to ((item 1 of argv) & (ASCII character 10))
+                    new window with configuration cfg
+                end tell
+            end run
+            """
+        case .cmux, .orca:
+            return
+        }
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        task.arguments = ["-e", script, shellCommand]
+        task.arguments = ["-e", script, shellCommand, cwd]
         let errorPipe = Pipe()
         task.standardError = errorPipe
         do {
@@ -213,6 +329,55 @@ final class SessionLaunchService {
             throw SessionLaunchError.terminalLaunchFailed(
                 detail?.isEmpty == false ? detail! : "osascript \(task.terminationStatus)"
             )
+        }
+    }
+
+    static func firstExecutable(in paths: [String]) -> String? {
+        paths.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    private func runCLI(
+        named name: String,
+        executablePaths: [String],
+        arguments: [String],
+        workingDirectory: String
+    ) throws {
+        guard let executable = Self.firstExecutable(in: executablePaths) else {
+            throw SessionLaunchError.terminalLaunchFailed("\(name) CLI not found")
+        }
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: executable)
+        task.arguments = arguments
+        task.currentDirectoryURL = URL(fileURLWithPath: workingDirectory, isDirectory: true)
+        let outputPipe = Pipe()
+        task.standardOutput = outputPipe
+        task.standardError = outputPipe
+        do {
+            try task.run()
+        } catch {
+            throw SessionLaunchError.terminalLaunchFailed(error.localizedDescription)
+        }
+        task.waitUntilExit()
+        guard task.terminationStatus == 0 else {
+            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            let detail = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if name == "cmux", detail?.localizedCaseInsensitiveContains("broken pipe") == true {
+                throw SessionLaunchError.terminalLaunchFailed(L10n.shared.sessionCmuxAccessRequired)
+            }
+            throw SessionLaunchError.terminalLaunchFailed(
+                detail?.isEmpty == false ? detail! : "\(name) exited with \(task.terminationStatus)"
+            )
+        }
+    }
+
+    private func activateApplication(bundleIdentifier: String?, fallbackPath: String) {
+        DispatchQueue.main.async {
+            let url = bundleIdentifier.flatMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
+                ?? URL(fileURLWithPath: fallbackPath)
+            guard FileManager.default.fileExists(atPath: url.path) else { return }
+            NSWorkspace.shared.openApplication(at: url, configuration: .init())
         }
     }
 }

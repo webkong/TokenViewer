@@ -37,7 +37,7 @@ struct MainWindowView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 9)
-        .frame(minHeight: 54)
+        .frame(height: 54)
         .frame(maxWidth: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
     }
@@ -50,8 +50,10 @@ struct MainWindowView: View {
             Label(title, systemImage: icon)
                 .font(.system(size: 14, weight: selected ? .semibold : .medium))
                 .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, 18)
-                .frame(minHeight: 36)
+                .frame(height: 36)
                 .background(
                     Capsule()
                         .fill(selected ? TVColor.brand : Color.clear)

@@ -12,6 +12,8 @@ struct SettingsView: View {
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @AppStorage("limitsVisibleSources") private var limitsVisibleSources = LimitsVisibilityStore.defaultsValue
     @AppStorage("sessionYoloConfirmed") private var sessionYoloConfirmed = false
+    @AppStorage(SessionLaunchApplication.storageKey)
+    private var sessionLaunchApplication = SessionLaunchApplication.terminal.rawValue
     @State private var pendingYoloSource: String? = nil
     @State private var launchAtLogin = false
     @State private var showRebuildAlert = false
@@ -379,6 +381,31 @@ struct SettingsView: View {
 
     private var sessionsSection: some View {
         SettingsCard(title: l10n.sessions) {
+            HStack(spacing: 12) {
+                TVSymbol(name: "terminal", size: 16)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(l10n.sessionLaunchApplication)
+                        .font(.system(size: 13, weight: .medium))
+                    Text(l10n.sessionLaunchApplicationDesc)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Picker("", selection: $sessionLaunchApplication) {
+                    ForEach(SessionLaunchApplication.allCases) { application in
+                        Text(
+                            application.isInstalled
+                                ? application.displayName
+                                : "\(application.displayName) (\(l10n.sessionLaunchApplicationNotInstalled))"
+                        )
+                        .tag(application.rawValue)
+                        .disabled(!application.isInstalled)
+                    }
+                }
+                .labelsHidden()
+                .tvSelect(width: 176)
+            }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text(l10n.sessionYoloListTitle).font(.system(size: 13, weight: .medium))
                 Text(l10n.sessionYoloListDesc)
@@ -438,6 +465,7 @@ struct SettingsView: View {
                 Toggle("", isOn: yoloEnabledBinding(agent.source))
                     .labelsHidden()
                     .toggleStyle(.switch)
+                    .controlSize(.mini)
                     .help(l10n.sessionYoloToggleHelp)
             } else {
                 Text(l10n.sessionYoloUnsupported)
@@ -556,6 +584,7 @@ struct SettingsView: View {
                 .help(l10n.syncNow)
             }
         }
+        .tint(TVColor.brand)
     }
 
     // MARK: Data
@@ -640,6 +669,7 @@ struct SettingsView: View {
         limitsVisibleSources = LimitsVisibilityStore.defaultsValue
         sessionYoloConfirmed = false
         sessionYoloStore.reset()
+        sessionLaunchApplication = SessionLaunchApplication.terminal.rawValue
         enabledAgentsJSON = AgentRegistry.defaultAgentSourcesJSON
 
         theme.theme = AppTheme.system.rawValue

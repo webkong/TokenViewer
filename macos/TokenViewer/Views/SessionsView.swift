@@ -5,7 +5,6 @@ struct SessionsView: View {
     @ObservedObject private var l10n = L10n.shared
 
     @State private var renameTarget: SessionEntry?
-    @State private var renameText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -17,12 +16,13 @@ struct SessionsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear { viewModel.start() }
-        .alert(l10n.sessionRenameTitle, isPresented: renameBinding) {
-            TextField(l10n.sessionRenamePlaceholder, text: $renameText)
-            Button(l10n.save) { commitRename() }
-            Button(l10n.cancel, role: .cancel) {}
-        } message: {
-            Text(l10n.sessionRenameHint)
+        .sheet(item: $renameTarget) { session in
+            SessionRenameSheet(session: session) { title in
+                viewModel.rename(session, to: title)
+                renameTarget = nil
+            } onCancel: {
+                renameTarget = nil
+            }
         }
     }
 
@@ -56,23 +56,27 @@ struct SessionsView: View {
 
     private var filters: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    filterChip(
-                        label: l10n.sessionAll,
-                        isSelected: viewModel.selectedAgent.isEmpty
-                    ) { viewModel.selectAgent("") }
-
-                    ForEach(viewModel.agentSources, id: \.self) { source in
-                        filterChip(
-                            label: AgentRegistry.shared.displayName(for: source),
-                            isSelected: viewModel.selectedAgent == source
-                        ) { viewModel.selectAgent(source) }
+            HStack(spacing: 10) {
+                HStack(spacing: 8) {
+                    TVSymbol(name: "magnifyingglass")
+                    TextField(l10n.sessionSearchPlaceholder, text: $viewModel.searchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                    if !viewModel.searchText.isEmpty {
+                        Button { viewModel.searchText = "" } label: {
+                            TVSymbol(name: "xmark.circle.fill", size: 12)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-            }
+                .padding(.horizontal, 12)
+                .frame(width: 320, height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 9)
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(.quaternary, lineWidth: 0.5))
+                )
 
-            HStack(spacing: 10) {
                 HStack(spacing: 3) {
                     ForEach(SessionDateRange.allCases) { range in
                         rangeButton(range)
@@ -84,6 +88,15 @@ struct SessionsView: View {
                         .fill(Color(nsColor: .controlBackgroundColor))
                         .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(.quaternary, lineWidth: 0.5))
                 )
+
+                if viewModel.selectedRange == .custom {
+                    CustomRangePicker(
+                        from: $viewModel.customFrom,
+                        to: $viewModel.customTo,
+                        onApply: {}
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .leading)))
+                }
 
                 Menu {
                     Button(l10n.sessionAllProjects) { viewModel.selectedProject = "" }
@@ -98,53 +111,43 @@ struct SessionsView: View {
                     )
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
-                    .frame(maxWidth: 180, alignment: .leading)
+                    .frame(maxWidth: 112, alignment: .leading)
                 }
                 .menuStyle(.borderlessButton)
-                .tvSelect(width: 190)
-
-                Spacer()
-            }
-
-            HStack(spacing: 10) {
-                HStack(spacing: 8) {
-                    TVSymbol(name: "magnifyingglass")
-                    TextField(l10n.sessionSearchPlaceholder, text: $viewModel.searchText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 13))
-                }
-                .padding(.horizontal, 12)
-                .frame(width: 360, height: 34)
-                .background(
-                    RoundedRectangle(cornerRadius: 9)
-                        .fill(Color(nsColor: .controlBackgroundColor))
-                        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(.quaternary, lineWidth: 0.5))
-                )
-
-                Spacer()
+                .menuIndicator(.hidden)
+                .tvSelect(width: 145)
 
                 Text("\(viewModel.filteredSessions.count) / \(viewModel.totalCount)")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .frame(minWidth: 64, alignment: .trailing)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    FilterChip(
+                        icon: "square.grid.2x2",
+                        label: l10n.sessionAll,
+                        isSelected: viewModel.selectedAgent.isEmpty,
+                        tooltip: l10n.sessionAll,
+                        action: { viewModel.selectAgent("") }
+                    )
+
+                    ForEach(viewModel.agentSources, id: \.self) { source in
+                        let name = AgentRegistry.shared.displayName(for: source)
+                        FilterChip(
+                            agentIcon: source,
+                            label: name,
+                            isSelected: viewModel.selectedAgent == source,
+                            tooltip: name,
+                            action: { viewModel.selectAgent(source) }
+                        )
+                    }
+                }
             }
         }
-    }
-
-    private func filterChip(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(isSelected ? Color.white : Color.primary)
-                .padding(.horizontal, 13)
-                .frame(height: 30)
-                .background(
-                    Capsule()
-                        .fill(isSelected ? TVColor.brand : Color(nsColor: .controlBackgroundColor))
-                        .overlay(Capsule().strokeBorder(.quaternary, lineWidth: 0.5))
-                )
-        }
-        .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.18), value: viewModel.selectedRange)
     }
 
     private func rangeButton(_ range: SessionDateRange) -> some View {
@@ -154,7 +157,7 @@ struct SessionsView: View {
             Text(rangeLabel(range))
                 .font(.system(size: 11, weight: viewModel.selectedRange == range ? .semibold : .regular))
                 .foregroundStyle(viewModel.selectedRange == range ? Color.primary : Color.secondary)
-                .padding(.horizontal, 11)
+                .padding(.horizontal, 9)
                 .frame(height: 26)
                 .background(
                     RoundedRectangle(cornerRadius: 7)
@@ -175,6 +178,7 @@ struct SessionsView: View {
         case .sevenDays: l10n.sevenDays
         case .thirtyDays: l10n.thirtyDays
         case .ninetyDays: l10n.ninetyDays
+        case .custom: l10n.rangeCustom
         }
     }
 
@@ -302,20 +306,16 @@ struct SessionsView: View {
         let yolo = SessionYoloStore.shared.args(for: session.source) != nil
 
         VStack(alignment: .trailing, spacing: 4) {
-            if yolo {
-                Label("YOLO", systemImage: "bolt.fill")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.orange)
-            }
             Button { launch(session) } label: {
-                Label(l10n.sessionLaunch, systemImage: "play.fill")
-                    .frame(minWidth: 84)
+                Label(yolo ? l10n.sessionLaunchYolo : l10n.sessionLaunch, systemImage: "play.fill")
+                    .lineLimit(1)
+                    .frame(minWidth: yolo ? 138 : 84)
             }
             .tvActionButton(.primary)
             .disabled(!supported)
             .help(launchHelp(session, adapter: adapter, installed: installReady))
         }
-        .frame(width: 116, alignment: .trailing)
+        .frame(width: yolo ? 176 : 116, alignment: .trailing)
     }
 
     private func launchHelp(
@@ -335,28 +335,25 @@ struct SessionsView: View {
     }
 
     private func launch(_ session: SessionEntry) {
-        do {
-            try SessionLaunchService.shared.launch(session)
-        } catch {
-            ToastCenter.shared.error(error.localizedDescription)
+        Task {
+            let errorMessage = await Task.detached { () -> String? in
+                do {
+                    try SessionLaunchService.shared.launch(session)
+                    return nil
+                } catch {
+                    return error.localizedDescription
+                }
+            }.value
+            if let errorMessage {
+                ToastCenter.shared.error(errorMessage)
+            }
         }
     }
 
     // MARK: - Rename
 
-    private var renameBinding: Binding<Bool> {
-        Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })
-    }
-
     private func beginRename(_ session: SessionEntry) {
-        renameText = session.displayTitle
         renameTarget = session
-    }
-
-    private func commitRename() {
-        guard let target = renameTarget else { return }
-        viewModel.rename(target, to: renameText)
-        renameTarget = nil
     }
 
     // MARK: - Formatting
@@ -387,5 +384,55 @@ struct SessionsView: View {
         let minutes = Int(seconds / 60)
         if minutes < 60 { return l10n.sessionDurationMinutes(minutes) }
         return l10n.sessionDurationHours(minutes / 60, minutes % 60)
+    }
+}
+
+private struct SessionRenameSheet: View {
+    @ObservedObject private var l10n = L10n.shared
+    @State private var title: String
+
+    let onSave: (String) -> Void
+    let onCancel: () -> Void
+
+    init(session: SessionEntry, onSave: @escaping (String) -> Void, onCancel: @escaping () -> Void) {
+        _title = State(initialValue: session.displayTitle)
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(l10n.sessionRenameTitle)
+                .font(.system(size: 18, weight: .semibold))
+
+            Text(l10n.sessionRenameHint)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+
+            TextEditor(text: $title)
+                .font(.system(size: 13))
+                .scrollContentBackground(.hidden)
+                .padding(8)
+                .frame(minHeight: 120)
+                .background(
+                    RoundedRectangle(cornerRadius: 9)
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9)
+                                .strokeBorder(.quaternary, lineWidth: 0.5)
+                        )
+                )
+                .accessibilityLabel(l10n.sessionRenamePlaceholder)
+
+            HStack(spacing: 8) {
+                Spacer()
+                Button(l10n.cancel, action: onCancel)
+                    .tvActionButton(.secondary)
+                Button(l10n.save) { onSave(title) }
+                    .tvActionButton(.primary)
+            }
+        }
+        .padding(20)
+        .frame(width: 480)
     }
 }

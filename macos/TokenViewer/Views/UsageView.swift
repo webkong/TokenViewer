@@ -182,7 +182,7 @@ struct UsageView: View {
     }
 }
 
-private struct CustomRangePicker: View {
+struct CustomRangePicker: View {
     @Binding var from: Date
     @Binding var to: Date
     let onApply: () -> Void

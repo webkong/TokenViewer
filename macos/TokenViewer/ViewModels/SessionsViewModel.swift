@@ -1,10 +1,11 @@
 import Foundation
 
 enum SessionDateRange: String, CaseIterable, Identifiable {
-    case all
     case sevenDays
     case thirtyDays
     case ninetyDays
+    case all
+    case custom
 
     var id: String { rawValue }
 
@@ -14,6 +15,7 @@ enum SessionDateRange: String, CaseIterable, Identifiable {
         case .sevenDays: 7
         case .thirtyDays: 30
         case .ninetyDays: 90
+        case .custom: nil
         }
     }
 }
@@ -25,7 +27,13 @@ final class SessionsViewModel: ObservableObject {
     @Published var sessions: [SessionEntry] = []
     /// Empty means "all agents".
     @Published var selectedAgent = ""
-    @Published var selectedRange: SessionDateRange = .all
+    @Published var selectedRange: SessionDateRange = .sevenDays
+    @Published var customFrom: Date = AppTime.localCalendar.date(
+        byAdding: .day,
+        value: -29,
+        to: AppTime.localStartOfDay(for: Date())
+    ) ?? Date()
+    @Published var customTo: Date = Date()
     @Published var selectedProject = ""
     @Published var searchText = ""
     @Published var isScanning = false
@@ -88,13 +96,28 @@ final class SessionsViewModel: ObservableObject {
     var filteredSessions: [SessionEntry] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let cutoff = selectedRange.days.flatMap {
-            Calendar.current.date(byAdding: .day, value: -$0, to: Date())
+            AppTime.localCalendar.date(byAdding: .day, value: -$0, to: Date())
         }
+        let customBounds: (from: Date, to: Date)? = selectedRange == .custom
+            ? (
+                AppTime.localStartOfDay(for: min(customFrom, customTo)),
+                AppTime.localCalendar.date(
+                    byAdding: .day,
+                    value: 1,
+                    to: AppTime.localStartOfDay(for: max(customFrom, customTo))
+                ) ?? max(customFrom, customTo)
+            )
+            : nil
         return sessions.filter { session in
             if !selectedProject.isEmpty, session.project != selectedProject {
                 return false
             }
             if let cutoff, let active = session.lastActiveDate, active < cutoff {
+                return false
+            }
+            if let bounds = customBounds,
+               let active = session.lastActiveDate,
+               (active < bounds.from || active >= bounds.to) {
                 return false
             }
             if !query.isEmpty {

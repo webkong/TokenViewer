@@ -47,9 +47,12 @@ impl Database {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap_or(0);
 
-        if version < 1 {
-            self.conn.execute_batch(
-                "CREATE TABLE IF NOT EXISTS usage (
+        // Always ensure the baseline tables exist. `user_version` is only a
+        // checkpoint: an interrupted SQLite DDL batch may leave the physical
+        // schema ahead of that number, so later migrations must inspect the
+        // actual structure instead of blindly replaying ALTER TABLE statements.
+        self.conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS usage (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     hour_start TEXT NOT NULL,
                     source TEXT NOT NULL,
@@ -77,14 +80,17 @@ impl Database {
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
                 );",
-            )?;
-        }
+        )?;
 
-        if version < 2 {
+        if !self.has_column("usage", "project_key")? {
             // Project attribution changes the usage row identity. Preserve agents
             // without a project-aware parser; replay only Codex/Claude-format logs
             // so historical aggregate data is never discarded when raw logs rotated.
-            self.conn.execute_batch(
+            // Run the destructive table swap atomically. If it is interrupted,
+            // SQLite rolls the whole migration back instead of leaving a half-v2
+            // schema with an old `user_version` checkpoint.
+            let tx = self.conn.unchecked_transaction()?;
+            tx.execute_batch(
                 "DROP TABLE IF EXISTS usage_v2;
                  CREATE TABLE usage_v2 (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,11 +128,16 @@ impl Database {
                  CREATE INDEX idx_usage_project ON usage(project_key);
                  DELETE FROM sync_cursors WHERE source IN ('claude', 'codex', 'everycode');",
             )?;
+            tx.commit()?;
         }
+        self.add_column_if_missing("usage", "project_ref", "TEXT NOT NULL DEFAULT ''")?;
 
-        if version < 3 {
-            self.conn.execute_batch(
-                "CREATE TABLE IF NOT EXISTS sessions (
+        self.conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_usage_hour ON usage(hour_start);
+             CREATE INDEX IF NOT EXISTS idx_usage_source ON usage(source);
+             CREATE INDEX IF NOT EXISTS idx_usage_project ON usage(project_key);
+
+             CREATE TABLE IF NOT EXISTS sessions (
                     id TEXT PRIMARY KEY,
                     source TEXT NOT NULL,
                     cwd TEXT NOT NULL DEFAULT '',
@@ -142,23 +153,47 @@ impl Database {
                 );
                 CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source);
                 CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at);",
-            )?;
-        }
+        )?;
 
-        if version < 4 {
-            self.conn.execute_batch(
-                "ALTER TABLE sessions ADD COLUMN model TEXT NOT NULL DEFAULT '';
-                 ALTER TABLE sessions ADD COLUMN total_tokens INTEGER NOT NULL DEFAULT 0;
-                 ALTER TABLE sessions ADD COLUMN total_cost_usd REAL NOT NULL DEFAULT 0;
-                 ALTER TABLE sessions ADD COLUMN turn_count INTEGER NOT NULL DEFAULT 0;
-                 ALTER TABLE sessions ADD COLUMN edit_count INTEGER NOT NULL DEFAULT 0;
-                 ALTER TABLE sessions ADD COLUMN duration_seconds INTEGER NOT NULL DEFAULT 0;",
-            )?;
-        }
+        self.add_column_if_missing("sessions", "model", "TEXT NOT NULL DEFAULT ''")?;
+        self.add_column_if_missing("sessions", "total_tokens", "INTEGER NOT NULL DEFAULT 0")?;
+        self.add_column_if_missing("sessions", "total_cost_usd", "REAL NOT NULL DEFAULT 0")?;
+        self.add_column_if_missing("sessions", "turn_count", "INTEGER NOT NULL DEFAULT 0")?;
+        self.add_column_if_missing("sessions", "edit_count", "INTEGER NOT NULL DEFAULT 0")?;
+        self.add_column_if_missing("sessions", "duration_seconds", "INTEGER NOT NULL DEFAULT 0")?;
 
-        self.conn
-            .execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
+        // Never downgrade a database created by a newer app. For an interrupted
+        // older migration, reaching this point means the required v4 structure
+        // has been verified/repaired and the checkpoint is now safe to advance.
+        if version < SCHEMA_VERSION {
+            self.conn
+                .execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
+        }
         Ok(())
+    }
+
+    fn has_column(&self, table: &str, column: &str) -> SqlResult<bool> {
+        let sql = format!("PRAGMA table_info(\"{}\")", table.replace('"', "\"\""));
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut rows = stmt.query([])?;
+        while let Some(row) = rows.next()? {
+            let name: String = row.get(1)?;
+            if name == column {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    fn add_column_if_missing(&self, table: &str, column: &str, definition: &str) -> SqlResult<()> {
+        if self.has_column(table, column)? {
+            return Ok(());
+        }
+        let table = table.replace('"', "\"\"");
+        let column = column.replace('"', "\"\"");
+        self.conn.execute_batch(&format!(
+            "ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {definition};"
+        ))
     }
 
     // --- Usage CRUD ---
