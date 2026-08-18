@@ -73,13 +73,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-15
+          - runner: macos-26
+            developer_dir: /Applications/Xcode_26.6.app/Contents/Developer
             macos_arch: arm64
             rust_target: aarch64-apple-darwin
             package_arch: arm64
             package_pkg: TokenViewer-Installer.pkg
             stable_aliases: true
           - runner: macos-15-intel
+            developer_dir: /Applications/Xcode_26.3.app/Contents/Developer
             macos_arch: x86_64
             rust_target: x86_64-apple-darwin
             package_arch: x64
@@ -96,6 +98,7 @@ jobs:
       PACKAGE_ARCH: ${{ matrix.package_arch }}
       PACKAGE_PKG: ${{ matrix.package_pkg }}
       STABLE_ALIASES: ${{ matrix.stable_aliases }}
+      DEVELOPER_DIR: ${{ matrix.developer_dir }}
 
     steps:
       - uses: actions/checkout@v4
