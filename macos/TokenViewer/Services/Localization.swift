@@ -75,9 +75,12 @@ final class L10n: ObservableObject {
     var input: String { isZh ? "输入" : "Input" }
     var output: String { isZh ? "输出" : "Output" }
     var cacheRead: String { isZh ? "缓存读取" : "Cache Read" }
+    var cache: String { isZh ? "缓存" : "Cache" }
     var reasoning: String { isZh ? "推理" : "Reasoning" }
     var cost: String { isZh ? "费用" : "Cost" }
     var costByModel: String { isZh ? "模型费用明细" : "Cost by Model" }
+    var modelUsageDetails: String { isZh ? "模型用量明细" : "Model Usage Details" }
+    var agentModelUsageDetails: String { isZh ? "Agent 模型用量" : "Agent Model Usage" }
     var cacheHit: String { isZh ? "缓存命中" : "Cache hit" }
 
     // MARK: - Limits
@@ -147,6 +150,7 @@ final class L10n: ObservableObject {
     var sessionYoloListDesc: String { isZh ? "为每个 Agent 单独配置 YOLO 参数，并可单独开启或关闭。" : "Configure YOLO arguments per agent and enable them individually." }
     var sessionYoloArgsPlaceholder: String { isZh ? "YOLO 参数（空格分隔）" : "YOLO flags (space-separated)" }
     var sessionYoloToggleHelp: String { isZh ? "为当前 Agent 启用 YOLO" : "Enable YOLO for this agent" }
+    var sessionsLoading: String { isZh ? "正在加载会话…" : "Loading sessions…" }
     var sessionYoloConfirmTitle: String { isZh ? "开启 YOLO 模式？" : "Enable YOLO mode?" }
     var sessionYoloConfirmMessage: String { isZh ? "YOLO 会自动批准所有权限请求并跳过安全确认，可能导致不可逆的操作。确认开启？" : "YOLO auto-approves every permission request and skips safety checks, which can cause irreversible actions. Enable it?" }
     var sessionYoloConfirmButton: String { isZh ? "仍然开启 YOLO" : "Enable YOLO" }

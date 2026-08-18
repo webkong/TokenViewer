@@ -471,6 +471,9 @@ pub extern "C" fn tt_query_model_breakdown(
                     model: r.model.clone(),
                     source: r.source.clone(),
                     total_tokens: r.total_tokens,
+                    input_tokens: r.input_tokens,
+                    output_tokens: r.output_tokens,
+                    cache_tokens: r.cached_input_tokens + r.cache_creation_input_tokens,
                     total_cost_usd: cost_by_model
                         .get(&(r.source.clone(), r.model.clone()))
                         .copied()

@@ -186,8 +186,12 @@ struct SessionsView: View {
 
     private var sessionList: some View {
         Group {
-            if viewModel.filteredSessions.isEmpty && !viewModel.isLoading && !viewModel.isScanning {
-                emptyState
+            if viewModel.filteredSessions.isEmpty {
+                if viewModel.isLoading || viewModel.isScanning {
+                    loadingState
+                } else {
+                    emptyState
+                }
             } else {
                 ScrollView(showsIndicators: true) {
                     LazyVStack(spacing: 8) {
@@ -204,6 +208,17 @@ struct SessionsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var loadingState: some View {
+        VStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+            Text(l10n.sessionsLoading)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 220)
     }
 
     private var emptyState: some View {

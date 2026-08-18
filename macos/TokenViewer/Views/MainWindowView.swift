@@ -24,6 +24,11 @@ struct MainWindowView: View {
         .frame(minWidth: 900, minHeight: 640)
         .clearInitialFocus(trigger: router.selectedTab)
         .clearFocusOnOutsideClick()
+        .task {
+            // Warm cached rows and scan asynchronously while the user is still
+            // on the initial tab, so the first Sessions switch is cache-first.
+            SessionsViewModel.shared.start()
+        }
     }
 
     private var mainTabBar: some View {

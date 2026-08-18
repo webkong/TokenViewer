@@ -592,28 +592,7 @@ private struct ModelBreakdownView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(l10n.usageModels).font(.system(size: 16, weight: .semibold))
             ForEach(visibleModels) { entry in
-                VStack(spacing: 5) {
-                    HStack(spacing: 8) {
-                        ModelProviderIcon(model: entry.model, fallbackAgentSource: entry.source, size: 14)
-                        Text(entry.model).font(.system(size: 14, weight: .medium)).lineLimit(1)
-                        Spacer()
-                        if !compact {
-                            Text(tvFormatCost(entry.total_cost_usd))
-                                .font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
-                        }
-                        Text(tvFormatTokens(entry.total_tokens))
-                            .font(.system(size: 12, design: .monospaced)).foregroundStyle(.primary)
-                            .frame(width: 60, alignment: .trailing)
-                    }
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(.quaternary).frame(height: 5)
-                            Capsule().fill(AgentRegistry.shared.brandColor(for: entry.source))
-                                .frame(width: max(2, geo.size.width * entry.percentage / 100.0), height: 5)
-                        }
-                    }
-                    .frame(height: 5)
-                }
+                ModelBreakdownRow(entry: entry, compact: compact)
             }
 
             if merged.count > limit {
@@ -637,6 +616,106 @@ private struct ModelBreakdownView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct ModelBreakdownRow: View {
+    let entry: ModelEntry
+    let compact: Bool
+    @State private var showsBreakdown = false
+    @State private var dismissWorkItem: DispatchWorkItem?
+
+    var body: some View {
+        VStack(spacing: 5) {
+            HStack(spacing: 8) {
+                ModelProviderIcon(model: entry.model, fallbackAgentSource: entry.source, size: 14)
+                Text(entry.model).font(.system(size: 14, weight: .medium)).lineLimit(1)
+                Spacer()
+                if !compact {
+                    Text(tvFormatCost(entry.total_cost_usd))
+                        .font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+                }
+                Text(tvFormatTokens(entry.total_tokens))
+                    .font(.system(size: 12, design: .monospaced)).foregroundStyle(.primary)
+                    .frame(width: 60, alignment: .trailing)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.quaternary).frame(height: 5)
+                    Capsule().fill(AgentRegistry.shared.brandColor(for: entry.source))
+                        .frame(width: max(2, geo.size.width * entry.percentage / 100.0), height: 5)
+                }
+            }
+            .frame(height: 5)
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            hovering ? presentBreakdown() : scheduleDismiss()
+        }
+        .popover(isPresented: $showsBreakdown, arrowEdge: .bottom) {
+            ModelUsageBreakdownTip(entry: entry)
+                .onHover { hovering in
+                    hovering ? cancelDismiss() : scheduleDismiss()
+                }
+        }
+    }
+
+    private func presentBreakdown() {
+        cancelDismiss()
+        showsBreakdown = true
+    }
+
+    private func scheduleDismiss() {
+        cancelDismiss()
+        let item = DispatchWorkItem { showsBreakdown = false }
+        dismissWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: item)
+    }
+
+    private func cancelDismiss() {
+        dismissWorkItem?.cancel()
+        dismissWorkItem = nil
+    }
+}
+
+private struct ModelUsageBreakdownTip: View {
+    let entry: ModelEntry
+    @ObservedObject private var l10n = L10n.shared
+
+    private var rows: [(label: String, value: UInt64, color: Color)] {
+        [
+            (l10n.input, entry.input_tokens, .blue),
+            (l10n.output, entry.output_tokens, .green),
+            (l10n.cache, entry.cache_tokens, .purple),
+        ]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(l10n.modelUsageDetails)
+                .font(.system(size: 13, weight: .semibold))
+            HStack(spacing: 7) {
+                ModelProviderIcon(model: entry.model, fallbackAgentSource: entry.source, size: 14)
+                Text(entry.model)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+            }
+            Divider()
+            ForEach(rows, id: \.label) { row in
+                HStack(spacing: 8) {
+                    Circle().fill(row.color).frame(width: 7, height: 7)
+                    Text(row.label)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(tvFormatTokens(row.value))
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .monospacedDigit()
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: 250)
     }
 }
 
@@ -734,28 +813,14 @@ private struct AgentBreakdownView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(l10n.usageAgents).font(.system(size: 16, weight: .semibold))
             ForEach(visibleRows) { row in
-                VStack(spacing: 5) {
-                    HStack(spacing: 8) {
-                        AgentIcon(source: row.id, size: 14)
-                        Text(AgentRegistry.shared.displayName(for: row.id)).font(.system(size: 14, weight: .medium))
-                        Spacer()
-                        if !compact {
-                            Text(tvFormatCost(row.cost))
-                                .font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
-                        }
-                        Text(tvFormatTokens(row.tokens))
-                            .font(.system(size: 12, design: .monospaced))
-                            .frame(width: 60, alignment: .trailing)
-                    }
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(.quaternary).frame(height: 5)
-                            Capsule().fill(AgentRegistry.shared.brandColor(for: row.id))
-                                .frame(width: max(2, geo.size.width * CGFloat(row.tokens) / CGFloat(total)), height: 5)
-                        }
-                    }
-                    .frame(height: 5)
-                }
+                AgentBreakdownRow(
+                    source: row.id,
+                    tokens: row.tokens,
+                    cost: row.cost,
+                    models: models.filter { $0.source == row.id },
+                    totalTokens: total,
+                    compact: compact
+                )
             }
 
             if rows.count > 6 {
@@ -779,6 +844,116 @@ private struct AgentBreakdownView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct AgentBreakdownRow: View {
+    let source: String
+    let tokens: UInt64
+    let cost: Double
+    let models: [ModelEntry]
+    let totalTokens: UInt64
+    let compact: Bool
+    @State private var showsBreakdown = false
+    @State private var dismissWorkItem: DispatchWorkItem?
+
+    var body: some View {
+        VStack(spacing: 5) {
+            HStack(spacing: 8) {
+                AgentIcon(source: source, size: 14)
+                Text(AgentRegistry.shared.displayName(for: source))
+                    .font(.system(size: 14, weight: .medium))
+                Spacer()
+                if !compact {
+                    Text(tvFormatCost(cost))
+                        .font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+                }
+                Text(tvFormatTokens(tokens))
+                    .font(.system(size: 12, design: .monospaced))
+                    .frame(width: 60, alignment: .trailing)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.quaternary).frame(height: 5)
+                    Capsule().fill(AgentRegistry.shared.brandColor(for: source))
+                        .frame(width: max(2, geo.size.width * CGFloat(tokens) / CGFloat(totalTokens)), height: 5)
+                }
+            }
+            .frame(height: 5)
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            hovering ? presentBreakdown() : scheduleDismiss()
+        }
+        .popover(isPresented: $showsBreakdown, arrowEdge: .bottom) {
+            AgentModelBreakdownTip(source: source, models: models)
+                .onHover { hovering in
+                    hovering ? cancelDismiss() : scheduleDismiss()
+                }
+        }
+    }
+
+    private func presentBreakdown() {
+        cancelDismiss()
+        showsBreakdown = true
+    }
+
+    private func scheduleDismiss() {
+        cancelDismiss()
+        let item = DispatchWorkItem { showsBreakdown = false }
+        dismissWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: item)
+    }
+
+    private func cancelDismiss() {
+        dismissWorkItem?.cancel()
+        dismissWorkItem = nil
+    }
+}
+
+private struct AgentModelBreakdownTip: View {
+    let source: String
+    let models: [ModelEntry]
+    @ObservedObject private var l10n = L10n.shared
+
+    private var sortedModels: [ModelEntry] {
+        models.sorted { $0.total_tokens > $1.total_tokens }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(l10n.agentModelUsageDetails)
+                .font(.system(size: 13, weight: .semibold))
+            HStack(spacing: 7) {
+                AgentIcon(source: source, size: 14)
+                Text(AgentRegistry.shared.displayName(for: source))
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+            }
+            Divider()
+            ScrollView(showsIndicators: sortedModels.count > 8) {
+                VStack(spacing: 8) {
+                    ForEach(sortedModels) { model in
+                        HStack(spacing: 8) {
+                            ModelProviderIcon(model: model.model,
+                                              fallbackAgentSource: source,
+                                              size: 14)
+                            Text(model.model)
+                                .font(.system(size: 12, weight: .medium))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 12)
+                            Text(tvFormatTokens(model.total_tokens))
+                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                .monospacedDigit()
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: 240)
+        }
+        .padding(12)
+        .frame(width: 290)
     }
 }
 

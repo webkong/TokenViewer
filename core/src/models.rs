@@ -121,6 +121,9 @@ pub struct ModelBreakdownEntry {
     pub model: String,
     pub source: String,
     pub total_tokens: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_tokens: u64,
     pub total_cost_usd: f64,
     pub percentage: f64,
 }

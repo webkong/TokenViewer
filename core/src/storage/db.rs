@@ -346,7 +346,9 @@ impl Database {
         to: &str,
     ) -> SqlResult<Vec<ModelBreakdownEntry>> {
         let mut stmt = self.conn.prepare(
-            "SELECT model, source, SUM(total_tokens)
+            "SELECT model, source, SUM(total_tokens), SUM(input_tokens),
+                    SUM(output_tokens),
+                    SUM(cached_input_tokens) + SUM(cache_creation_input_tokens)
              FROM usage
              WHERE hour_start >= ?1 AND hour_start < ?2
              GROUP BY model, source
@@ -358,6 +360,9 @@ impl Database {
                 model: row.get(0)?,
                 source: row.get(1)?,
                 total_tokens: row.get::<_, i64>(2)? as u64,
+                input_tokens: row.get::<_, i64>(3)? as u64,
+                output_tokens: row.get::<_, i64>(4)? as u64,
+                cache_tokens: row.get::<_, i64>(5)? as u64,
                 total_cost_usd: 0.0,
                 percentage: 0.0,
             })

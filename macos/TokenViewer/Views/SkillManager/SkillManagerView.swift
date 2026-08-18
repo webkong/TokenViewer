@@ -96,9 +96,9 @@ struct SkillManagerView: View {
                     Button {
                         showOnboarding = true
                     } label: {
-                        TVSymbol(name: "questionmark.circle")
+                        TVSymbol(name: "questionmark.circle", size: 14)
                     }
-                    .tvIconButton()
+                    .buttonStyle(.plain)
                     .quickHelp(L10n.shared.skillOnboardingShowHelpTip)
                 }
             }

@@ -44,6 +44,9 @@ struct ModelEntry: Codable, Identifiable {
     let model: String
     let source: String
     let total_tokens: UInt64
+    let input_tokens: UInt64
+    let output_tokens: UInt64
+    let cache_tokens: UInt64
     let total_cost_usd: Double
     let percentage: Double
 }
@@ -58,24 +61,31 @@ struct ProjectUsageEntry: Codable, Identifiable {
 
 /// Merge ModelEntry list by model name (ignoring source), recalculating percentages.
 func mergedByModel(_ entries: [ModelEntry]) -> [ModelEntry] {
-    var map: [(String, UInt64, Double)] = [] // (model, tokens, cost)
-    var order: [String] = []
+    var map: [(model: String, tokens: UInt64, input: UInt64, output: UInt64, cache: UInt64, cost: Double)] = []
     var dict: [String: Int] = [:]
     for e in entries {
         if let idx = dict[e.model] {
-            map[idx].1 += e.total_tokens
-            map[idx].2 += e.total_cost_usd
+            map[idx].tokens += e.total_tokens
+            map[idx].input += e.input_tokens
+            map[idx].output += e.output_tokens
+            map[idx].cache += e.cache_tokens
+            map[idx].cost += e.total_cost_usd
         } else {
             dict[e.model] = map.count
-            order.append(e.model)
-            map.append((e.model, e.total_tokens, e.total_cost_usd))
+            map.append((e.model, e.total_tokens, e.input_tokens, e.output_tokens,
+                        e.cache_tokens, e.total_cost_usd))
         }
     }
-    let grand = map.reduce(0 as UInt64) { $0 + $1.1 }
-    return map.sorted { $0.1 > $1.1 }.map { item in
-        ModelEntry(model: item.0, source: entries.first { $0.model == item.0 }?.source ?? "",
-                   total_tokens: item.1, total_cost_usd: item.2,
-                   percentage: grand > 0 ? Double(item.1) / Double(grand) * 100 : 0)
+    let grand = map.reduce(0 as UInt64) { $0 + $1.tokens }
+    return map.sorted { $0.tokens > $1.tokens }.map { item in
+        ModelEntry(model: item.model,
+                   source: entries.first { $0.model == item.model }?.source ?? "",
+                   total_tokens: item.tokens,
+                   input_tokens: item.input,
+                   output_tokens: item.output,
+                   cache_tokens: item.cache,
+                   total_cost_usd: item.cost,
+                   percentage: grand > 0 ? Double(item.tokens) / Double(grand) * 100 : 0)
     }
 }
 
