@@ -19,6 +19,9 @@ struct TokenViewerApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Increment when parser semantics change in a way that requires replaying
+    /// raw logs to repair already-aggregated usage.
+    private static let parserDataRevision = 1
     private var statusBarController: StatusBarController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -54,10 +57,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func rebuildIfVersionChanged() {
         let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
         let lastVersion = UserDefaults.standard.string(forKey: "lastDataVersion")
-        if lastVersion != currentVersion {
-            _ = CoreBridge.shared.rebuildAll()
+        let lastParserRevision = UserDefaults.standard.integer(forKey: "lastParserDataRevision")
+        if lastVersion != currentVersion || lastParserRevision != Self.parserDataRevision {
+            guard let data = CoreBridge.shared.rebuildAll(),
+                  let result = try? JSONDecoder().decode(SyncResult.self, from: data),
+                  result.errors.isEmpty else {
+                return
+            }
             UserDefaults.standard.set(currentVersion, forKey: "lastDataVersion")
-            migrateLimitsVisibility()
+            UserDefaults.standard.set(Self.parserDataRevision, forKey: "lastParserDataRevision")
+            if lastVersion != currentVersion {
+                migrateLimitsVisibility()
+            }
         }
     }
 

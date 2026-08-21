@@ -189,9 +189,6 @@ final class UpdateChecker: ObservableObject {
         // publish. Instead list releases and pick the highest semver ourselves
         // so we always offer the genuinely newest published version.
         let url = URL(string: "https://api.github.com/repos/\(Self.repo)/releases?per_page=30")!
-        var req = URLRequest(url: url)
-        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        req.setValue("TokenViewer/\(currentVersion)", forHTTPHeaderField: "User-Agent")
         // Only attach the user's GitHub PAT (configured for skills git sync) on a
         // user-initiated check (Settings → Check Now). Reading from Keychain can
         // surface a system authorization prompt if the app's code signature isn't
@@ -200,12 +197,17 @@ final class UpdateChecker: ObservableObject {
         // checks are rare and user-triggered, so a prompt there is expected and
         // still gets the higher authenticated rate limit (5000/hr vs 60/hr) when
         // the user explicitly asks us to check.
-        if useAuthToken, let token = KeychainManager.shared.getToken(for: "github"), !token.isEmpty {
-            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let authToken = useAuthToken ? KeychainManager.shared.getToken(for: "github") : nil
+        var (data, http) = try await fetchReleaseData(from: url, authToken: authToken)
+
+        // A revoked or expired GitHub PAT must not break update checks for this
+        // public repository. Retry anonymously while leaving the saved token
+        // untouched so Skills Git sync can report and manage it separately.
+        if authToken?.isEmpty == false, http.statusCode == 401 || http.statusCode == 403 {
+            (data, http) = try await fetchReleaseData(from: url, authToken: nil)
         }
-        req.timeoutInterval = 15
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+
+        guard (200...299).contains(http.statusCode) else {
             throw URLError(.badServerResponse)
         }
         let releases = try JSONDecoder().decode([GitHubRelease].self, from: data)
@@ -225,6 +227,22 @@ final class UpdateChecker: ObservableObject {
         let trimmedNotes = json.body?.trimmingCharacters(in: .whitespacesAndNewlines)
         let notes = (trimmedNotes?.isEmpty == false) ? trimmedNotes! : L10n.shared.noReleaseNotesAvailable
         return ReleaseInfo(version: version, releaseURL: releaseURL, pkgURL: pkgURL, notes: notes)
+    }
+
+    private func fetchReleaseData(from url: URL, authToken: String?) async throws -> (Data, HTTPURLResponse) {
+        var request = URLRequest(url: url)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("TokenViewer/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+        if let authToken, !authToken.isEmpty {
+            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        }
+        request.timeoutInterval = 15
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        return (data, http)
     }
 
     private static func normalizeVersion(_ tag: String) -> String {

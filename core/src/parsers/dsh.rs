@@ -48,6 +48,10 @@ struct FrameRange {
 /// mid-file, the offset before the unconsumed frame is persisted (without
 /// committing the mtime) so the next sync resumes the backlog.
 /// The latest `request/header` model is persisted in `FileCursor::last_models`.
+/// Forked sessions declare `parentSession` and `seedLength` in their `session`
+/// header. DSH copies all parent events through that sequence into the child
+/// file, so usage at `seq <= seedLength` is inherited history and is skipped;
+/// only the child's continuation is counted.
 pub fn parse(
     home_dir: &Path,
     cursor_data: Option<&str>,
@@ -76,14 +80,33 @@ pub fn parse(
             }
 
             let offset = cursor.get_offset(&key);
+            if offset == 0 {
+                // A new/recreated file must rediscover its fork boundary from
+                // the session header instead of inheriting stale cursor state.
+                cursor.dsh_fork_seed_lengths.remove(&key);
+            }
             let header_model = cursor.last_models.get(&key).cloned();
+            let fork_seed_length = cursor.dsh_fork_seed_lengths.get(&key).copied();
 
-            match stream_file(&file, offset, header_model, MAX_DECOMPRESSED_BYTES) {
+            match stream_file(
+                &file,
+                offset,
+                header_model,
+                fork_seed_length,
+                MAX_DECOMPRESSED_BYTES,
+            ) {
                 Ok(ScanOutcome::Done(scan) | ScanOutcome::BudgetExhausted(scan)) => {
                     let budget_exhausted = scan.budget_exhausted;
                     cursor.set_offset(&key, scan.new_offset);
                     if let Some(m) = scan.model {
                         cursor.last_models.insert(key.clone(), m);
+                    }
+                    if let Some(seed_length) = scan.fork_seed_length {
+                        cursor
+                            .dsh_fork_seed_lengths
+                            .insert(key.clone(), seed_length);
+                    } else {
+                        cursor.dsh_fork_seed_lengths.remove(&key);
                     }
                     all_records.extend(scan.records);
                     // BudgetExhausted must NOT commit the mtime: the next sync
@@ -114,6 +137,8 @@ struct DshScan {
     new_offset: u64,
     /// Latest `request/header` model (persisted in `FileCursor::last_models`).
     model: Option<String>,
+    /// Highest event sequence copied from a fork's parent session.
+    fork_seed_length: Option<u64>,
     /// True when the per-sync decompression budget ran out before EOF.
     budget_exhausted: bool,
 }
@@ -142,6 +167,7 @@ fn stream_file(
     file: &Path,
     offset: u64,
     header_model: Option<String>,
+    initial_fork_seed_length: Option<u64>,
     budget: u64,
 ) -> std::io::Result<ScanOutcome> {
     let meta = std::fs::metadata(file)?;
@@ -165,12 +191,14 @@ fn stream_file(
             records: Vec::new(),
             new_offset: start,
             model: header_model,
+            fork_seed_length: initial_fork_seed_length,
             budget_exhausted: false,
         }));
     }
 
     let mut records = Vec::new();
     let mut model = header_model;
+    let mut fork_seed_length = initial_fork_seed_length;
     let mut new_offset = start;
 
     if file.to_string_lossy().ends_with(".zstd") {
@@ -214,18 +242,31 @@ fn stream_file(
                     records,
                     new_offset: start + frame.start as u64,
                     model,
+                    fork_seed_length,
                     budget_exhausted: true,
                 }));
             }
 
             remaining -= content.len() as u64;
-            parse_bytes(&content, file, &mut records, &mut model);
+            parse_bytes(
+                &content,
+                file,
+                &mut records,
+                &mut model,
+                &mut fork_seed_length,
+            );
             new_offset = start + frame.end as u64;
         }
     } else {
         // Uncompressed: the file-size cap already bounds the total bytes, so
         // the shared budget is trivially satisfied.
-        let consumed = parse_bytes(&suffix, file, &mut records, &mut model);
+        let consumed = parse_bytes(
+            &suffix,
+            file,
+            &mut records,
+            &mut model,
+            &mut fork_seed_length,
+        );
         new_offset = start + consumed;
     }
 
@@ -233,6 +274,7 @@ fn stream_file(
         records,
         new_offset,
         model,
+        fork_seed_length,
         budget_exhausted: false,
     }))
 }
@@ -257,6 +299,7 @@ fn parse_bytes(
     file: &Path,
     records: &mut Vec<UsageRecord>,
     header_model: &mut Option<String>,
+    fork_seed_length: &mut Option<u64>,
 ) -> u64 {
     let mut start = 0usize;
     while let Some(rel) = bytes[start..].iter().position(|b| *b == b'\n') {
@@ -264,7 +307,7 @@ fn parse_bytes(
         let line = std::str::from_utf8(&bytes[start..end]).unwrap_or("");
         if !line.trim().is_empty() {
             if let Ok(v) = serde_json::from_str::<Value>(line.trim()) {
-                parse_event(&v, file, records, header_model);
+                parse_event(&v, file, records, header_model, fork_seed_length);
             }
         }
         start = end + 1;
@@ -278,11 +321,23 @@ fn parse_event(
     file: &Path,
     records: &mut Vec<UsageRecord>,
     header_model: &mut Option<String>,
+    fork_seed_length: &mut Option<u64>,
 ) {
     let Some(ty) = v.get("type").and_then(|t| t.as_str()) else {
         return;
     };
     match ty {
+        "session" => {
+            let is_fork = v
+                .get("parentSession")
+                .and_then(Value::as_str)
+                .is_some_and(|parent| !parent.is_empty());
+            *fork_seed_length = if is_fork {
+                v.get("seedLength").and_then(Value::as_u64)
+            } else {
+                None
+            };
+        }
         "request/header" => {
             if let Some(m) = v
                 .pointer("/data/header/config/model")
@@ -292,6 +347,13 @@ fn parse_event(
             }
         }
         "assistant/message" => {
+            if fork_seed_length.is_some_and(|seed| {
+                v.get("seq")
+                    .and_then(Value::as_u64)
+                    .is_some_and(|seq| seq <= seed)
+            }) {
+                return;
+            }
             let Some(usage) = v.pointer("/data/usage").and_then(|u| u.as_object()) else {
                 return;
             };
@@ -471,6 +533,12 @@ mod tests {
         format!(r#"{{"type":"session","version":0,"id":"{id}","createdAt":1786678123061,"delegationDepth":0}}"#)
     }
 
+    fn fork_header_json(id: &str, parent_id: &str, seed_length: u64) -> String {
+        format!(
+            r#"{{"type":"session","version":0,"id":"{id}","createdAt":1786678123061,"parentSession":"{parent_id}","seedLength":{seed_length},"delegationDepth":0}}"#
+        )
+    }
+
     fn req_header_json(seq: u64, model: &str) -> String {
         format!(
             r#"{{"type":"request/header","seq":{seq},"time":1786678139519,"data":{{"header":{{"config":{{"provider":"deepseek-official","model":"{model}"}}}}}}}}"#
@@ -582,7 +650,7 @@ mod tests {
         let mut done = false;
 
         for _ in 0..6 {
-            match stream_file(&path, offset, None, budget).unwrap() {
+            match stream_file(&path, offset, None, None, budget).unwrap() {
                 ScanOutcome::Done(scan) => {
                     grand_total += scan.records.iter().map(|r| r.total_tokens).sum::<u64>();
                     done = true;
@@ -693,6 +761,73 @@ mod tests {
         let (records, _) = parse(home, None).unwrap();
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].model, "deepseek-v4-flash");
+    }
+
+    #[test]
+    fn forked_session_skips_copied_parent_usage_and_counts_continuation() {
+        let dir = TempDir::new().unwrap();
+        let home = dir.path();
+        let sessions = home.join(".dsh/sessions/proj");
+        let parent_dir = sessions.join("session-parent");
+        let child_dir = sessions.join("session-child");
+        fs::create_dir_all(&parent_dir).unwrap();
+        fs::create_dir_all(&child_dir).unwrap();
+
+        let parent_path = parent_dir.join("session.jsonl.zstd");
+        append_zstd_frame(&parent_path, &header_json("session-parent"));
+        append_zstd_frame(&parent_path, &usage_json(1, 10, 10, 0, 0, 0));
+        append_zstd_frame(&parent_path, &usage_json(2, 10, 10, 0, 0, 0));
+
+        let child_path = child_dir.join("session.jsonl.zstd");
+        append_zstd_frame(
+            &child_path,
+            &fork_header_json("session-child", "session-parent", 2),
+        );
+        // DSH physically copies the parent's prefix into the child file.
+        append_zstd_frame(&child_path, &usage_json(1, 10, 10, 0, 0, 0));
+        append_zstd_frame(&child_path, &usage_json(2, 10, 10, 0, 0, 0));
+        // Only this post-fork event belongs to the child session.
+        append_zstd_frame(&child_path, &usage_json(3, 5, 5, 0, 0, 0));
+
+        let (records, cursor_json) = parse(home, None).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].total_tokens, 50); // parent 40 + child continuation 10
+        assert_eq!(records[0].conversation_count, 3);
+
+        let cursor = FileCursor::from_json(Some(&cursor_json));
+        assert_eq!(
+            cursor
+                .dsh_fork_seed_lengths
+                .get(&child_path.to_string_lossy().to_string()),
+            Some(&2)
+        );
+
+        let (records2, _) = parse(home, Some(&cursor_json)).unwrap();
+        assert!(records2.is_empty());
+    }
+
+    #[test]
+    fn fork_boundary_survives_incremental_cursor() {
+        let dir = TempDir::new().unwrap();
+        let home = dir.path();
+        let sessions = home.join(".dsh/sessions/proj/session-child");
+        fs::create_dir_all(&sessions).unwrap();
+
+        let path = sessions.join("session.jsonl.zstd");
+        append_zstd_frame(
+            &path,
+            &fork_header_json("session-child", "session-parent", 2),
+        );
+        append_zstd_frame(&path, &usage_json(1, 10, 10, 0, 0, 0));
+        append_zstd_frame(&path, &usage_json(2, 10, 10, 0, 0, 0));
+
+        let (records, cursor_json) = parse(home, None).unwrap();
+        assert!(records.is_empty(), "copied fork prefix must be skipped");
+
+        append_zstd_frame(&path, &usage_json(3, 5, 5, 0, 0, 0));
+        let (records2, _) = parse(home, Some(&cursor_json)).unwrap();
+        assert_eq!(records2.len(), 1);
+        assert_eq!(records2[0].total_tokens, 10);
     }
 
     #[test]

@@ -216,6 +216,12 @@ pub struct FileCursor {
     /// is still being consumed.
     #[serde(default)]
     pub codex_fork_replay_pending: HashMap<String, String>,
+    /// DeepSeek Harness copies the parent event prefix into a forked session.
+    /// Maps the child session file -> highest inherited event sequence so
+    /// incremental scans can keep excluding the copied prefix after the header
+    /// itself is already behind the compressed-byte cursor.
+    #[serde(default)]
+    pub dsh_fork_seed_lengths: HashMap<String, u64>,
     /// Per-directory mtime stamp — skip re-glob if dir unchanged.
     #[serde(default)]
     pub dir_mtimes: HashMap<String, u64>,
