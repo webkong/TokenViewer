@@ -795,12 +795,10 @@ mod tests {
         assert_eq!(records[0].conversation_count, 3);
 
         let cursor = FileCursor::from_json(Some(&cursor_json));
-        assert_eq!(
-            cursor
-                .dsh_fork_seed_lengths
-                .get(&child_path.to_string_lossy().to_string()),
-            Some(&2)
-        );
+        let child_key = child_path.to_string_lossy().replace('\\', "/");
+        assert!(cursor.dsh_fork_seed_lengths.iter().any(|(path, seed)| {
+            path.replace('\\', "/") == child_key && *seed == 2
+        }));
 
         let (records2, _) = parse(home, Some(&cursor_json)).unwrap();
         assert!(records2.is_empty());
