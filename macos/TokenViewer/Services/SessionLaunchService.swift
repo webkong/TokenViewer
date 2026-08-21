@@ -181,6 +181,27 @@ final class SessionLaunchService {
     /// Rejects anything that could inject flags, paths, or metacharacters.
     private static let sessionIDPattern = #"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$"#
 
+    /// Resolve a recorded cwd (tilde-expanded) to an existing directory path,
+    /// or nil when it is empty or no longer exists. Used both to pre-validate
+    /// rows in the Sessions list and inside `launch`.
+    static func resolvedCWD(_ cwd: String) -> String? {
+        let trimmed = cwd.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let expanded = (trimmed as NSString).expandingTildeInPath
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: expanded, isDirectory: &isDir), isDir.boolValue else {
+            return nil
+        }
+        return expanded
+    }
+
+    /// Whether a session can be launched given its recorded cwd: an empty cwd
+    /// launches from the home directory, otherwise the directory must exist.
+    static func isCWDUsable(_ cwd: String) -> Bool {
+        let trimmed = cwd.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || resolvedCWD(trimmed) != nil
+    }
+
     func launch(_ session: SessionEntry) throws {
         guard let adapter = registry.adapter(for: session.source) else {
             throw SessionLaunchError.unsupportedAgent(session.source)
@@ -194,12 +215,10 @@ final class SessionLaunchService {
         // Validate cwd: must resolve to an existing directory.
         var cwd = session.cwd.trimmingCharacters(in: .whitespacesAndNewlines)
         if !cwd.isEmpty {
-            let expanded = (cwd as NSString).expandingTildeInPath
-            var isDir: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: expanded, isDirectory: &isDir), isDir.boolValue else {
+            guard let resolved = Self.resolvedCWD(cwd) else {
                 throw SessionLaunchError.invalidCWD(cwd)
             }
-            cwd = expanded
+            cwd = resolved
         }
 
         // Per-agent YOLO flags (configurable in Settings → Sessions). Global

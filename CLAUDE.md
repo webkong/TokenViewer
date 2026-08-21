@@ -152,6 +152,7 @@ bash script/release.sh build-release
 MACOS_ARCH=x86_64 MACOS_RUST_TARGET=x86_64-apple-darwin bash script/release.sh build-release
 ```
 - Stable Apple silicon aliases are `TokenViewer.dmg` and `TokenViewer-Installer.pkg`. Intel packages are versioned as `TokenViewer-X.Y.Z-macOS-x64.{dmg,zip}` and `TokenViewer-X.Y.Z-macOS-x64-Installer.pkg`.
+- GitHub CLI authentication is configured for release operations. Prefer `gh run list/view/watch` to monitor Actions and `gh release view` to verify published assets instead of polling GitHub web pages.
 - Website deploy: `npm run build` in `website/` outputs to `docs/`. ⚠️ Vite empties `docs/` on build, wiping `docs/releases/*.md` — restore them (`git checkout -- docs/releases`) after building. Pages serves from `main` `/docs`.
 
 ## Git

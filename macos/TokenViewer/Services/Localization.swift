@@ -130,6 +130,7 @@ final class L10n: ObservableObject {
     func sessionUnsupportedAgent(_ name: String) -> String { isZh ? "\(name) 暂不支持恢复" : "\(name) doesn't support resume" }
     func sessionInvalidID(_ id: String) -> String { isZh ? "会话 ID 无效：\(id)" : "Invalid session id: \(id)" }
     func sessionInvalidCWD(_ cwd: String) -> String { isZh ? "工作目录无效：\(cwd)" : "Invalid working directory: \(cwd)" }
+    func sessionCWDMissingDetail(_ cwd: String) -> String { isZh ? "工作目录不存在，无法启动：\(cwd)" : "Working directory no longer exists: \(cwd)" }
     var sessionAllProjects: String { isZh ? "所有项目" : "All Projects" }
     var sessionSearchPlaceholder: String { isZh ? "搜索标题、项目、模型或 ID…" : "Search title, project, model, or ID…" }
     var sessionTokens: String { isZh ? "Token 数" : "Tokens" }

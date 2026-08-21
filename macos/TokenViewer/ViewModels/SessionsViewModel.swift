@@ -41,10 +41,14 @@ final class SessionsViewModel: ObservableObject {
     /// Distinct agent sources discovered on disk — the dynamic filter, never hardcoded.
     @Published var agentSources: [String] = []
     @Published var totalCount = 0
+    /// Session id → whether its recorded cwd still resolves to an existing
+    /// directory (empty cwd counts as usable: launch falls back to home).
+    @Published var cwdValidity: [String: Bool] = [:]
 
     private let pageSize: Int32 = 500
     private var hasStarted = false
     private var loadGeneration = 0
+    private var cwdValidationGeneration = 0
 
     private init() {}
 
@@ -183,6 +187,35 @@ final class SessionsViewModel: ObservableObject {
                 self.isLoading = false
                 self.totalCount = count
                 self.sessions = rows
+                self.cwdValidity = [:]
+                self.scheduleCWDValidation(for: rows, loadGeneration: generation)
+            }
+        }
+    }
+
+    /// Refresh directory availability without delaying cached session rows.
+    /// Launch performs its own authoritative validation, so this state is only
+    /// used to surface an up-to-date warning in the list.
+    func refreshCWDValidity() {
+        let rows = sessions
+        guard !rows.isEmpty else { return }
+        scheduleCWDValidation(for: rows, loadGeneration: loadGeneration)
+    }
+
+    private func scheduleCWDValidation(for rows: [SessionEntry], loadGeneration: Int) {
+        cwdValidationGeneration &+= 1
+        let validationGeneration = cwdValidationGeneration
+        Task.detached { [weak self] in
+            var validity: [String: Bool] = [:]
+            validity.reserveCapacity(rows.count)
+            for row in rows {
+                validity[row.id] = SessionLaunchService.isCWDUsable(row.cwd)
+            }
+            await MainActor.run { [weak self] in
+                guard let self,
+                      loadGeneration == self.loadGeneration,
+                      validationGeneration == self.cwdValidationGeneration else { return }
+                self.cwdValidity = validity
             }
         }
     }

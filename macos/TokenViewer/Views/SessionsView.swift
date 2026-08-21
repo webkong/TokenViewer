@@ -15,7 +15,10 @@ struct SessionsView: View {
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .windowBackgroundColor))
-        .onAppear { viewModel.start() }
+        .onAppear {
+            viewModel.start()
+            viewModel.refreshCWDValidity()
+        }
         .sheet(item: $renameTarget) { session in
             SessionRenameSheet(session: session) { title in
                 viewModel.rename(session, to: title)
@@ -239,7 +242,9 @@ struct SessionsView: View {
     // MARK: - Row
 
     private func sessionRow(_ session: SessionEntry) -> some View {
-        HStack(spacing: 14) {
+        let cwdUsable = viewModel.cwdValidity[session.id] ?? true
+
+        return HStack(spacing: 14) {
             AgentIcon(source: session.source, size: 28)
 
             VStack(alignment: .leading, spacing: 5) {
@@ -260,6 +265,10 @@ struct SessionsView: View {
                         .foregroundStyle(AgentRegistry.shared.brandColor(for: session.source))
                     metadataSeparator
                     Text(session.project.isEmpty ? session.cwd : session.project)
+                    if !cwdUsable {
+                        TVSymbol(name: "exclamationmark.triangle", size: 10, color: .orange)
+                            .help(l10n.sessionCWDMissingDetail(session.cwd))
+                    }
                     if !session.model.isEmpty {
                         metadataSeparator
                         Text(session.model)
@@ -282,7 +291,7 @@ struct SessionsView: View {
             metricColumn(value: "\(session.turn_count)", label: l10n.sessionTurns)
             metricColumn(value: "\(session.edit_count)", label: l10n.sessionEdits)
 
-            launchButton(session)
+            launchButton(session, cwdUsable: cwdUsable)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -292,6 +301,7 @@ struct SessionsView: View {
                 .fill(Color(nsColor: .controlBackgroundColor))
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 0.5))
         )
+        .opacity(cwdUsable ? 1 : 0.55)
         .contextMenu { renameMenu(session) }
     }
 
@@ -313,7 +323,7 @@ struct SessionsView: View {
     }
 
     @ViewBuilder
-    private func launchButton(_ session: SessionEntry) -> some View {
+    private func launchButton(_ session: SessionEntry, cwdUsable: Bool) -> some View {
         let adapter = SessionCommandRegistry.shared.adapter(for: session.source)
         let registry = AgentRegistry.shared
         let installReady = !registry.hasDetectedInstalls || registry.isInstalled(for: session.source)
@@ -328,7 +338,7 @@ struct SessionsView: View {
             }
             .tvActionButton(yolo ? .warning : .primary)
             .disabled(!supported)
-            .help(launchHelp(session, adapter: adapter, installed: installReady))
+            .help(launchHelp(session, adapter: adapter, installed: installReady, cwdUsable: cwdUsable))
         }
         .frame(width: yolo ? 176 : 116, alignment: .trailing)
     }
@@ -336,11 +346,13 @@ struct SessionsView: View {
     private func launchHelp(
         _ session: SessionEntry,
         adapter: SessionCommandAdapter?,
-        installed: Bool
+        installed: Bool,
+        cwdUsable: Bool
     ) -> String {
         let name = AgentRegistry.shared.displayName(for: session.source)
         if adapter == nil { return l10n.sessionUnsupportedAgent(name) }
         if !installed { return l10n.sessionAgentNotInstalled(name) }
+        if !cwdUsable { return l10n.sessionCWDMissingDetail(session.cwd) }
         return l10n.sessionLaunchHelp
     }
 
