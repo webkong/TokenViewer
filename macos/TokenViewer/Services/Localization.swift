@@ -470,6 +470,9 @@ final class L10n: ObservableObject {
     var gitSyncBranch: String { isZh ? "同步分支" : "Sync Branch" }
     var gitSyncBranchDesc: String { isZh ? "Pull 和 Push 都使用此远程分支。" : "Pull and Push both use this remote branch." }
     var gitTokenStoredLocally: String { isZh ? "令牌仅保存在本机，并只用于 git pull/push。" : "Token is stored locally and used only for git push/pull." }
+    func gitEnvironmentTokenDetected(_ variable: String) -> String {
+        isZh ? "正在使用环境变量 \(variable)" : "Using environment variable \(variable)"
+    }
     var gitTokenScopes: String { isZh ? "需要权限: repo 读写" : "Required scopes: repo read/write" }
     var gitTokenSaved: String { isZh ? "令牌已保存" : "Token saved" }
     var gitRemoveToken: String { isZh ? "移除令牌" : "Remove Token" }

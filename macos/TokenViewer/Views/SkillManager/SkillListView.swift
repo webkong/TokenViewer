@@ -410,6 +410,7 @@ private struct SkillDetailPanel: View {
     let onPreview: () -> Void
     @ObservedObject private var l10n = L10n.shared
     @State private var showDeleteConfirm = false
+    @State private var showEnvironmentSheet = false
 
     private var activeAgentIDs: Set<String> {
         viewModel.skillAgentIDs(for: skill)
@@ -474,11 +475,34 @@ private struct SkillDetailPanel: View {
 
                 Divider().padding(.vertical, 18)
 
-                Button(action: onPreview) {
-                    Label(l10n.skillPreview, systemImage: "doc.text.magnifyingglass")
-                        .frame(maxWidth: .infinity)
+                HStack(spacing: 8) {
+                    Button(action: onPreview) {
+                        Label(l10n.skillPreview, systemImage: "doc.text.magnifyingglass")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .tvActionButton(.secondary)
+
+                    Button {
+                        openInFinder()
+                    } label: {
+                        Label(l10n.openInFinder, systemImage: "folder")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .tvActionButton(.secondary)
+                    .quickHelp(l10n.openInFinder)
                 }
-                .tvActionButton(.secondary)
+
+                if !skill.manifest.environmentVariables.isEmpty {
+                    Button {
+                        showEnvironmentSheet = true
+                    } label: {
+                        Label(l10n.skillEnvironmentTitle, systemImage: "gearshape.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .tvActionButton(.secondary)
+                    .quickHelp(l10n.skillEnvironmentManageTip)
+                    .padding(.top, 9)
+                }
 
                 HStack(spacing: 8) {
                     if !viewModel.isInSourceRoot(skill), let sourceAgent {
@@ -510,6 +534,9 @@ private struct SkillDetailPanel: View {
             }
             .padding(20)
         }
+        .sheet(isPresented: $showEnvironmentSheet) {
+            SkillEnvironmentConfigurationSheet(skill: skill)
+        }
         .alert(l10n.skillDelete, isPresented: $showDeleteConfirm) {
             Button(l10n.cancel, role: .cancel) {}
             Button(l10n.skillDelete, role: .destructive) {
@@ -518,6 +545,11 @@ private struct SkillDetailPanel: View {
         } message: {
             Text(l10n.skillDeleteConfirm)
         }
+    }
+
+    private func openInFinder() {
+        let path = (NSString(string: skill.sourceDir).expandingTildeInPath as NSString).standardizingPath
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
     private func detailLine(_ label: String, value: String, valueColor: Color = .primary) -> some View {
@@ -1041,7 +1073,6 @@ private struct SkillMarkdownPreviewSheet: View {
     @State private var isLoadingContent = true
     @State private var contentError: String?
     @State private var isContentTruncated = false
-    @State private var showEnvironmentSheet = false
     @State private var initialLoadTask: Task<Void, Never>?
     @State private var fileLoadTask: Task<Void, Never>?
 
@@ -1062,9 +1093,6 @@ private struct SkillMarkdownPreviewSheet: View {
             }
         }
         .frame(minWidth: 820, idealWidth: 900, minHeight: 520, idealHeight: 620)
-        .sheet(isPresented: $showEnvironmentSheet) {
-            SkillEnvironmentConfigurationSheet(skill: preview.skill)
-        }
         .onAppear { startInitialLoad() }
         .onDisappear {
             initialLoadTask?.cancel()
@@ -1210,38 +1238,12 @@ private struct SkillMarkdownPreviewSheet: View {
 
             Spacer()
 
-            if !preview.skill.manifest.environmentVariables.isEmpty {
-                Button {
-                    showEnvironmentSheet = true
-                } label: {
-                    Label(l10n.skillEnvironmentTitle, systemImage: "gearshape.fill")
-                }
-                .quickHelp(l10n.skillEnvironmentManageTip)
-            }
-
-            Button(l10n.openInFinder) {
-                openInFinder()
-            }
-            .quickHelp(l10n.openInFinder)
-
             Button(l10n.gitDone) {
                 dismiss()
             }
             .keyboardShortcut(.cancelAction)
             .quickHelp(l10n.gitDoneTip)
         }
-    }
-
-    private func openInFinder() {
-        let filePath = standardizedPath(selectedFilePath.isEmpty ? preview.filePath : selectedFilePath)
-        let fileURL = URL(fileURLWithPath: filePath)
-        if FileManager.default.fileExists(atPath: filePath) {
-            NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-            return
-        }
-
-        let skillDir = standardizedPath(preview.skill.sourceDir)
-        NSWorkspace.shared.open(URL(fileURLWithPath: skillDir))
     }
 
     private func standardizedPath(_ path: String) -> String {

@@ -3,6 +3,46 @@ import XCTest
 
 @MainActor
 final class AppSyncCoordinatorTests: XCTestCase {
+    func testGitCredentialResolverPrefersExplicitEnvironmentToken() {
+        let token = GitCredentialResolver.resolve(
+            provider: "github",
+            storedToken: " keychain-token ",
+            environment: ["GH_TOKEN": "environment-token"]
+        )
+
+        XCTAssertEqual(token, "environment-token")
+    }
+
+    func testGitCredentialResolverFallsBackToGitHubEnvironmentTokens() {
+        XCTAssertEqual(
+            GitCredentialResolver.resolve(
+                provider: "github",
+                storedToken: nil,
+                environment: ["GH_TOKEN": " gh-token ", "GITHUB_TOKEN": "github-token"]
+            ),
+            "gh-token"
+        )
+        XCTAssertEqual(
+            GitCredentialResolver.resolve(
+                provider: "github",
+                storedToken: "  ",
+                environment: ["GITHUB_TOKEN": " github-token "]
+            ),
+            "github-token"
+        )
+    }
+
+    func testGitCredentialResolverDoesNotUseGitHubEnvironmentForOtherProviders() {
+        XCTAssertEqual(
+            GitCredentialResolver.resolve(
+                provider: "gitlab",
+                storedToken: "gitlab-token",
+                environment: ["GH_TOKEN": "github-token"]
+            ),
+            "gitlab-token"
+        )
+    }
+
     func testSyncAllTriggersUsageAndLimits() {
         var usageCalls = 0
         var limitsCalls = 0

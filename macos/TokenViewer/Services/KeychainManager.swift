@@ -1,6 +1,52 @@
 import Foundation
 import Security
 
+enum GitCredentialResolver {
+    private static let githubEnvironmentKeys = ["GH_TOKEN", "GITHUB_TOKEN"]
+
+    static func resolve(
+        provider: String,
+        storedToken: String?,
+        environment: [String: String]
+    ) -> String? {
+        if let token = environmentToken(provider: provider, environment: environment)?.token {
+            return token
+        }
+        if let token = normalized(storedToken) {
+            return token
+        }
+        return nil
+    }
+
+    static func environmentTokenName(
+        provider: String,
+        environment: [String: String]
+    ) -> String? {
+        environmentToken(provider: provider, environment: environment)?.name
+    }
+
+    private static func environmentToken(
+        provider: String,
+        environment: [String: String]
+    ) -> (name: String, token: String)? {
+        guard provider.lowercased() == "github" else { return nil }
+        for key in githubEnvironmentKeys {
+            if let token = normalized(environment[key]) {
+                return (key, token)
+            }
+        }
+        return nil
+    }
+
+    private static func normalized(_ token: String?) -> String? {
+        guard let token = token?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !token.isEmpty else {
+            return nil
+        }
+        return token
+    }
+}
+
 final class KeychainManager {
     static let shared = KeychainManager()
 
@@ -54,6 +100,27 @@ final class KeychainManager {
             return nil
         }
         return String(data: data, encoding: .utf8)
+    }
+
+    func gitToken(
+        for provider: String,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> String? {
+        GitCredentialResolver.resolve(
+            provider: provider,
+            storedToken: getToken(for: provider),
+            environment: environment
+        )
+    }
+
+    func gitEnvironmentTokenName(
+        for provider: String,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> String? {
+        return GitCredentialResolver.environmentTokenName(
+            provider: provider,
+            environment: environment
+        )
     }
 
     func deleteToken(for provider: String) throws {

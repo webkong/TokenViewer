@@ -45,9 +45,6 @@ struct SkillGitSyncSheet: View {
 
     @AppStorage("syncRepoURL") private var repoURL = ""
     @AppStorage("syncProvider") private var providerRaw = SkillGitProvider.github.rawValue
-    @AppStorage("syncTokenSaved_github") private var tokenSavedGithub = false
-    @AppStorage("syncTokenSaved_gitlab") private var tokenSavedGitlab = false
-    @AppStorage("syncTokenSaved_other") private var tokenSavedOther = false
     @AppStorage("syncGitUserName") private var storedGitUserName = ""
     @AppStorage("syncGitUserEmail") private var storedGitUserEmail = ""
     @AppStorage("syncGitBranch") private var syncGitBranch = "main"
@@ -65,11 +62,7 @@ struct SkillGitSyncSheet: View {
     }
 
     private var tokenSaved: Bool {
-        switch provider {
-        case .github: return tokenSavedGithub
-        case .gitlab: return tokenSavedGitlab
-        case .other: return tokenSavedOther
-        }
+        !currentToken.isEmpty
     }
 
     private var repoPlaceholder: String {
@@ -88,7 +81,7 @@ struct SkillGitSyncSheet: View {
     }
 
     private var currentToken: String {
-        KeychainManager.shared.getToken(for: provider.key) ?? ""
+        KeychainManager.shared.gitToken(for: provider.key) ?? ""
     }
 
     var body: some View {
@@ -665,9 +658,6 @@ struct SkillAuthSheet: View {
     @Binding var provider: String
     var onSave: ((String, String, String) -> Void)?
 
-    @AppStorage("syncTokenSaved_github") private var tokenSavedGithub = false
-    @AppStorage("syncTokenSaved_gitlab") private var tokenSavedGitlab = false
-    @AppStorage("syncTokenSaved_other") private var tokenSavedOther = false
     @AppStorage("syncGitUserName") private var storedGitUserName = ""
     @AppStorage("syncGitUserEmail") private var storedGitUserEmail = ""
     @AppStorage("syncGitBranch") private var storedGitBranch = "main"
@@ -678,6 +668,9 @@ struct SkillAuthSheet: View {
     @State private var tokenGithub = ""
     @State private var tokenGitlab = ""
     @State private var tokenOther = ""
+    @State private var tokenSavedGithub = false
+    @State private var tokenSavedGitlab = false
+    @State private var tokenSavedOther = false
     @State private var gitUserName = ""
     @State private var gitUserEmail = ""
     @State private var gitBranch = "main"
@@ -760,6 +753,12 @@ struct SkillAuthSheet: View {
                 }
 
                 tokenField
+
+                if let variable = KeychainManager.shared.gitEnvironmentTokenName(for: currentProvider.key) {
+                    Label(l10n.gitEnvironmentTokenDetected(variable), systemImage: "terminal")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Label(l10n.gitTokenStoredLocally, systemImage: "lock.shield")
@@ -858,6 +857,9 @@ struct SkillAuthSheet: View {
         tokenGithub = KeychainManager.shared.getToken(for: "github") ?? ""
         tokenGitlab = KeychainManager.shared.getToken(for: "gitlab") ?? ""
         tokenOther = KeychainManager.shared.getToken(for: "other") ?? ""
+        tokenSavedGithub = !tokenGithub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        tokenSavedGitlab = !tokenGitlab.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        tokenSavedOther = !tokenOther.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func loadGitIdentityConfig() {

@@ -163,14 +163,8 @@ final class SkillManagerViewModel: ObservableObject {
         installIsInstalling = true
 
         let githubToken: String? = {
-            guard installSourceType == .git,
-                  UserDefaults.standard.bool(forKey: "syncTokenSaved_github")
-            else { return nil }
-            guard let token = KeychainManager.shared.getToken(for: "github")?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-                !token.isEmpty
-            else { return nil }
-            return token
+            guard installSourceType == .git else { return nil }
+            return KeychainManager.shared.gitToken(for: "github")
         }()
 
         let request = SkillInstallPayload(
@@ -433,22 +427,18 @@ final class SkillManagerViewModel: ObservableObject {
         let defaults = UserDefaults.standard
         let providerRaw = defaults.string(forKey: "syncProvider") ?? "GitHub"
         let platform: String
-        let tokenSaved: Bool
 
         switch providerRaw {
         case "GitLab":
             platform = "gitlab"
-            tokenSaved = defaults.bool(forKey: "syncTokenSaved_gitlab")
         case "Other":
             platform = "other"
-            tokenSaved = defaults.bool(forKey: "syncTokenSaved_other")
         default:
             platform = "github"
-            tokenSaved = defaults.bool(forKey: "syncTokenSaved_github")
         }
 
         let remoteURL = defaults.string(forKey: "syncRepoURL") ?? ""
-        let token = tokenSaved ? (KeychainManager.shared.getToken(for: platform) ?? "") : ""
+        let token = KeychainManager.shared.gitToken(for: platform) ?? ""
         let userName = defaults.string(forKey: "syncGitUserName") ?? ""
         let userEmail = defaults.string(forKey: "syncGitUserEmail") ?? ""
         let gitBranch = defaults.string(forKey: "syncGitBranch") ?? "main"

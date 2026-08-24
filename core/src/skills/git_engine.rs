@@ -239,6 +239,26 @@ impl GitEngine {
         callbacks
     }
 
+    fn friendly_remote_error(error: &git2::Error) -> String {
+        let message = error.message().to_ascii_lowercase();
+        if message.contains("authentication")
+            || message.contains("credential")
+            || message.contains("401")
+        {
+            return "Authentication failed. Update the Git token and ensure it can access this private repository."
+                .into();
+        }
+        if message.contains("403") {
+            return "Access denied (403). Ensure the Git token has read/write access to this repository."
+                .into();
+        }
+        if message.contains("404") {
+            return "Repository not found (404). Check the repository URL and token access."
+                .into();
+        }
+        error.to_string()
+    }
+
     /// Return the repository's configured default git identity.
     pub fn default_identity(&self) -> (Option<String>, Option<String>) {
         match self.repo.signature() {
@@ -603,7 +623,10 @@ impl GitEngine {
                 debug_log!(" fetch_origin: remote branch does not exist yet");
                 return Ok(());
             }
-            return Err(format!("Failed to fetch from origin: {error}"));
+            return Err(format!(
+                "Failed to fetch from origin: {}",
+                Self::friendly_remote_error(&error)
+            ));
         }
         drop(remote);
 
@@ -1024,7 +1047,12 @@ impl GitEngine {
             let refspec = format!("{force_prefix}{temporary_ref}:refs/heads/{branch}");
             remote
                 .push(&[&refspec], Some(&mut push_options))
-                .map_err(|e| format!("Failed to push filtered sync: {}", e))?;
+                .map_err(|e| {
+                    format!(
+                        "Failed to push filtered sync: {}",
+                        Self::friendly_remote_error(&e)
+                    )
+                })?;
             self.repo
                 .reference(
                     &format!("refs/remotes/origin/{branch}"),
@@ -1510,14 +1538,12 @@ impl GitEngine {
                 message: None,
             }),
             Err(e) => {
-                let msg = if e.contains("403") {
-                    "Access denied (403). Check that your token has 'repo' scope and is not expired.".into()
-                } else if e.contains("401") {
-                    "Authentication failed (401). The token may be invalid or revoked.".into()
-                } else if e.contains("404") {
-                    "Repository not found (404). Check the repository URL.".into()
+                let error = git2::Error::from_str(&e);
+                let friendly = Self::friendly_remote_error(&error);
+                let msg = if friendly == error.to_string() {
+                    format!("Connection failed: {friendly}")
                 } else {
-                    format!("Connection failed: {}", e)
+                    friendly
                 };
                 Ok(GitConnectivity {
                     status: "disconnected".into(),
@@ -1552,7 +1578,9 @@ impl GitEngine {
 
         remote
             .push(&[&refspec], Some(&mut push_options))
-            .map_err(|e| format!("Failed to push: {}", e))?;
+            .map_err(|e| {
+                format!("Failed to push: {}", Self::friendly_remote_error(&e))
+            })?;
         let pushed_oid = self
             .repo
             .head()
@@ -2634,5 +2662,14 @@ mod tests {
             .unwrap();
         let remote = engine.repo.find_remote("origin").unwrap();
         assert_eq!(remote.url().unwrap(), "https://gitlab.com/test/repo.git");
+    }
+
+    #[test]
+    fn test_authentication_replay_error_is_actionable() {
+        let error = git2::Error::from_str("too many redirects or authentication replays");
+        assert_eq!(
+            GitEngine::friendly_remote_error(&error),
+            "Authentication failed. Update the Git token and ensure it can access this private repository."
+        );
     }
 }
