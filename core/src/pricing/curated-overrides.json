@@ -1,72 +1,16 @@
 {
   "_meta": {
-    "note": "Curated price overrides. Always wins over LiteLLM. Two reasons to live here: (1) self-defined alias names that LiteLLM will never carry (kiro-*, hy3-*, composer-*, kimi-for-coding, free-tier OpenRouter routes); (2) prices we want to pin even if LiteLLM has the model (e.g. cache_write fields LiteLLM often omits). Units: USD per million tokens. Edit this file to override pricing without redeploying.",
+    "note": "Curated route overrides. Always wins over LiteLLM and is reserved for product-specific SKUs, aliases, free routes, and time-dependent pricing that a flat online table cannot represent. Canonical vendor model prices belong in data.rs as offline fallback so LiteLLM can update them. Units: USD per million tokens.",
     "units": "usd_per_million_tokens",
     "deepseek_pricing_note": "DeepSeek moved to peak/off-peak (峰谷) pricing effective 2026-08-17 Beijing time. Peak hours are 09:00-12:00 and 14:00-18:00 Beijing; peak = off-peak x2. Off-peak RMB/MTok: v4-flash 1.5 in / 0.05 cache-hit / 4.5 out; v4-pro 4.5 in / 0.15 cache-hit / 13.5 out. Entries below store the OFF-PEAK rates in USD at ~7.2 RMB/USD; the peak overlay lives in data.rs PEAK_PRICING_DATA. cache_write = input (no write surcharge)."
   },
   "exact": {
-    "claude-fable-5": {
-      "input": 10,
-      "output": 50,
-      "cache_read": 1,
-      "cache_write": 12.5,
-      "note": "Fable 5 \u2014 Anthropic's top tier above Opus. Not yet in LiteLLM. $10/$50 per MTok; cache_read 0.1x, cache_write 1.25x. Remove once LiteLLM carries it."
-    },
-    "claude-opus-5": {
-      "input": 5,
-      "output": 25,
-      "cache_read": 0.5,
-      "cache_write": 6.25,
-      "note": "Opus 5 (public 2026-07). Standard Opus tier, unchanged from 4.6/4.7/4.8: $5/$25 per MTok, cache_read 0.1x, cache_write 1.25x. Not yet in LiteLLM. Fast mode is billed at $10/$50 \u2014 see claude-opus-5-fast. Remove once LiteLLM carries it."
-    },
     "claude-opus-5-fast": {
       "input": 10,
       "output": 50,
       "cache_read": 1,
       "cache_write": 12.5,
       "note": "Opus 5 fast mode (speed=\"fast\", beta fast-mode-2026-02-01) is priced at $10/$50 per MTok \u2014 2x standard Opus. Kept separate so a -fast model id is not silently priced at the standard tier. See claude-opus-5."
-    },
-    "claude-opus-4-8": {
-      "input": 5,
-      "output": 25,
-      "cache_read": 0.5,
-      "cache_write": 6.25,
-      "note": "Opus 4.8 not yet in LiteLLM. Pin to the standard Opus tier (same as 4.6/4.7); remove once LiteLLM carries it."
-    },
-    "claude-sonnet-5": {
-      "input": 3,
-      "output": 15,
-      "cache_read": 0.3,
-      "cache_write": 3.75,
-      "note": "Sonnet 5. LiteLLM added this model on ~2026-06-30 with matching rates, but pin explicitly so pricing is correct immediately rather than depending on the 24h local pricing-cache refresh cycle."
-    },
-    "claude-haiku-4-5": {
-      "input": 1,
-      "output": 5,
-      "cache_read": 0.1,
-      "cache_write": 1.25,
-      "note": "Canonical undated alias emitted by Cursor. Pin to the same rates as claude-haiku-4-5-20251001 so local cost does not depend on which dated LiteLLM aliases are present in the current cache."
-    },
-    "gpt-5.6-sol": {
-      "input": 5,
-      "output": 30,
-      "cache_read": 0.5,
-      "cache_write": 6.25,
-      "note": "GPT-5.6 family (public 2026-07-09). Flagship tier. Not yet in LiteLLM. developers.openai.com/api/docs/pricing short-context: $5/$30 per MTok, cached input 0.1x, cache write 1.25x. Codex emits gpt-5.6-sol (+ reasoning-effort variants like gpt-5.6-solhigh, caught by fuzzy). Remove once LiteLLM carries it."
-    },
-    "gpt-5.6-terra": {
-      "input": 2,
-      "output": 12,
-      "cache_read": 0.2,
-      "cache_write": 2.5,
-      "note": "GPT-5.6 balanced default tier. Official short-context rates: $2/$12 per MTok (not the earlier $2.5/$15 snapshot). See gpt-5.6-sol."
-    },
-    "gpt-5.6-luna": {
-      "input": 0.2,
-      "output": 1.2,
-      "cache_read": 0.02,
-      "cache_write": 0.25,
-      "note": "GPT-5.6 lightweight tier. Official short-context rates: $0.20/$1.20 per MTok (previous curated values $1/$6 overcounted 5x). See gpt-5.6-sol."
     },
     "kiro-agent": {
       "input": 3,
@@ -146,12 +90,6 @@
       "cache_write": 0.625,
       "note": "Off-peak rate (RMB 4.5 in / 0.15 cache-hit / 13.5 out, converted at ~7.2 RMB/USD). Peak (x2) lives in data.rs PEAK_PRICING_DATA."
     },
-    "deepseek-chat": {
-      "input": 0.14,
-      "output": 0.28,
-      "cache_read": 0.0028,
-      "cache_write": 0.14
-    },
     "grok-build": {
       "input": 1.25,
       "output": 2.5,
@@ -206,12 +144,6 @@
       "input": 0.2,
       "output": 0.5,
       "cache_read": 0.05
-    },
-    "deepseek-reasoner": {
-      "input": 0.14,
-      "output": 0.28,
-      "cache_read": 0.0028,
-      "cache_write": 0.14
     },
     "kimi-for-coding": {
       "input": 0.6,
@@ -401,22 +333,6 @@
   },
   "fuzzy": [
     {
-      "match": "gpt-5.6-sol",
-      "ref": "gpt-5.6-sol"
-    },
-    {
-      "match": "gpt-5.6-terra",
-      "ref": "gpt-5.6-terra"
-    },
-    {
-      "match": "gpt-5.6-luna",
-      "ref": "gpt-5.6-luna"
-    },
-    {
-      "match": "gpt-5.6",
-      "ref": "gpt-5.6-terra"
-    },
-    {
       "match": "kiro",
       "ref": "kiro-cli-agent"
     },
@@ -431,14 +347,6 @@
     {
       "match": "claude-opus-5-fast",
       "ref": "claude-opus-5-fast"
-    },
-    {
-      "match": "claude-opus-5",
-      "ref": "claude-opus-5"
-    },
-    {
-      "match": "claude-opus-4-8",
-      "ref": "claude-opus-4-8"
     },
     {
       "match": "minimax-m3",

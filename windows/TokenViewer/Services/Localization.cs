@@ -57,8 +57,8 @@ public sealed class L10n : ObservableObject
         ["output"] = ("Output", "输出"),
         ["cacheRead"] = ("Cache Read", "缓存读取"),
         ["reasoning"] = ("Reasoning", "推理"),
-        ["cost"] = ("Cost", "费用"),
-        ["costByModel"] = ("Cost by Model", "模型费用明细"),
+        ["cost"] = ("API-Equivalent Estimate", "API 等价估算费用"),
+        ["costByModel"] = ("API-Equivalent Estimate by Model", "模型 API 等价估算"),
         ["cacheHit"] = ("Cache hit", "缓存命中"),
 
         // Limits

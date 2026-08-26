@@ -3,7 +3,7 @@ use std::sync::{OnceLock, RwLock};
 
 use chrono::{DateTime, FixedOffset, Timelike};
 
-use super::data::{PricingEntry, PEAK_PRICING_DATA, PRICING_DATA};
+use super::data::{PricingEntry, HISTORICAL_PRICING_DATA, PEAK_PRICING_DATA, PRICING_DATA};
 use crate::models::{ModelPricing, UsageRecord};
 
 const ZERO_PRICING: ModelPricing = ModelPricing {
@@ -12,6 +12,8 @@ const ZERO_PRICING: ModelPricing = ModelPricing {
     cache_read: 0.0,
     cache_write: 0.0,
 };
+
+const DEEPSEEK_V4_PEAK_EFFECTIVE_AT: &str = "2026-08-16T16:00:00Z";
 
 // ---------------------------------------------------------------------------
 // Curated overrides (embedded from TokenTracker's curated-overrides.json).
@@ -250,7 +252,19 @@ fn strip_reasoning_suffix(m: &str) -> String {
             return stripped.to_string();
         }
     }
+    if m.starts_with("gpt-5.6-") {
+        for p in ["xhigh", "high", "medium", "low", "fast"] {
+            if let Some(stripped) = m.strip_suffix(p) {
+                return stripped.to_string();
+            }
+        }
+    }
     m.to_string()
+}
+
+fn is_free_model(model: &str) -> bool {
+    let lower = model.to_ascii_lowercase();
+    lower.ends_with("-free") || lower.contains("-free-")
 }
 
 /// Split a `major.minor` (or `major-minor`) token into (major, minor).
@@ -528,6 +542,10 @@ fn lookup_pricing_inner(
     let lower = normalized.to_lowercase();
     let dot_form = build_dot_restored(&lower);
 
+    if is_free_model(&lower) {
+        return Some(ZERO_PRICING);
+    }
+
     // 1. CURATED exact (case-insensitive), then dot-restored variants.
     if let Some(p) = curated.exact.get(&lower) {
         return Some(*p);
@@ -675,6 +693,38 @@ fn builtin_lookup(lower: &str) -> Option<ModelPricing> {
     best.map(|e| e.pricing)
 }
 
+fn lookup_historical_pricing(model: &str, source: &str, hour_start: &str) -> Option<ModelPricing> {
+    let timestamp = DateTime::parse_from_rfc3339(hour_start).ok()?;
+    let normalized = normalize_for_source(model, source).to_lowercase();
+    if is_free_model(&normalized) {
+        return None;
+    }
+    let most_specific = HISTORICAL_PRICING_DATA
+        .iter()
+        .filter(|entry| normalized == entry.model || normalized.starts_with(entry.model))
+        .map(|entry| entry.model.len())
+        .max()?;
+
+    for entry in HISTORICAL_PRICING_DATA {
+        if entry.model.len() != most_specific
+            || !(normalized == entry.model || normalized.starts_with(entry.model))
+        {
+            continue;
+        }
+        let Ok(from) = DateTime::parse_from_rfc3339(entry.effective_from) else {
+            continue;
+        };
+        let Ok(until) = DateTime::parse_from_rfc3339(entry.effective_until) else {
+            continue;
+        };
+        if timestamp >= from && timestamp < until {
+            return Some(entry.pricing);
+        }
+    }
+
+    None
+}
+
 /// Look up pricing, returning `None` when the model is unknown so callers can
 /// distinguish "unpriced/unknown" from a genuine zero price.
 pub fn lookup_model_pricing(model: &str, source: &str) -> Option<ModelPricing> {
@@ -726,6 +776,23 @@ fn is_peak_hour(hour_start: &str) -> bool {
     matches!(beijing.hour(), 9 | 10 | 11 | 14 | 15 | 16 | 17)
 }
 
+fn peak_pricing_is_effective(model: &str, hour_start: &str) -> bool {
+    let bare = model.rsplit('/').next().unwrap_or(model);
+    if is_free_model(bare) {
+        return false;
+    }
+    if !bare.starts_with("deepseek-v4") {
+        return true;
+    }
+    let Ok(timestamp) = DateTime::parse_from_rfc3339(hour_start) else {
+        return false;
+    };
+    let Ok(effective_at) = DateTime::parse_from_rfc3339(DEEPSEEK_V4_PEAK_EFFECTIVE_AT) else {
+        return false;
+    };
+    timestamp >= effective_at
+}
+
 /// Peak-rate overlay lookup: exact, then longest-prefix, then last `/`-segment
 /// (provider-prefixed names like `deepseek/deepseek-v4-pro`). Mirrors
 /// `builtin_lookup` + `builtin_fallback`. `lower` is the normalized model name.
@@ -753,10 +820,17 @@ fn peak_lookup(lower: &str) -> Option<ModelPricing> {
 /// Compute USD cost for a single usage record (30-min bucket). DeepSeek models
 /// use peak/off-peak rates keyed off the bucket's Beijing hour.
 pub fn compute_row_cost(record: &UsageRecord) -> f64 {
-    let mut pricing = get_model_pricing(&record.model, &record.source);
+    let normalized = normalize_for_source(&record.model, &record.source).to_lowercase();
+    if is_free_model(&normalized) {
+        return 0.0;
+    }
 
-    if is_peak_hour(&record.hour_start) {
-        let normalized = normalize_for_source(&record.model, &record.source).to_lowercase();
+    let mut pricing = lookup_historical_pricing(&record.model, &record.source, &record.hour_start)
+        .unwrap_or_else(|| get_model_pricing(&record.model, &record.source));
+
+    if is_peak_hour(&record.hour_start)
+        && peak_pricing_is_effective(&normalized, &record.hour_start)
+    {
         if let Some(peak) = lookup_peak_pricing(&normalized) {
             pricing = peak;
         }
@@ -950,22 +1024,145 @@ mod tests {
     }
 
     #[test]
+    fn canonical_vendor_models_use_litellm_before_offline_fallbacks() {
+        let _runtime_guard = reset_runtime();
+        let mut litellm = HashMap::new();
+        litellm.insert(
+            "claude-sonnet-5".to_string(),
+            LiteLLMPricing {
+                input: Some(2.0),
+                output: Some(10.0),
+                cache_read: Some(0.2),
+                cache_write: Some(2.5),
+            },
+        );
+        litellm.insert(
+            "deepseek-chat".to_string(),
+            LiteLLMPricing {
+                input: Some(0.28),
+                output: Some(0.42),
+                cache_read: Some(0.028),
+                cache_write: None,
+            },
+        );
+        let curated = curated().clone();
+
+        let sonnet = lookup_pricing_inner("claude-sonnet-5", "kiro", &curated, &litellm).unwrap();
+        assert_eq!(sonnet.input, 2.0);
+        assert_eq!(sonnet.output, 10.0);
+
+        let deepseek =
+            lookup_pricing_inner("deepseek-chat", "opencode", &curated, &litellm).unwrap();
+        assert_eq!(deepseek.input, 0.28);
+        assert_eq!(deepseek.output, 0.42);
+        assert_eq!(deepseek.cache_read, 0.028);
+        assert_eq!(deepseek.cache_write, 0.28);
+    }
+
+    #[test]
     fn reasoning_suffix_strip() {
         assert_eq!(strip_reasoning_suffix("gpt-5.6-sol-high"), "gpt-5.6-sol");
-        assert_eq!(strip_reasoning_suffix("gpt-5.6-solhigh"), "gpt-5.6-solhigh");
+        assert_eq!(strip_reasoning_suffix("gpt-5.6-solhigh"), "gpt-5.6-sol");
         assert_eq!(strip_reasoning_suffix("gpt-5.6-sol"), "gpt-5.6-sol");
     }
 
     #[test]
-    fn reasoning_suffix_attached_resolves_via_curated_fuzzy() {
+    fn gpt_5_6_dynamic_price_wins_and_handles_attached_reasoning_suffix() {
         let _runtime_guard = reset_runtime();
-        // `gpt-5.6-solhigh` has no exact key, but the curated fuzzy needle
-        // `gpt-5.6-sol` matches as a substring and wins with the pinned price.
         let mut litellm = HashMap::new();
-        litellm.insert("openai/gpt-5.6-sol".to_string(), pricing(1.75, 14.0));
+        litellm.insert(
+            "gpt-5.6-sol".to_string(),
+            LiteLLMPricing {
+                input: Some(4.0),
+                output: Some(20.0),
+                cache_read: Some(0.4),
+                cache_write: Some(5.0),
+            },
+        );
         let curated = curated().clone();
         let p = lookup_pricing_inner("gpt-5.6-solhigh", "opencode", &curated, &litellm).unwrap();
-        assert_eq!(p.input, 5.0);
+        assert_eq!(p.input, 4.0);
+        assert_eq!(p.output, 20.0);
+        assert_eq!(p.cache_read, 0.4);
+        assert_eq!(p.cache_write, 5.0);
+    }
+
+    #[test]
+    fn gpt_5_6_offline_prices_match_current_official_rates() {
+        let _runtime_guard = reset_runtime();
+        let expected = [
+            ("gpt-5.6-sol", 4.0, 0.4, 5.0, 20.0),
+            ("gpt-5.6-terra", 2.0, 0.2, 2.5, 12.0),
+            ("gpt-5.6-luna", 0.2, 0.02, 0.25, 1.2),
+            ("gpt-5.6", 4.0, 0.4, 5.0, 20.0),
+        ];
+        for (model, input, cache_read, cache_write, output) in expected {
+            let p = lookup_model_pricing(model, "codex").unwrap();
+            assert_eq!(p.input, input, "{model}");
+            assert_eq!(p.cache_read, cache_read, "{model}");
+            assert_eq!(p.cache_write, cache_write, "{model}");
+            assert_eq!(p.output, output, "{model}");
+        }
+    }
+
+    #[test]
+    fn gpt_5_6_historical_prices_stop_at_official_change_boundaries() {
+        let _runtime_guard = reset_runtime();
+        let mut record = UsageRecord {
+            id: None,
+            hour_start: "2026-08-20T23:30:00Z".to_string(),
+            source: "codex".to_string(),
+            model: "gpt-5.6-sol".to_string(),
+            project_key: String::new(),
+            project_ref: String::new(),
+            input_tokens: 1_000_000,
+            output_tokens: 1_000_000,
+            cached_input_tokens: 1_000_000,
+            cache_creation_input_tokens: 1_000_000,
+            reasoning_output_tokens: 500_000,
+            total_tokens: 4_500_000,
+            conversation_count: 1,
+        };
+
+        assert!((compute_row_cost(&record) - 41.75).abs() < 1e-9);
+        record.hour_start = "2026-08-21T00:00:00Z".to_string();
+        assert!((compute_row_cost(&record) - 29.4).abs() < 1e-9);
+
+        record.model = "gpt-5.6-terra".to_string();
+        record.hour_start = "2026-07-29T23:30:00Z".to_string();
+        assert!((compute_row_cost(&record) - 20.875).abs() < 1e-9);
+        record.hour_start = "2026-07-30T00:00:00Z".to_string();
+        assert!((compute_row_cost(&record) - 16.7).abs() < 1e-9);
+
+        record.model = "gpt-5.6-luna".to_string();
+        record.hour_start = "2026-07-29T23:30:00Z".to_string();
+        assert!((compute_row_cost(&record) - 8.35).abs() < 1e-9);
+        record.hour_start = "2026-07-30T00:00:00Z".to_string();
+        assert!((compute_row_cost(&record) - 1.67).abs() < 1e-9);
+    }
+
+    #[test]
+    fn sonnet_5_introductory_price_ends_after_august() {
+        let _runtime_guard = reset_runtime();
+        let mut record = UsageRecord {
+            id: None,
+            hour_start: "2026-08-31T23:30:00Z".to_string(),
+            source: "kiro".to_string(),
+            model: "claude-sonnet-5".to_string(),
+            project_key: String::new(),
+            project_ref: String::new(),
+            input_tokens: 1_000_000,
+            output_tokens: 1_000_000,
+            cached_input_tokens: 1_000_000,
+            cache_creation_input_tokens: 1_000_000,
+            reasoning_output_tokens: 0,
+            total_tokens: 4_000_000,
+            conversation_count: 1,
+        };
+
+        assert!((compute_row_cost(&record) - 14.7).abs() < 1e-9);
+        record.hour_start = "2026-09-01T00:00:00Z".to_string();
+        assert!((compute_row_cost(&record) - 22.05).abs() < 1e-9);
     }
 
     #[test]
@@ -1021,6 +1218,33 @@ mod tests {
     }
 
     #[test]
+    fn free_models_are_not_overridden_by_fuzzy_historical_or_peak_prices() {
+        let _runtime_guard = reset_runtime();
+        let record = UsageRecord {
+            id: None,
+            hour_start: "2026-08-17T02:00:00Z".to_string(),
+            source: "opencode".to_string(),
+            model: "deepseek-v4-flash-free".to_string(),
+            project_key: String::new(),
+            project_ref: String::new(),
+            input_tokens: 1_000_000,
+            output_tokens: 1_000_000,
+            cached_input_tokens: 1_000_000,
+            cache_creation_input_tokens: 1_000_000,
+            reasoning_output_tokens: 1_000_000,
+            total_tokens: 5_000_000,
+            conversation_count: 1,
+        };
+
+        let pricing = lookup_model_pricing(&record.model, &record.source).unwrap();
+        assert_eq!(pricing.input, 0.0);
+        assert_eq!(pricing.output, 0.0);
+        assert_eq!(pricing.cache_read, 0.0);
+        assert_eq!(pricing.cache_write, 0.0);
+        assert_eq!(compute_row_cost(&record), 0.0);
+    }
+
+    #[test]
     fn deepseek_cost_uses_peak_and_offpeak_rates() {
         let _runtime_guard = reset_runtime();
         let mut record = UsageRecord {
@@ -1038,6 +1262,12 @@ mod tests {
             total_tokens: 2_000_000,
             conversation_count: 1,
         };
+
+        // Before the 2026-08-17 Beijing change, the old flat rate applies
+        // even if the bucket's clock time falls in today's peak window.
+        record.hour_start = "2026-08-16T02:00:00Z".to_string();
+        let old_flat = compute_row_cost(&record);
+        assert!((old_flat - 1.305).abs() < 1e-9, "old_flat={old_flat}");
 
         // Off-peak (Beijing 20:00): input 0.625 + output 1.875 = 2.5.
         record.hour_start = "2026-08-17T12:00:00Z".to_string();

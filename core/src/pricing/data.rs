@@ -5,6 +5,13 @@ pub struct PricingEntry {
     pub pricing: ModelPricing,
 }
 
+pub struct HistoricalPricingEntry {
+    pub model: &'static str,
+    pub effective_from: &'static str,
+    pub effective_until: &'static str,
+    pub pricing: ModelPricing,
+}
+
 pub static PRICING_DATA: &[PricingEntry] = &[
     PricingEntry {
         model: "claude-sonnet-4-20250514",
@@ -42,6 +49,54 @@ pub static PRICING_DATA: &[PricingEntry] = &[
             cache_write: 1.0,
         },
     },
+    // Canonical Anthropic models use runtime LiteLLM prices when available.
+    // These standard rates are offline fallbacks; Sonnet 5's introductory
+    // interval is represented separately in HISTORICAL_PRICING_DATA.
+    PricingEntry {
+        model: "claude-fable-5",
+        pricing: ModelPricing {
+            input: 10.0,
+            output: 50.0,
+            cache_read: 1.0,
+            cache_write: 12.5,
+        },
+    },
+    PricingEntry {
+        model: "claude-opus-5",
+        pricing: ModelPricing {
+            input: 5.0,
+            output: 25.0,
+            cache_read: 0.5,
+            cache_write: 6.25,
+        },
+    },
+    PricingEntry {
+        model: "claude-opus-4-8",
+        pricing: ModelPricing {
+            input: 5.0,
+            output: 25.0,
+            cache_read: 0.5,
+            cache_write: 6.25,
+        },
+    },
+    PricingEntry {
+        model: "claude-sonnet-5",
+        pricing: ModelPricing {
+            input: 3.0,
+            output: 15.0,
+            cache_read: 0.3,
+            cache_write: 3.75,
+        },
+    },
+    PricingEntry {
+        model: "claude-haiku-4-5",
+        pricing: ModelPricing {
+            input: 1.0,
+            output: 5.0,
+            cache_read: 0.1,
+            cache_write: 1.25,
+        },
+    },
     PricingEntry {
         model: "gpt-4o",
         pricing: ModelPricing {
@@ -58,6 +113,44 @@ pub static PRICING_DATA: &[PricingEntry] = &[
             output: 0.6,
             cache_read: 0.075,
             cache_write: 0.0,
+        },
+    },
+    // Current OpenAI standard rates. Runtime LiteLLM data takes precedence;
+    // these entries keep offline cost estimates available.
+    PricingEntry {
+        model: "gpt-5.6-sol",
+        pricing: ModelPricing {
+            input: 4.0,
+            output: 20.0,
+            cache_read: 0.4,
+            cache_write: 5.0,
+        },
+    },
+    PricingEntry {
+        model: "gpt-5.6-terra",
+        pricing: ModelPricing {
+            input: 2.0,
+            output: 12.0,
+            cache_read: 0.2,
+            cache_write: 2.5,
+        },
+    },
+    PricingEntry {
+        model: "gpt-5.6-luna",
+        pricing: ModelPricing {
+            input: 0.2,
+            output: 1.2,
+            cache_read: 0.02,
+            cache_write: 0.25,
+        },
+    },
+    PricingEntry {
+        model: "gpt-5.6",
+        pricing: ModelPricing {
+            input: 4.0,
+            output: 20.0,
+            cache_read: 0.4,
+            cache_write: 5.0,
         },
     },
     PricingEntry {
@@ -117,19 +210,19 @@ pub static PRICING_DATA: &[PricingEntry] = &[
     PricingEntry {
         model: "deepseek-chat",
         pricing: ModelPricing {
-            input: 0.14,
-            output: 0.28,
-            cache_read: 0.0028,
-            cache_write: 0.14,
+            input: 0.28,
+            output: 0.42,
+            cache_read: 0.028,
+            cache_write: 0.28,
         },
     },
     PricingEntry {
         model: "deepseek-reasoner",
         pricing: ModelPricing {
-            input: 0.14,
-            output: 0.28,
-            cache_read: 0.0028,
-            cache_write: 0.14,
+            input: 0.28,
+            output: 0.42,
+            cache_read: 0.028,
+            cache_write: 0.28,
         },
     },
     PricingEntry {
@@ -345,6 +438,102 @@ pub static PRICING_DATA: &[PricingEntry] = &[
             output: 0.12,
             cache_read: 0.008,
             cache_write: 0.0,
+        },
+    },
+];
+
+// Closed documented price intervals. Open-ended current prices continue to come
+// from LiteLLM (or PRICING_DATA while offline), so future changes do not require
+// guessing an end date in advance. Boundaries are stored as UTC timestamps.
+pub static HISTORICAL_PRICING_DATA: &[HistoricalPricingEntry] = &[
+    HistoricalPricingEntry {
+        model: "claude-sonnet-5",
+        effective_from: "2026-06-30T00:00:00Z",
+        effective_until: "2026-09-01T00:00:00Z",
+        pricing: ModelPricing {
+            input: 2.0,
+            output: 10.0,
+            cache_read: 0.2,
+            cache_write: 2.5,
+        },
+    },
+    HistoricalPricingEntry {
+        model: "gpt-5.6-sol",
+        effective_from: "2026-07-09T00:00:00Z",
+        effective_until: "2026-08-21T00:00:00Z",
+        pricing: ModelPricing {
+            input: 5.0,
+            output: 30.0,
+            cache_read: 0.5,
+            cache_write: 6.25,
+        },
+    },
+    HistoricalPricingEntry {
+        model: "gpt-5.6-terra",
+        effective_from: "2026-07-09T00:00:00Z",
+        effective_until: "2026-07-30T00:00:00Z",
+        pricing: ModelPricing {
+            input: 2.5,
+            output: 15.0,
+            cache_read: 0.25,
+            cache_write: 3.125,
+        },
+    },
+    HistoricalPricingEntry {
+        model: "gpt-5.6-luna",
+        effective_from: "2026-07-09T00:00:00Z",
+        effective_until: "2026-07-30T00:00:00Z",
+        pricing: ModelPricing {
+            input: 1.0,
+            output: 6.0,
+            cache_read: 0.1,
+            cache_write: 1.25,
+        },
+    },
+    HistoricalPricingEntry {
+        model: "gpt-5.6",
+        effective_from: "2026-07-09T00:00:00Z",
+        effective_until: "2026-08-21T00:00:00Z",
+        pricing: ModelPricing {
+            input: 5.0,
+            output: 30.0,
+            cache_read: 0.5,
+            cache_write: 6.25,
+        },
+    },
+    // DeepSeek V4 switched to Beijing-time peak/off-peak pricing on
+    // 2026-08-17. Preserve the preceding flat rates for older usage buckets.
+    HistoricalPricingEntry {
+        model: "deepseek-v4-flash",
+        effective_from: "1970-01-01T00:00:00Z",
+        effective_until: "2026-08-16T16:00:00Z",
+        pricing: ModelPricing {
+            input: 0.14,
+            output: 0.28,
+            cache_read: 0.0028,
+            cache_write: 0.14,
+        },
+    },
+    HistoricalPricingEntry {
+        model: "deepseek-v4-pro",
+        effective_from: "1970-01-01T00:00:00Z",
+        effective_until: "2026-08-16T16:00:00Z",
+        pricing: ModelPricing {
+            input: 0.435,
+            output: 0.87,
+            cache_read: 0.003625,
+            cache_write: 0.435,
+        },
+    },
+    HistoricalPricingEntry {
+        model: "deepseek-v4",
+        effective_from: "1970-01-01T00:00:00Z",
+        effective_until: "2026-08-16T16:00:00Z",
+        pricing: ModelPricing {
+            input: 0.435,
+            output: 0.87,
+            cache_read: 0.003625,
+            cache_write: 0.435,
         },
     },
 ];
