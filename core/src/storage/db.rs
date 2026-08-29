@@ -2,11 +2,11 @@ use rusqlite::{params, Connection, Result as SqlResult};
 use std::path::Path;
 
 use crate::models::{
-    DailyUsage, HeatmapPoint, ModelBreakdownEntry, ProjectUsageEntry, Session, SyncCursor,
-    UsageRecord, UsageSummary,
+    normalize_model, DailyUsage, HeatmapPoint, ModelBreakdownEntry, ProjectUsageEntry, Session,
+    SyncCursor, UsageRecord, UsageSummary,
 };
 
-const SCHEMA_VERSION: i32 = 4;
+const SCHEMA_VERSION: i32 = 5;
 
 #[derive(Clone, Copy)]
 enum LocalUsageBucket {
@@ -132,6 +132,54 @@ impl Database {
         }
         self.add_column_if_missing("usage", "project_ref", "TEXT NOT NULL DEFAULT ''")?;
 
+        // v5: fold case variants of the same model id (e.g. `GLM-5.3-Flash`
+        // vs `glm-5.3-flash`) into one canonical lowercased row per
+        // (source, hour_start, project), matching the write-path normalization.
+        // Runs once per database, guarded by the user_version checkpoint; the
+        // table swap is atomic, so an interrupted run leaves the old state.
+        if version < 5 && self.has_mixed_case_models()? {
+            let tx = self.conn.unchecked_transaction()?;
+            tx.execute_batch(
+                "DROP TABLE IF EXISTS usage_norm;
+                 CREATE TABLE usage_norm (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    hour_start TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    project_key TEXT NOT NULL DEFAULT '',
+                    project_ref TEXT NOT NULL DEFAULT '',
+                    input_tokens INTEGER DEFAULT 0,
+                    output_tokens INTEGER DEFAULT 0,
+                    cached_input_tokens INTEGER DEFAULT 0,
+                    cache_creation_input_tokens INTEGER DEFAULT 0,
+                    reasoning_output_tokens INTEGER DEFAULT 0,
+                    total_tokens INTEGER DEFAULT 0,
+                    conversation_count INTEGER DEFAULT 1,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    UNIQUE(source, model, hour_start, project_key)
+                 );
+                 INSERT INTO usage_norm (
+                    hour_start, source, model, project_key, project_ref,
+                    input_tokens, output_tokens, cached_input_tokens,
+                    cache_creation_input_tokens, reasoning_output_tokens,
+                    total_tokens, conversation_count, created_at
+                 )
+                 SELECT hour_start, source, lower(trim(model)), project_key,
+                    MAX(project_ref),
+                    SUM(input_tokens), SUM(output_tokens), SUM(cached_input_tokens),
+                    SUM(cache_creation_input_tokens), SUM(reasoning_output_tokens),
+                    SUM(total_tokens), SUM(conversation_count), MIN(created_at)
+                 FROM usage
+                 GROUP BY source, lower(trim(model)), hour_start, project_key;
+                 DROP TABLE usage;
+                 ALTER TABLE usage_norm RENAME TO usage;
+                 CREATE INDEX idx_usage_hour ON usage(hour_start);
+                 CREATE INDEX idx_usage_source ON usage(source);
+                 CREATE INDEX idx_usage_project ON usage(project_key);",
+            )?;
+            tx.commit()?;
+        }
+
         self.conn.execute_batch(
             "CREATE INDEX IF NOT EXISTS idx_usage_hour ON usage(hour_start);
              CREATE INDEX IF NOT EXISTS idx_usage_source ON usage(source);
@@ -185,6 +233,16 @@ impl Database {
         Ok(false)
     }
 
+    /// True when any stored model id is not already lowercase — i.e. the v5
+    /// model-case normalization still needs to run for this database.
+    fn has_mixed_case_models(&self) -> SqlResult<bool> {
+        self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM usage WHERE model != lower(trim(model)) LIMIT 1)",
+            [],
+            |r| r.get(0),
+        )
+    }
+
     fn add_column_if_missing(&self, table: &str, column: &str, definition: &str) -> SqlResult<()> {
         if self.has_column(table, column)? {
             return Ok(());
@@ -199,6 +257,7 @@ impl Database {
     // --- Usage CRUD ---
 
     pub fn upsert_usage(&self, record: &UsageRecord) -> SqlResult<()> {
+        let model = normalize_model(&record.model);
         self.conn.execute(
             "INSERT INTO usage (hour_start, source, model, project_key, project_ref, input_tokens, output_tokens,
                 cached_input_tokens, cache_creation_input_tokens, reasoning_output_tokens,
@@ -214,7 +273,7 @@ impl Database {
                 total_tokens = usage.total_tokens + excluded.total_tokens,
                 conversation_count = usage.conversation_count + excluded.conversation_count",
             params![
-                record.hour_start, record.source, record.model,
+                record.hour_start, record.source, model,
                 record.project_key, record.project_ref,
                 record.input_tokens, record.output_tokens,
                 record.cached_input_tokens, record.cache_creation_input_tokens,

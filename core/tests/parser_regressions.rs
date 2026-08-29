@@ -226,7 +226,8 @@ fn agent_parser_matrix_matches_reference_shapes() {
         (
             "zcode",
             Expectation {
-                model: "GLM-5.2",
+                // Fixture emits `GLM-5.2`; stored/aggregated model ids are normalized to lowercase.
+                model: "glm-5.2",
                 total_tokens: 21,
                 conversation_count: 0,
             },

@@ -22,6 +22,14 @@ pub struct UsageRecord {
     pub conversation_count: u32,
 }
 
+/// Canonical model ID for storage & aggregation: trimmed and lowercased.
+/// Agents report the same model with different casing (e.g. ZCode emits
+/// `GLM-5.3-Flash` while others emit `glm-5.3-flash`); pricing lookup is
+/// already case-insensitive, so grouping must be too.
+pub fn normalize_model(model: &str) -> String {
+    model.trim().to_lowercase()
+}
+
 /// A resumable coding-agent session (conversation) discovered on disk.
 ///
 /// `id` is the stable composite key `"<source>:<raw_session_id>"` so that

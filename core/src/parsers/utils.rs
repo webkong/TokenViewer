@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, NaiveDateTime, TimeZone, Timelike, Utc};
 use serde_json::Value;
 
-use crate::models::UsageRecord;
+use crate::models::{normalize_model, UsageRecord};
 
 /// Resolve a stable, display-friendly project identity from session metadata.
 /// Git remotes become `owner/repo`; local-only projects use their directory name.
@@ -426,20 +426,23 @@ impl Iterator for OffsetLineReader {
 }
 
 /// Aggregate records by (hour_start, source, model, project) key.
+/// Model IDs are normalized (trim + lowercase) so case variants from the
+/// same agent (e.g. `GLM-5.3-Flash` vs `glm-5.3-flash`) merge into one row.
 pub fn aggregate_records(records: Vec<UsageRecord>) -> Vec<UsageRecord> {
     let mut map: HashMap<(String, String, String, String), UsageRecord> = HashMap::new();
     for r in records {
+        let model = normalize_model(&r.model);
         let key = (
             r.hour_start.clone(),
             r.source.clone(),
-            r.model.clone(),
+            model.clone(),
             r.project_key.clone(),
         );
         let entry = map.entry(key).or_insert_with(|| UsageRecord {
             id: None,
             hour_start: r.hour_start.clone(),
             source: r.source.clone(),
-            model: r.model.clone(),
+            model,
             project_key: r.project_key.clone(),
             project_ref: r.project_ref.clone(),
             input_tokens: 0,
