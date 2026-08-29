@@ -1,5 +1,70 @@
 import SwiftUI
 
+/// Hover-presented popover with an intent delay before showing and a grace
+/// period before hiding. Presenting instantly makes brushing across adjacent
+/// rows flash one popover per row — and because the popover covers the rows
+/// below it, overlapping presentations can leave a stale popover anchored to
+/// a row the pointer already left. The delays make both transitions cancelable:
+/// only a pointer that settles on the row opens it, and a popover stays long
+/// enough for the pointer to move into it.
+private enum HoverPopoverTiming {
+    static let presentDelay: TimeInterval = 0.25
+    static let dismissGrace: TimeInterval = 0.30
+}
+
+private struct HoverPopoverModifier<PopoverContent: View>: ViewModifier {
+    var arrowEdge: Edge = .bottom
+    @ViewBuilder let popoverContent: () -> PopoverContent
+
+    @State private var isPresented = false
+    @State private var presentWorkItem: DispatchWorkItem?
+    @State private var dismissWorkItem: DispatchWorkItem?
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { hovering in
+                hovering ? schedulePresent() : scheduleDismiss()
+            }
+            .popover(isPresented: $isPresented, arrowEdge: arrowEdge) {
+                popoverContent()
+                    .onHover { hovering in
+                        hovering ? cancelPending() : scheduleDismiss()
+                    }
+            }
+    }
+
+    private func schedulePresent() {
+        cancelPending()
+        let item = DispatchWorkItem { isPresented = true }
+        presentWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + HoverPopoverTiming.presentDelay, execute: item)
+    }
+
+    private func scheduleDismiss() {
+        cancelPending()
+        let item = DispatchWorkItem { isPresented = false }
+        dismissWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + HoverPopoverTiming.dismissGrace, execute: item)
+    }
+
+    private func cancelPending() {
+        presentWorkItem?.cancel()
+        presentWorkItem = nil
+        dismissWorkItem?.cancel()
+        dismissWorkItem = nil
+    }
+}
+
+extension View {
+    /// Popover shown after the pointer settles on the view; see `HoverPopoverModifier`.
+    func hoverPopover(
+        arrowEdge: Edge = .bottom,
+        @ViewBuilder content: @escaping () -> some View
+    ) -> some View {
+        modifier(HoverPopoverModifier(arrowEdge: arrowEdge, popoverContent: content))
+    }
+}
+
 /// Brand color constant only — display names and agent colors come from
 /// `AgentRegistry.shared`.
 enum TVColor {
@@ -412,8 +477,6 @@ private struct CostMetricCard: View {
     let totalCost: Double
     let models: [ModelEntry]
     @ObservedObject private var l10n = L10n.shared
-    @State private var showsBreakdown = false
-    @State private var dismissWorkItem: DispatchWorkItem?
 
     private var costByModel: [ModelEntry] {
         mergedByModel(models)
@@ -430,32 +493,9 @@ private struct CostMetricCard: View {
         MetricCard(title: l10n.cost, value: tvFormatCost(totalCost),
                    icon: "dollarsign.circle.fill", tint: .orange)
             .contentShape(RoundedRectangle(cornerRadius: 12))
-            .onHover { hovering in
-                hovering ? presentBreakdown() : scheduleDismiss()
-            }
-            .popover(isPresented: $showsBreakdown, arrowEdge: .bottom) {
+            .hoverPopover {
                 CostBreakdownTip(models: costByModel, totalCost: totalCost)
-                    .onHover { hovering in
-                        hovering ? cancelDismiss() : scheduleDismiss()
-                    }
             }
-    }
-
-    private func presentBreakdown() {
-        cancelDismiss()
-        showsBreakdown = true
-    }
-
-    private func scheduleDismiss() {
-        cancelDismiss()
-        let item = DispatchWorkItem { showsBreakdown = false }
-        dismissWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: item)
-    }
-
-    private func cancelDismiss() {
-        dismissWorkItem?.cancel()
-        dismissWorkItem = nil
     }
 }
 
@@ -622,8 +662,6 @@ private struct ModelBreakdownView: View {
 private struct ModelBreakdownRow: View {
     let entry: ModelEntry
     let compact: Bool
-    @State private var showsBreakdown = false
-    @State private var dismissWorkItem: DispatchWorkItem?
 
     var body: some View {
         VStack(spacing: 5) {
@@ -649,32 +687,9 @@ private struct ModelBreakdownRow: View {
             .frame(height: 5)
         }
         .contentShape(Rectangle())
-        .onHover { hovering in
-            hovering ? presentBreakdown() : scheduleDismiss()
-        }
-        .popover(isPresented: $showsBreakdown, arrowEdge: .bottom) {
+        .hoverPopover {
             ModelUsageBreakdownTip(entry: entry)
-                .onHover { hovering in
-                    hovering ? cancelDismiss() : scheduleDismiss()
-                }
         }
-    }
-
-    private func presentBreakdown() {
-        cancelDismiss()
-        showsBreakdown = true
-    }
-
-    private func scheduleDismiss() {
-        cancelDismiss()
-        let item = DispatchWorkItem { showsBreakdown = false }
-        dismissWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: item)
-    }
-
-    private func cancelDismiss() {
-        dismissWorkItem?.cancel()
-        dismissWorkItem = nil
     }
 }
 
@@ -854,8 +869,6 @@ private struct AgentBreakdownRow: View {
     let models: [ModelEntry]
     let totalTokens: UInt64
     let compact: Bool
-    @State private var showsBreakdown = false
-    @State private var dismissWorkItem: DispatchWorkItem?
 
     var body: some View {
         VStack(spacing: 5) {
@@ -882,32 +895,9 @@ private struct AgentBreakdownRow: View {
             .frame(height: 5)
         }
         .contentShape(Rectangle())
-        .onHover { hovering in
-            hovering ? presentBreakdown() : scheduleDismiss()
-        }
-        .popover(isPresented: $showsBreakdown, arrowEdge: .bottom) {
+        .hoverPopover {
             AgentModelBreakdownTip(source: source, models: models)
-                .onHover { hovering in
-                    hovering ? cancelDismiss() : scheduleDismiss()
-                }
         }
-    }
-
-    private func presentBreakdown() {
-        cancelDismiss()
-        showsBreakdown = true
-    }
-
-    private func scheduleDismiss() {
-        cancelDismiss()
-        let item = DispatchWorkItem { showsBreakdown = false }
-        dismissWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: item)
-    }
-
-    private func cancelDismiss() {
-        dismissWorkItem?.cancel()
-        dismissWorkItem = nil
     }
 }
 
