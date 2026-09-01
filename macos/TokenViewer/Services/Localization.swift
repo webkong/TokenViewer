@@ -568,6 +568,78 @@ final class L10n: ObservableObject {
     var sync30min: String { "30 min" }
     var sync1hour: String { "1 hour" }
 
+    // MARK: - Device Sync errors
+    func deviceSyncErrorMessage(_ code: String) -> String {
+        switch code {
+        case "invalid_config":
+            return isZh ? "设备同步配置无效。" : "The Device Sync configuration is invalid."
+        case "credential_missing":
+            return isZh ? "设备同步凭据不可用。" : "Device Sync credentials are unavailable."
+        case "authentication_failed", "vault_auth_failed":
+            return isZh ? "设备同步认证失败。" : "Device Sync authentication failed."
+        case "network_unreachable":
+            return isZh ? "设备同步服务无法连接。" : "The Device Sync service could not be reached."
+        case "rate_limited":
+            return isZh ? "设备同步请求过于频繁，请稍后重试。" : "Device Sync requests are being rate limited. Try again later."
+        case "protocol_unsupported":
+            return isZh ? "设备同步协议版本不受支持。" : "The Device Sync protocol version is unsupported."
+        case "vault_not_found":
+            return isZh ? "未找到设备同步 Vault。" : "The Device Sync vault could not be found."
+        case "integrity_failed":
+            return isZh ? "设备同步数据完整性校验失败。" : "Device Sync data failed its integrity check."
+        case "remote_changed":
+            return isZh ? "远端设备同步数据已变化，请重新预览。" : "Remote Device Sync data changed. Preview again."
+        case "invalid_preview":
+            return isZh ? "设备同步预览无效，请重新预览。" : "The Device Sync preview is invalid. Preview again."
+        case "recovery_blocked":
+            return isZh ? "设备同步已暂停，请先完成恢复。" : "Device Sync is paused until recovery is completed."
+        case "operation_in_progress":
+            return isZh ? "已有设备同步操作正在进行。" : "Another Device Sync operation is already in progress."
+        case "invalid_transaction_id":
+            return isZh ? "设备同步事务标识无效。" : "The Device Sync transaction identifier is invalid."
+        case "invalid_recovery_path":
+            return isZh ? "设备同步恢复目录路径无效。" : "The Device Sync recovery directory path is invalid."
+        case "unknown_preference_key":
+            return isZh ? "远端包含不受支持的应用偏好设置。" : "The remote snapshot contains an unsupported app preference."
+        case "invalid_preference_mutation":
+            return isZh ? "远端应用偏好设置无效。" : "The remote app preference is invalid."
+        case "preference_write_failed":
+            return isZh ? "应用偏好设置写入失败，已尝试恢复。" : "The app preference could not be written; recovery was attempted."
+        case "rollback_failed":
+            return isZh ? "设备同步回滚失败，请保留恢复目录并处理。" : "Device Sync rollback failed. Keep the recovery directory and resolve it."
+        case "journal_write_failed":
+            return isZh ? "设备同步恢复记录写入失败。" : "The Device Sync recovery journal could not be written."
+        case "journal_read_failed", "journal_corrupt":
+            return isZh ? "设备同步恢复记录损坏或无法读取。" : "The Device Sync recovery journal is damaged or unreadable."
+        case "journal_cleanup_failed":
+            return isZh ? "设备同步已完成，但恢复记录清理失败。" : "Device Sync completed, but its recovery journal could not be removed."
+        case "recovery_ambiguous", "recovery_incomplete", "recovery_failed":
+            return isZh ? "设备同步恢复未完成，新的同步操作已暂停。" : "Device Sync recovery is incomplete; new sync operations are paused."
+        case "stale_preview":
+            return isZh ? "预览基线已变化，请重新预览。" : "The preview baseline changed. Preview again."
+        case "link_target_occupied":
+            return isZh ? "目标路径已被本地内容占用，未覆盖原数据。" : "A target path is occupied by local content; existing data was not replaced."
+        case "object_too_large":
+            return isZh ? "设备同步对象超过安全大小限制。" : "The Device Sync object exceeds its safety limit."
+        case "archive_unsafe":
+            return isZh ? "设备同步归档未通过安全校验。" : "The Device Sync archive failed safety validation."
+        case "conflict_requires_resolution":
+            return isZh ? "设备同步发现冲突，需要先解决。" : "Device Sync found a conflict that must be resolved first."
+        case "apply_failed":
+            return isZh ? "设备同步应用失败。" : "Device Sync could not apply the snapshot."
+        case "partial_failure":
+            return isZh ? "设备同步部分完成，请检查恢复状态。" : "Device Sync completed only partially; check the recovery state."
+        case "immutable_object_conflict":
+            return isZh ? "远端设备同步对象已存在但内容不同。" : "A remote Device Sync object already exists with different content."
+        case "remote_rollback_detected":
+            return isZh ? "检测到远端设备同步历史回退。" : "Remote Device Sync history moved backwards."
+        case "internal_error":
+            return isZh ? "设备同步内部错误。" : "An internal Device Sync error occurred."
+        default:
+            return isZh ? "设备同步失败。" : "Device Sync failed."
+        }
+    }
+
     // MARK: - Agent settings
     var pathLabel: String { "Path" }
     var linkLabel: String { "Link" }

@@ -1,4 +1,5 @@
 pub mod codex_home;
+pub mod device_sync;
 pub mod ffi;
 pub mod models;
 pub mod parsers;

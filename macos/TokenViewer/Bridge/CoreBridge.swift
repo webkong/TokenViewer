@@ -171,6 +171,24 @@ final class CoreBridge: @unchecked Sendable {
             return String(cString: ptr).data(using: .utf8)
         }
     }
+
+    /// Run a blocking FFI call on the same serial queue as synchronous calls.
+    /// The opaque handle is scoped to the queue closure and is never captured
+    /// by the async task or returned across the concurrency boundary.
+    func callAsync(
+        _ body: @escaping @Sendable (OpaquePointer) -> UnsafeMutablePointer<CChar>?
+    ) async -> Data? {
+        await withCheckedContinuation { continuation in
+            queue.async { [weak self] in
+                guard let self, let h = self.handle, let ptr = body(h) else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                defer { tt_free_string(ptr) }
+                continuation.resume(returning: String(cString: ptr).data(using: .utf8))
+            }
+        }
+    }
 }
 
 private enum CoreBridgeError: LocalizedError {

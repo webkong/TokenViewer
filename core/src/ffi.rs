@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use chrono::{DateTime, Datelike, Local, Timelike};
 
@@ -12,14 +14,23 @@ use crate::sync;
 /// string (`YYYY-MM-DD`), matching SQLite's
 /// `strftime('%Y-%m-%d', hour_start, 'localtime')`.
 fn local_date(hour_start: &str) -> Option<String> {
-    let ts = DateTime::parse_from_rfc3339(hour_start).ok()?.with_timezone(&Local);
-    Some(format!("{:04}-{:02}-{:02}", ts.year(), ts.month(), ts.day()))
+    let ts = DateTime::parse_from_rfc3339(hour_start)
+        .ok()?
+        .with_timezone(&Local);
+    Some(format!(
+        "{:04}-{:02}-{:02}",
+        ts.year(),
+        ts.month(),
+        ts.day()
+    ))
 }
 
 /// Like [`local_date`] but with the hour appended (`YYYY-MM-DDTHH`), matching
 /// `strftime('%Y-%m-%dT%H', hour_start, 'localtime')`.
 fn local_hour(hour_start: &str) -> Option<String> {
-    let ts = DateTime::parse_from_rfc3339(hour_start).ok()?.with_timezone(&Local);
+    let ts = DateTime::parse_from_rfc3339(hour_start)
+        .ok()?
+        .with_timezone(&Local);
     Some(format!(
         "{:04}-{:02}-{:02}T{:02}",
         ts.year(),
@@ -34,6 +45,7 @@ pub struct CoreHandle {
     pub db_path: PathBuf,
     pub home_dir: PathBuf,
     pub skills: crate::skills::SkillsCore,
+    pub device_sync: Mutex<crate::device_sync::DeviceSyncEngine>,
 }
 
 /// Initialize the core with a database path. Returns null on failure.
@@ -127,11 +139,20 @@ pub extern "C" fn tt_init(db_path: *const c_char) -> *mut CoreHandle {
                 let _ = git.set_sync_branch(&skills.git_branch);
             }
 
+            let device_sync = match crate::device_sync::DeviceSyncEngine::new(
+                home_dir.clone(),
+                skills.source_root.clone(),
+            ) {
+                Ok(engine) => engine,
+                Err(_) => return std::ptr::null_mut(),
+            };
+
             Box::into_raw(Box::new(CoreHandle {
                 db,
                 db_path: path,
                 home_dir,
                 skills,
+                device_sync: Mutex::new(device_sync),
             }))
         }
         Err(_) => std::ptr::null_mut(),
@@ -214,7 +235,9 @@ pub extern "C" fn tt_set_pricing(json: *const c_char) -> *mut c_char {
     }
     let raw = match unsafe { CStr::from_ptr(json) }.to_str() {
         Ok(s) => s,
-        Err(e) => return to_json_cstring(&serde_json::json!({"ok": false, "error": e.to_string()})),
+        Err(e) => {
+            return to_json_cstring(&serde_json::json!({"ok": false, "error": e.to_string()}))
+        }
     };
     match crate::pricing::set_pricing_override(raw) {
         Ok(models) => to_json_cstring(&serde_json::json!({"ok": true, "models": models})),
@@ -804,8 +827,16 @@ mod skills_scan_tests {
         let claude_skill = claude_skills.join("test-driven-development");
         fs::create_dir_all(&claude_skill).unwrap();
 
-        assert!(!is_agent_built_in_skill("codex", &codex_skills, &codex_skill));
-        assert!(!is_agent_built_in_skill("claude", &claude_skills, &claude_skill));
+        assert!(!is_agent_built_in_skill(
+            "codex",
+            &codex_skills,
+            &codex_skill
+        ));
+        assert!(!is_agent_built_in_skill(
+            "claude",
+            &claude_skills,
+            &claude_skill
+        ));
     }
 
     #[test]
@@ -1293,7 +1324,11 @@ pub extern "C" fn tt_skills_git_pull(handle: *mut CoreHandle) -> *mut c_char {
     let user_name = handle.skills.git_user_name.clone();
     let user_email = handle.skills.git_user_email.clone();
     match &mut handle.skills.git {
-        Some(git) => match git.pull(token.as_deref(), user_name.as_deref(), user_email.as_deref()) {
+        Some(git) => match git.pull(
+            token.as_deref(),
+            user_name.as_deref(),
+            user_email.as_deref(),
+        ) {
             Ok(status) => to_json_cstring(&status),
             Err(e) => to_json_cstring(&crate::skills::models::GitStatusInfo::error(&e)),
         },
@@ -1313,12 +1348,26 @@ pub extern "C" fn tt_skills_git_force_pull(handle: *mut CoreHandle) -> *mut c_ch
         Some(h) => h,
         None => return std::ptr::null_mut(),
     };
-    if handle.skills.git_remote_url.as_deref().unwrap_or("").trim().is_empty() {
+    if handle
+        .skills
+        .git_remote_url
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
         return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
             "No git remote URL configured",
         ));
     }
-    if handle.skills.git_token.as_deref().unwrap_or("").trim().is_empty() {
+    if handle
+        .skills
+        .git_token
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
         return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
             "No git token configured",
         ));
@@ -1404,12 +1453,26 @@ pub extern "C" fn tt_skills_git_force_push(handle: *mut CoreHandle) -> *mut c_ch
         Some(h) => h,
         None => return std::ptr::null_mut(),
     };
-    if handle.skills.git_remote_url.as_deref().unwrap_or("").trim().is_empty() {
+    if handle
+        .skills
+        .git_remote_url
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
         return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
             "No git remote URL configured",
         ));
     }
-    if handle.skills.git_token.as_deref().unwrap_or("").trim().is_empty() {
+    if handle
+        .skills
+        .git_token
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
         return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
             "No git token configured",
         ));
@@ -1529,12 +1592,26 @@ pub extern "C" fn tt_skills_git_force_push_filtered(
     if json.is_null() {
         return to_json_cstring(&crate::skills::models::GitStatusInfo::error("Null json"));
     }
-    if handle.skills.git_remote_url.as_deref().unwrap_or("").trim().is_empty() {
+    if handle
+        .skills
+        .git_remote_url
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
         return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
             "No git remote URL configured",
         ));
     }
-    if handle.skills.git_token.as_deref().unwrap_or("").trim().is_empty() {
+    if handle
+        .skills
+        .git_token
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
         return to_json_cstring(&crate::skills::models::GitStatusInfo::error(
             "No git token configured",
         ));
@@ -1661,6 +1738,19 @@ pub extern "C" fn tt_skills_set_git_config(
                 ));
             }
         }
+        let mut device_sync = match handle.device_sync.try_lock() {
+            Ok(engine) => engine,
+            Err(_) => {
+                return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+                    "Device Sync operation is in progress",
+                ))
+            }
+        };
+        if let Err(error) = device_sync.ensure_source_root_change_allowed() {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+                error.to_string(),
+            ));
+        }
         let old_source_root = handle.skills.source_root.clone();
         if let Err(e) = handle.skills.symlink.retarget_source_root_links(
             &old_source_root,
@@ -1680,7 +1770,12 @@ pub extern "C" fn tt_skills_set_git_config(
         }
         // Re-init scanner and symlink
         handle.skills.scanner = crate::skills::scanner::Scanner::new(path.clone());
-        handle.skills.symlink = crate::skills::symlink::SymlinkManager::new(path);
+        handle.skills.symlink = crate::skills::symlink::SymlinkManager::new(path.clone());
+        if let Err(error) = device_sync.set_source_root(path) {
+            return to_json_cstring(&crate::skills::models::SkillCommandResult::error(
+                error.to_string(),
+            ));
+        }
         if let Err(e) = persist_skills_config(&handle.skills.config_dir, &handle.skills) {
             return to_json_cstring(&crate::skills::models::SkillCommandResult::error(e));
         }
@@ -1796,12 +1891,11 @@ pub extern "C" fn tt_skills_detect_installed(handle: *mut CoreHandle) -> *mut c_
         None => return std::ptr::null_mut(),
     };
     let agents = handle.skills.registry.all();
-    let results: Vec<(String, bool)> =
-        crate::skills::agent_config::detect_installed_agents_cached(
-            &handle.skills.config_dir,
-            &agents,
-            true,
-        );
+    let results: Vec<(String, bool)> = crate::skills::agent_config::detect_installed_agents_cached(
+        &handle.skills.config_dir,
+        &agents,
+        true,
+    );
     let map: std::collections::HashMap<String, bool> = results.into_iter().collect();
     to_json_cstring(&map)
 }
@@ -1924,12 +2018,375 @@ pub extern "C" fn tt_sessions_rename(
     };
     let title = match unsafe { CStr::from_ptr(title) }.to_str() {
         Ok(s) => s,
-        Err(_) => return to_json_cstring(&serde_json::json!({"ok": false, "error": "Invalid title"})),
+        Err(_) => {
+            return to_json_cstring(&serde_json::json!({"ok": false, "error": "Invalid title"}))
+        }
     };
     match handle.db.rename_session(id, title) {
         Ok(()) => to_json_cstring(&serde_json::json!({"ok": true})),
         Err(e) => to_json_cstring(&serde_json::json!({"ok": false, "error": e.to_string()})),
     }
+}
+
+// --- Device Sync FFI ---
+
+#[derive(serde::Deserialize)]
+struct DeviceSyncPasswordRequest {
+    password: crate::device_sync::crypto::SecretString,
+}
+
+#[derive(serde::Deserialize)]
+struct DeviceSyncMasterKeyRequest {
+    master_key_b64: crate::device_sync::crypto::SecretString,
+}
+
+#[derive(serde::Deserialize, Default)]
+struct DeviceSyncPreviewRequest {
+    #[serde(default)]
+    enabled_agent_ids: Vec<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct DeviceSyncTokenRequest {
+    preview_token: String,
+    #[serde(default)]
+    enabled_agent_ids: Vec<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct DeviceSyncTransactionRequest {
+    transaction_id: String,
+}
+
+fn device_sync_envelope<T: serde::Serialize>(
+    result: Result<T, crate::device_sync::DeviceSyncError>,
+) -> *mut c_char {
+    match result {
+        Ok(data) => to_json_cstring(&serde_json::json!({
+            "ok": true,
+            "data": data,
+            "error": null,
+        })),
+        Err(error) => to_json_cstring(&serde_json::json!({
+            "ok": false,
+            "data": null,
+            "error": error,
+        })),
+    }
+}
+
+fn device_sync_lock_error() -> crate::device_sync::DeviceSyncError {
+    crate::device_sync::DeviceSyncError::new(
+        crate::device_sync::DeviceSyncErrorCode::OperationInProgress,
+        true,
+    )
+}
+
+fn with_device_sync<T, F>(handle: *mut CoreHandle, operation: F) -> *mut c_char
+where
+    T: serde::Serialize,
+    F: FnOnce(
+            &CoreHandle,
+            &mut crate::device_sync::DeviceSyncEngine,
+        ) -> Result<T, crate::device_sync::DeviceSyncError>
+        + std::panic::UnwindSafe,
+{
+    with_device_sync_internal(handle, operation, true)
+}
+
+fn with_device_sync_unblocked<T, F>(handle: *mut CoreHandle, operation: F) -> *mut c_char
+where
+    T: serde::Serialize,
+    F: FnOnce(
+            &CoreHandle,
+            &mut crate::device_sync::DeviceSyncEngine,
+        ) -> Result<T, crate::device_sync::DeviceSyncError>
+        + std::panic::UnwindSafe,
+{
+    with_device_sync_internal(handle, operation, false)
+}
+
+fn with_device_sync_internal<T, F>(
+    handle: *mut CoreHandle,
+    operation: F,
+    require_recovery_clear: bool,
+) -> *mut c_char
+where
+    T: serde::Serialize,
+    F: FnOnce(
+            &CoreHandle,
+            &mut crate::device_sync::DeviceSyncEngine,
+        ) -> Result<T, crate::device_sync::DeviceSyncError>
+        + std::panic::UnwindSafe,
+{
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let handle = unsafe { handle.as_ref() }.ok_or_else(|| {
+            crate::device_sync::DeviceSyncError::new(
+                crate::device_sync::DeviceSyncErrorCode::InvalidConfig,
+                false,
+            )
+        })?;
+        let mut engine = handle
+            .device_sync
+            .try_lock()
+            .map_err(|_| device_sync_lock_error())?;
+        if require_recovery_clear {
+            engine.ensure_operation_allowed()?;
+        }
+        operation(handle, &mut engine)
+    }));
+    match result {
+        Ok(result) => device_sync_envelope(result),
+        Err(_) => device_sync_envelope::<serde_json::Value>(Err(
+            crate::device_sync::DeviceSyncError::new(
+                crate::device_sync::DeviceSyncErrorCode::InternalError,
+                false,
+            ),
+        )),
+    }
+}
+
+fn with_mutable_device_sync<T, F>(handle: *mut CoreHandle, operation: F) -> *mut c_char
+where
+    T: serde::Serialize,
+    F: FnOnce(
+            &mut crate::skills::SkillsCore,
+            &mut crate::device_sync::DeviceSyncEngine,
+        ) -> Result<T, crate::device_sync::DeviceSyncError>
+        + std::panic::UnwindSafe,
+{
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let handle = unsafe { handle.as_mut() }.ok_or_else(|| {
+            crate::device_sync::DeviceSyncError::new(
+                crate::device_sync::DeviceSyncErrorCode::InvalidConfig,
+                false,
+            )
+        })?;
+        let mut engine = handle
+            .device_sync
+            .try_lock()
+            .map_err(|_| device_sync_lock_error())?;
+        engine.ensure_operation_allowed()?;
+        operation(&mut handle.skills, &mut engine)
+    }));
+    match result {
+        Ok(result) => device_sync_envelope(result),
+        Err(_) => device_sync_envelope::<serde_json::Value>(Err(
+            crate::device_sync::DeviceSyncError::new(
+                crate::device_sync::DeviceSyncErrorCode::InternalError,
+                false,
+            ),
+        )),
+    }
+}
+
+/// Return the non-sensitive Device Sync config and local identity envelope.
+#[no_mangle]
+pub extern "C" fn tt_device_sync_get_config(handle: *mut CoreHandle) -> *mut c_char {
+    with_device_sync_unblocked(handle, |_, engine| engine.status())
+}
+
+/// Save Device Sync config. Passwords and object-store secrets are not valid
+/// fields of this request and are never persisted by the core.
+#[no_mangle]
+pub extern "C" fn tt_device_sync_set_config(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let config = match parse_device_sync_json::<crate::device_sync::DeviceSyncConfig>(json) {
+        Ok(config) => config,
+        Err(error) => return device_sync_envelope::<serde_json::Value>(Err(error)),
+    };
+    with_device_sync(handle, move |_, engine| {
+        engine.set_config(config)?;
+        Ok(engine.config())
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn tt_device_sync_test_connection(handle: *mut CoreHandle) -> *mut c_char {
+    with_device_sync(handle, |_, engine| {
+        engine.test_connection()?;
+        Ok(serde_json::json!({"connected": true}))
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn tt_device_sync_create_vault(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let request = match parse_device_sync_json::<DeviceSyncPasswordRequest>(json) {
+        Ok(request) => request,
+        Err(error) => return device_sync_envelope::<serde_json::Value>(Err(error)),
+    };
+    with_device_sync(handle, move |_, engine| {
+        let password = request.password.as_str()?;
+        engine.create_vault(password)?;
+        engine.vault_session()
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn tt_device_sync_join_vault(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let request = match parse_device_sync_json::<DeviceSyncPasswordRequest>(json) {
+        Ok(request) => request,
+        Err(error) => return device_sync_envelope::<serde_json::Value>(Err(error)),
+    };
+    with_device_sync(handle, move |_, engine| {
+        let password = request.password.as_str()?;
+        engine.join_vault(password)?;
+        engine.vault_session()
+    })
+}
+
+/// Restore a master key loaded from the dedicated Swift Keychain item. The
+/// request is separate from config and status so the key never becomes
+/// persisted JSON state.
+#[no_mangle]
+pub extern "C" fn tt_device_sync_set_master_key(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let request = match parse_device_sync_json::<DeviceSyncMasterKeyRequest>(json) {
+        Ok(request) => request,
+        Err(error) => return device_sync_envelope::<serde_json::Value>(Err(error)),
+    };
+    with_device_sync_unblocked(handle, move |_, engine| {
+        engine.set_master_key_b64(request.master_key_b64.as_str()?)?;
+        Ok(serde_json::json!({"restored": true}))
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn tt_device_sync_preview_push(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let request = match parse_device_sync_json::<DeviceSyncPreviewRequest>(json) {
+        Ok(request) => request,
+        Err(error) => return device_sync_envelope::<serde_json::Value>(Err(error)),
+    };
+    with_device_sync(handle, move |handle, engine| {
+        engine.preview_push(&handle.skills, &request.enabled_agent_ids)
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn tt_device_sync_preview_pull(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let request = match parse_device_sync_json::<DeviceSyncPreviewRequest>(json) {
+        Ok(request) => request,
+        Err(error) => return device_sync_envelope::<serde_json::Value>(Err(error)),
+    };
+    with_device_sync(handle, move |handle, engine| {
+        engine.preview_pull(&handle.skills, &request.enabled_agent_ids)
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn tt_device_sync_push(handle: *mut CoreHandle, json: *const c_char) -> *mut c_char {
+    let request = match parse_device_sync_json::<DeviceSyncTokenRequest>(json) {
+        Ok(request) => request,
+        Err(error) => return device_sync_envelope::<serde_json::Value>(Err(error)),
+    };
+    with_device_sync(handle, move |handle, engine| {
+        engine.push(
+            &handle.skills,
+            &request.enabled_agent_ids,
+            &request.preview_token,
+        )
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn tt_device_sync_prepare_apply(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let request = match parse_device_sync_json::<DeviceSyncTokenRequest>(json) {
+        Ok(request) => request,
+        Err(error) => return device_sync_envelope::<serde_json::Value>(Err(error)),
+    };
+    with_device_sync(handle, move |handle, engine| {
+        engine.prepare_apply(&handle.skills, &request.preview_token)
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn tt_device_sync_commit_apply(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let request = match parse_device_sync_json::<DeviceSyncTransactionRequest>(json) {
+        Ok(request) => request,
+        Err(error) => return device_sync_envelope::<serde_json::Value>(Err(error)),
+    };
+    with_mutable_device_sync(handle, move |skills, engine| {
+        engine.commit_apply(skills, &request.transaction_id)
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn tt_device_sync_rollback_apply(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let request = match parse_device_sync_json::<DeviceSyncTransactionRequest>(json) {
+        Ok(request) => request,
+        Err(error) => return device_sync_envelope::<serde_json::Value>(Err(error)),
+    };
+    with_device_sync_unblocked(handle, move |_, engine| {
+        engine.rollback_apply(&request.transaction_id)?;
+        Ok(serde_json::json!({"rolled_back": true}))
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn tt_device_sync_finalize_apply(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let request = match parse_device_sync_json::<DeviceSyncTransactionRequest>(json) {
+        Ok(request) => request,
+        Err(error) => return device_sync_envelope::<serde_json::Value>(Err(error)),
+    };
+    with_device_sync_unblocked(handle, move |_, engine| {
+        engine.finalize_apply(&request.transaction_id)?;
+        Ok(serde_json::json!({"finalized": true}))
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn tt_device_sync_recover_pending_apply(handle: *mut CoreHandle) -> *mut c_char {
+    with_device_sync_unblocked(handle, |_, engine| engine.recover_pending_apply_detailed())
+}
+
+#[no_mangle]
+pub extern "C" fn tt_device_sync_list_snapshots(handle: *mut CoreHandle) -> *mut c_char {
+    with_device_sync(handle, |_, engine| engine.list_snapshots())
+}
+
+#[no_mangle]
+pub extern "C" fn tt_device_sync_get_status(handle: *mut CoreHandle) -> *mut c_char {
+    with_device_sync_unblocked(handle, |_, engine| engine.status())
+}
+
+fn parse_device_sync_json<T: serde::de::DeserializeOwned>(
+    json: *const c_char,
+) -> Result<T, crate::device_sync::DeviceSyncError> {
+    if json.is_null() {
+        return Err(crate::device_sync::DeviceSyncError::invalid_config(
+            "missing JSON request",
+        ));
+    }
+    unsafe { from_cstring_json(json) }
+        .map_err(|_| crate::device_sync::DeviceSyncError::invalid_config("invalid JSON request"))
 }
 
 // --- Helpers ---

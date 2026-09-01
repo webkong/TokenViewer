@@ -36,6 +36,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.register(defaults: ["syncFrequencyMinutes": 10])
         // Initialize Rust core early to create database
         _ = CoreBridge.shared
+        let deviceSyncCoordinator = DeviceSyncApplyCoordinator.shared
+        Task { @MainActor in
+            do {
+                _ = try await deviceSyncCoordinator.restoreMasterKeyIfAvailable()
+            } catch {
+                // The coordinator publishes the block while normal usage views
+                // continue to launch.
+                if !deviceSyncCoordinator.isRecoveryBlocked {
+                    deviceSyncCoordinator.markRecoveryBlocked(error)
+                }
+            }
+            do {
+                _ = try await deviceSyncCoordinator.recoverPendingApply()
+            } catch {
+                if !deviceSyncCoordinator.isRecoveryBlocked {
+                    deviceSyncCoordinator.markRecoveryBlocked(error)
+                }
+            }
+        }
         AgentRegistry.shared.loadIfNeeded()
         AgentRegistry.shared.refreshInstallStatus()
         LimitsVisibilityStore.load()

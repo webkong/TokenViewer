@@ -52,4 +52,21 @@ char* _Nullable tt_sessions_count(CoreHandle* _Nullable handle, const char* _Non
 char* _Nullable tt_sessions_sources(CoreHandle* _Nullable handle);
 char* _Nullable tt_sessions_rename(CoreHandle* _Nullable handle, const char* _Nonnull session_id, const char* _Nonnull title);
 
+char* _Nullable tt_device_sync_get_config(CoreHandle* _Nullable handle);
+char* _Nullable tt_device_sync_set_config(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_device_sync_test_connection(CoreHandle* _Nullable handle);
+char* _Nullable tt_device_sync_create_vault(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_device_sync_join_vault(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_device_sync_set_master_key(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_device_sync_preview_push(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_device_sync_push(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_device_sync_preview_pull(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_device_sync_prepare_apply(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_device_sync_commit_apply(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_device_sync_rollback_apply(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_device_sync_finalize_apply(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_device_sync_recover_pending_apply(CoreHandle* _Nullable handle);
+char* _Nullable tt_device_sync_list_snapshots(CoreHandle* _Nullable handle);
+char* _Nullable tt_device_sync_get_status(CoreHandle* _Nullable handle);
+
 #endif
