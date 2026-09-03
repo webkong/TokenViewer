@@ -286,8 +286,15 @@ final class L10n: ObservableObject {
         isZh ? "请求操作：\(operation)" : "Request operation: \(operation)"
     }
 
-    var deviceSyncRetrySuggestion: String {
-        isZh ? "请检查网络后稍后重试。" : "Check the network and try again later."
+    func deviceSyncRetryHint(_ code: String) -> String {
+        switch code {
+        case "remote_changed", "stale_preview", "invalid_preview":
+            return isZh ? "远端数据已变化，请重新预览后再试。" : "Remote data changed. Preview again and retry."
+        case "network_unreachable", "rate_limited":
+            return isZh ? "请检查网络后稍后重试。" : "Check the network and try again later."
+        default:
+            return isZh ? "请稍后重试。" : "Please try again later."
+        }
     }
     var directory: String { isZh ? "目录" : "Directory" }
     var add: String { isZh ? "添加" : "Add" }

@@ -804,7 +804,7 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                     if deviceSyncDiagnosticRetryable {
-                        Text(l10n.deviceSyncRetrySuggestion)
+                        Text(l10n.deviceSyncRetryHint(code))
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                     }
