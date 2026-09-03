@@ -28,7 +28,8 @@ struct ScanCursor {
 
 impl ScanCursor {
     fn from_json(data: Option<&str>) -> Self {
-        data.and_then(|s| serde_json::from_str(s).ok()).unwrap_or_default()
+        data.and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_default()
     }
 
     fn to_json(&self) -> String {
@@ -43,7 +44,12 @@ impl ScanCursor {
             .and_then(|metadata| {
                 let modified = metadata.modified().ok()?;
                 let elapsed = modified.duration_since(std::time::UNIX_EPOCH).ok()?;
-                Some(format!("{}:{}:{}", elapsed.as_secs(), elapsed.subsec_nanos(), metadata.len()))
+                Some(format!(
+                    "{}:{}:{}",
+                    elapsed.as_secs(),
+                    elapsed.subsec_nanos(),
+                    metadata.len()
+                ))
             })
             .unwrap_or_default();
         if self.stamps.get(path) != Some(&stamp) {
@@ -72,7 +78,9 @@ struct SessionMetrics {
 impl SessionMetrics {
     fn observe_timestamp(&mut self, timestamp: Option<&str>) {
         let Some(timestamp) = timestamp else { return };
-        let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(timestamp) else { return };
+        let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(timestamp) else {
+            return;
+        };
         let current = parsed.timestamp_millis();
         if let Some(previous) = self.last_timestamp_ms {
             let delta = current.saturating_sub(previous);
@@ -121,13 +129,22 @@ fn collect_claude_assistant_metrics(v: &Value, metrics: &mut SessionMetrics) {
     }
     if let Some(usage) = v.pointer("/message/usage").or_else(|| v.get("usage")) {
         metrics.input_tokens = metrics.input_tokens.saturating_add(
-            usage.get("input_tokens").and_then(Value::as_u64).unwrap_or(0),
+            usage
+                .get("input_tokens")
+                .and_then(Value::as_u64)
+                .unwrap_or(0),
         );
         metrics.output_tokens = metrics.output_tokens.saturating_add(
-            usage.get("output_tokens").and_then(Value::as_u64).unwrap_or(0),
+            usage
+                .get("output_tokens")
+                .and_then(Value::as_u64)
+                .unwrap_or(0),
         );
         metrics.cached_input_tokens = metrics.cached_input_tokens.saturating_add(
-            usage.get("cache_read_input_tokens").and_then(Value::as_u64).unwrap_or(0),
+            usage
+                .get("cache_read_input_tokens")
+                .and_then(Value::as_u64)
+                .unwrap_or(0),
         );
         metrics.cache_creation_input_tokens = metrics.cache_creation_input_tokens.saturating_add(
             usage
@@ -152,8 +169,15 @@ fn collect_claude_assistant_metrics(v: &Value, metrics: &mut SessionMetrics) {
 fn is_edit_tool(name: &str) -> bool {
     matches!(
         name.trim().to_ascii_lowercase().as_str(),
-        "apply_patch" | "edit" | "write" | "multiedit" | "notebookedit"
-            | "search_replace" | "str_replace" | "create_file" | "write_file"
+        "apply_patch"
+            | "edit"
+            | "write"
+            | "multiedit"
+            | "notebookedit"
+            | "search_replace"
+            | "str_replace"
+            | "create_file"
+            | "write_file"
     )
 }
 
@@ -197,7 +221,12 @@ pub fn scan_and_store(db: &Database, home: &Path) -> Result<usize, String> {
 
 // --- Claude Code ----------------------------------------------------------
 
-fn scan_claude(home: &Path, cursor: &mut ScanCursor, out: &mut Vec<Session>, all_ids: &mut Vec<String>) {
+fn scan_claude(
+    home: &Path,
+    cursor: &mut ScanCursor,
+    out: &mut Vec<Session>,
+    all_ids: &mut Vec<String>,
+) {
     let base = home.join(".claude").join("projects");
     if !base.exists() {
         return;
@@ -232,14 +261,17 @@ fn parse_claude_session(file: &Path, raw_id: &str) -> Option<Session> {
     let mut metrics = SessionMetrics::default();
 
     for (line, _) in reader {
-        let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
+        let Ok(v) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
         metrics.observe_timestamp(v.get("timestamp").and_then(Value::as_str));
 
         if let Some(t) = v.get("type").and_then(Value::as_str) {
             match t {
                 "ai-title" => {
                     if let Some(title) = v.get("aiTitle").and_then(Value::as_str) {
-                        let cleaned = clean_user_message(title).unwrap_or_else(|| title.trim().to_string());
+                        let cleaned =
+                            clean_user_message(title).unwrap_or_else(|| title.trim().to_string());
                         if !cleaned.is_empty() {
                             agent_title = cleaned;
                         }
@@ -253,7 +285,11 @@ fn parse_claude_session(file: &Path, raw_id: &str) -> Option<Session> {
                         }
                     }
                     if started_at.is_empty() {
-                        started_at = v.get("timestamp").and_then(Value::as_str).unwrap_or("").to_string();
+                        started_at = v
+                            .get("timestamp")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
                     }
                 }
                 "user" => {
@@ -266,10 +302,18 @@ fn parse_claude_session(file: &Path, raw_id: &str) -> Option<Session> {
             }
         }
         if cwd.is_empty() {
-            cwd = v.get("cwd").and_then(Value::as_str).unwrap_or("").to_string();
+            cwd = v
+                .get("cwd")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
         }
         if started_at.is_empty() {
-            started_at = v.get("timestamp").and_then(Value::as_str).unwrap_or("").to_string();
+            started_at = v
+                .get("timestamp")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
         }
     }
 
@@ -347,7 +391,12 @@ fn claude_user_text(v: &Value) -> Option<String> {
 
 // --- Codex -----------------------------------------------------------------
 
-fn scan_codex(home: &Path, cursor: &mut ScanCursor, out: &mut Vec<Session>, all_ids: &mut Vec<String>) {
+fn scan_codex(
+    home: &Path,
+    cursor: &mut ScanCursor,
+    out: &mut Vec<Session>,
+    all_ids: &mut Vec<String>,
+) {
     let homes = crate::codex_home::discover_codex_homes(home, &[], &[], false);
     let default_home = normalize(&home.join(".codex"));
     let mut bases: Vec<(PathBuf, String)> = Vec::new();
@@ -380,7 +429,12 @@ fn scan_codex(home: &Path, cursor: &mut ScanCursor, out: &mut Vec<Session>, all_
         let title_index = load_codex_title_index(&index_home.join("session_index.jsonl"));
         let pattern = format!("{}/**/rollout-*.jsonl", base.display());
         for file in glob_files(&pattern) {
-            let Some(raw_id) = extract_last_uuid(&file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()) else {
+            let Some(raw_id) = extract_last_uuid(
+                &file
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default(),
+            ) else {
                 continue;
             };
             let path_str = file.to_string_lossy().to_string();
@@ -398,11 +452,19 @@ fn scan_codex(home: &Path, cursor: &mut ScanCursor, out: &mut Vec<Session>, all_
 
 fn load_codex_title_index(path: &Path) -> HashMap<String, String> {
     let mut titles = HashMap::new();
-    let Ok(reader) = OffsetLineReader::new(path, 0) else { return titles };
+    let Ok(reader) = OffsetLineReader::new(path, 0) else {
+        return titles;
+    };
     for (line, _) in reader {
-        let Ok(value) = serde_json::from_str::<Value>(&line) else { continue };
-        let Some(id) = value.get("id").and_then(Value::as_str) else { continue };
-        let Some(title) = value.get("thread_name").and_then(Value::as_str) else { continue };
+        let Ok(value) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        let Some(id) = value.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(title) = value.get("thread_name").and_then(Value::as_str) else {
+            continue;
+        };
         if let Some(cleaned) = clean_user_message(title) {
             titles.insert(id.to_string(), cleaned);
         }
@@ -424,7 +486,9 @@ fn parse_codex_session(
     let mut metrics = SessionMetrics::default();
 
     for (line, _) in reader {
-        let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
+        let Ok(v) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
         metrics.observe_timestamp(v.get("timestamp").and_then(Value::as_str));
         let event_type = v.get("type").and_then(Value::as_str).unwrap_or("");
         let payload = v.get("payload").unwrap_or(&Value::Null);
@@ -432,13 +496,17 @@ fn parse_codex_session(
         match event_type {
             "thread_name_updated" => {
                 if let Some(name) = v.get("thread_name").and_then(Value::as_str) {
-                    let cleaned = clean_user_message(name).unwrap_or_else(|| name.trim().to_string());
+                    let cleaned =
+                        clean_user_message(name).unwrap_or_else(|| name.trim().to_string());
                     if !cleaned.is_empty() {
                         agent_title = cleaned;
                     }
                 }
             }
-            "message" if v.get("role").and_then(Value::as_str) == Some("user") && first_user.is_empty() => {
+            "message"
+                if v.get("role").and_then(Value::as_str) == Some("user")
+                    && first_user.is_empty() =>
+            {
                 if let Some(text) = codex_user_text(&v) {
                     if let Some(cleaned) = clean_user_message(&text) {
                         first_user = cleaned;
@@ -483,7 +551,9 @@ fn parse_codex_session(
         }
 
         if cwd.is_empty() {
-            cwd = payload.get("cwd").and_then(Value::as_str)
+            cwd = payload
+                .get("cwd")
+                .and_then(Value::as_str)
                 .or_else(|| v.get("cwd").and_then(Value::as_str))
                 .unwrap_or("")
                 .to_string();
@@ -539,7 +609,11 @@ fn codex_event_user_text(payload: &Value) -> Option<String> {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    if text.trim().is_empty() { None } else { Some(text) }
+    if text.trim().is_empty() {
+        None
+    } else {
+        Some(text)
+    }
 }
 
 fn collect_codex_token_metrics(payload: &Value, metrics: &mut SessionMetrics) {
@@ -549,7 +623,10 @@ fn collect_codex_token_metrics(payload: &Value, metrics: &mut SessionMetrics) {
     else {
         return;
     };
-    let raw_input = usage.get("input_tokens").and_then(Value::as_u64).unwrap_or(0);
+    let raw_input = usage
+        .get("input_tokens")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
     let cached = usage
         .get("cached_input_tokens")
         .and_then(Value::as_u64)
@@ -561,7 +638,10 @@ fn collect_codex_token_metrics(payload: &Value, metrics: &mut SessionMetrics) {
         .or_else(|| usage.get("cache_write_input_tokens"))
         .and_then(Value::as_u64)
         .unwrap_or(0);
-    metrics.output_tokens = usage.get("output_tokens").and_then(Value::as_u64).unwrap_or(0);
+    metrics.output_tokens = usage
+        .get("output_tokens")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
     metrics.reasoning_output_tokens = usage
         .get("reasoning_output_tokens")
         .and_then(Value::as_u64)
@@ -603,12 +683,21 @@ fn codex_user_text(v: &Value) -> Option<String> {
         }
     }
     let joined = parts.join("\n");
-    if joined.trim().is_empty() { None } else { Some(joined) }
+    if joined.trim().is_empty() {
+        None
+    } else {
+        Some(joined)
+    }
 }
 
 // --- Grok ------------------------------------------------------------------
 
-fn scan_grok(home: &Path, cursor: &mut ScanCursor, out: &mut Vec<Session>, all_ids: &mut Vec<String>) {
+fn scan_grok(
+    home: &Path,
+    cursor: &mut ScanCursor,
+    out: &mut Vec<Session>,
+    all_ids: &mut Vec<String>,
+) {
     let base = home.join(".grok").join("sessions");
     if !base.exists() {
         return;
@@ -616,7 +705,10 @@ fn scan_grok(home: &Path, cursor: &mut ScanCursor, out: &mut Vec<Session>, all_i
     let pattern = format!("{}/**/summary.json", base.display());
     for file in glob_files(&pattern) {
         let Some(dir) = file.parent() else { continue };
-        let raw_id = dir.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        let raw_id = dir
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
         if raw_id.is_empty() {
             continue;
         }
@@ -635,18 +727,28 @@ fn parse_grok_session(file: &Path, raw_id: &str) -> Option<Session> {
     let data = crate::parsers::utils::read_to_string_capped(file)?;
     let v: Value = serde_json::from_str(&data).ok()?;
     let info = v.get("info");
-    let cwd = info.and_then(|i| i.get("cwd")).and_then(Value::as_str).unwrap_or("").to_string();
-    let agent_title = v.get("generated_title").and_then(Value::as_str)
+    let cwd = info
+        .and_then(|i| i.get("cwd"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let agent_title = v
+        .get("generated_title")
+        .and_then(Value::as_str)
         .or_else(|| v.get("session_summary").and_then(Value::as_str))
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| clean_user_message(s).unwrap_or_else(|| s.to_string()))
         .unwrap_or_default();
-    let started_at = info.and_then(|i| i.get("created_at")).and_then(Value::as_str)
+    let started_at = info
+        .and_then(|i| i.get("created_at"))
+        .and_then(Value::as_str)
         .or_else(|| v.get("last_active_at").and_then(Value::as_str))
         .unwrap_or("")
         .to_string();
-    let last_active_at = v.get("last_active_at").and_then(Value::as_str)
+    let last_active_at = v
+        .get("last_active_at")
+        .and_then(Value::as_str)
         .map(str::to_string)
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| mtime_iso(file));
@@ -747,7 +849,9 @@ fn scan_opencode(home: &Path, out: &mut Vec<Session>, all_ids: &mut Vec<String>)
     if !db_path.exists() {
         return;
     }
-    let Some(conn) = open_sqlite_readonly(&db_path) else { return };
+    let Some(conn) = open_sqlite_readonly(&db_path) else {
+        return;
+    };
     let Ok(mut stmt) = conn.prepare(
         "SELECT id, directory, title, time_created, time_updated, model,
                 COALESCE(tokens_input,0) + COALESCE(tokens_output,0) + COALESCE(tokens_reasoning,0)
@@ -795,7 +899,12 @@ fn scan_opencode(home: &Path, out: &mut Vec<Session>, all_ids: &mut Vec<String>)
 
 // --- Kiro CLI (legacy JSON + v3 session.json) -------------------------------
 
-fn scan_kiro(home: &Path, cursor: &mut ScanCursor, out: &mut Vec<Session>, all_ids: &mut Vec<String>) {
+fn scan_kiro(
+    home: &Path,
+    cursor: &mut ScanCursor,
+    out: &mut Vec<Session>,
+    all_ids: &mut Vec<String>,
+) {
     let sessions_root = home.join(".kiro").join("sessions");
     if !sessions_root.exists() {
         return;
@@ -803,7 +912,10 @@ fn scan_kiro(home: &Path, cursor: &mut ScanCursor, out: &mut Vec<Session>, all_i
 
     let legacy_pattern = format!("{}/cli/*.json", sessions_root.display());
     for file in glob_files(&legacy_pattern) {
-        let raw_id = file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        let raw_id = file
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
         if raw_id.is_empty() {
             continue;
         }
@@ -819,10 +931,17 @@ fn scan_kiro(home: &Path, cursor: &mut ScanCursor, out: &mut Vec<Session>, all_i
 
     let v3_pattern = format!("{}/*/sess_*/session.json", sessions_root.display());
     for file in glob_files(&v3_pattern) {
-        let Some(dir_name) = file.parent().and_then(|p| p.file_name()).map(|s| s.to_string_lossy().to_string()) else {
+        let Some(dir_name) = file
+            .parent()
+            .and_then(|p| p.file_name())
+            .map(|s| s.to_string_lossy().to_string())
+        else {
             continue;
         };
-        let raw_id = dir_name.strip_prefix("sess_").unwrap_or(&dir_name).to_string();
+        let raw_id = dir_name
+            .strip_prefix("sess_")
+            .unwrap_or(&dir_name)
+            .to_string();
         let path_str = file.to_string_lossy().to_string();
         all_ids.push(format!("kiro:{raw_id}"));
         if !cursor.changed(&path_str) {
@@ -837,11 +956,30 @@ fn scan_kiro(home: &Path, cursor: &mut ScanCursor, out: &mut Vec<Session>, all_i
 fn parse_kiro_legacy(file: &Path, raw_id: &str) -> Option<Session> {
     let data = crate::parsers::utils::read_to_string_capped(file)?;
     let v: Value = serde_json::from_str(&data).ok()?;
-    let session_id = v.get("session_id").and_then(Value::as_str).unwrap_or(raw_id);
-    let cwd = v.get("cwd").and_then(Value::as_str).unwrap_or("").to_string();
-    let agent_title = v.get("title").and_then(Value::as_str).map(str::trim).unwrap_or("");
-    let started_at = v.get("created_at").and_then(Value::as_str).unwrap_or("").to_string();
-    let last_active_at = v.get("updated_at").and_then(Value::as_str).unwrap_or("").to_string();
+    let session_id = v
+        .get("session_id")
+        .and_then(Value::as_str)
+        .unwrap_or(raw_id);
+    let cwd = v
+        .get("cwd")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let agent_title = v
+        .get("title")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    let started_at = v
+        .get("created_at")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let last_active_at = v
+        .get("updated_at")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
     let model = v
         .pointer("/session_state/rts_model_state/model_info/model_name")
         .and_then(Value::as_str)
@@ -849,7 +987,11 @@ fn parse_kiro_legacy(file: &Path, raw_id: &str) -> Option<Session> {
         .to_string();
     let project = project_label(&cwd);
     let title = derive_title(agent_title, "", &project, &started_at);
-    let last_active_at = if last_active_at.is_empty() { mtime_iso(file) } else { last_active_at };
+    let last_active_at = if last_active_at.is_empty() {
+        mtime_iso(file)
+    } else {
+        last_active_at
+    };
     Some(empty_session(
         format!("kiro:{session_id}"),
         "kiro",
@@ -876,13 +1018,33 @@ fn parse_kiro_v3(file: &Path, raw_id: &str) -> Option<Session> {
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
-    let agent_title = v.get("title").and_then(Value::as_str).map(str::trim).unwrap_or("");
-    let started_at = v.get("createdAt").and_then(Value::as_str).unwrap_or("").to_string();
-    let last_active_at = v.get("lastModifiedAt").and_then(Value::as_str).unwrap_or("").to_string();
-    let model = v.get("modelId").and_then(Value::as_str).unwrap_or("").to_string();
+    let agent_title = v
+        .get("title")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    let started_at = v
+        .get("createdAt")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let last_active_at = v
+        .get("lastModifiedAt")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let model = v
+        .get("modelId")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
     let project = project_label(&cwd);
     let title = derive_title(agent_title, "", &project, &started_at);
-    let last_active_at = if last_active_at.is_empty() { mtime_iso(file) } else { last_active_at };
+    let last_active_at = if last_active_at.is_empty() {
+        mtime_iso(file)
+    } else {
+        last_active_at
+    };
     Some(empty_session(
         format!("kiro:{raw_id}"),
         "kiro",
@@ -908,10 +1070,12 @@ fn scan_copilot(home: &Path, out: &mut Vec<Session>, all_ids: &mut Vec<String>) 
     if !db_path.exists() {
         return;
     }
-    let Some(conn) = open_sqlite_readonly(&db_path) else { return };
-    let Ok(mut stmt) = conn.prepare(
-        "SELECT id, cwd, summary, created_at, updated_at FROM sessions",
-    ) else {
+    let Some(conn) = open_sqlite_readonly(&db_path) else {
+        return;
+    };
+    let Ok(mut stmt) =
+        conn.prepare("SELECT id, cwd, summary, created_at, updated_at FROM sessions")
+    else {
         return;
     };
     let Ok(mut turn_stmt) = conn.prepare(
@@ -964,14 +1128,22 @@ fn scan_copilot(home: &Path, out: &mut Vec<Session>, all_ids: &mut Vec<String>) 
 
 // --- Gemini CLI (chats/session-*.json) --------------------------------------
 
-fn scan_gemini(home: &Path, cursor: &mut ScanCursor, out: &mut Vec<Session>, all_ids: &mut Vec<String>) {
+fn scan_gemini(
+    home: &Path,
+    cursor: &mut ScanCursor,
+    out: &mut Vec<Session>,
+    all_ids: &mut Vec<String>,
+) {
     let base = home.join(".gemini").join("tmp");
     if !base.exists() {
         return;
     }
     let pattern = format!("{}/*/chats/session-*.json", base.display());
     for file in glob_files(&pattern) {
-        let stem = file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        let stem = file
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
         let raw_id = stem.strip_prefix("session-").unwrap_or(&stem).to_string();
         let path_str = file.to_string_lossy().to_string();
         all_ids.push(format!("gemini:{raw_id}"));
@@ -1036,7 +1208,9 @@ fn scan_hermes(home: &Path, out: &mut Vec<Session>, all_ids: &mut Vec<String>) {
     if !db_path.exists() {
         return;
     }
-    let Some(conn) = open_sqlite_readonly(&db_path) else { return };
+    let Some(conn) = open_sqlite_readonly(&db_path) else {
+        return;
+    };
     let Ok(mut stmt) = conn.prepare(
         "SELECT id, model, started_at, ended_at, input_tokens, output_tokens, \
          cache_read_tokens, cache_write_tokens, reasoning_tokens FROM sessions",
@@ -1059,11 +1233,14 @@ fn scan_hermes(home: &Path, out: &mut Vec<Session>, all_ids: &mut Vec<String>) {
         return;
     };
     for row in rows.flatten() {
-        let (id, model, started_at, ended_at, input, output, cache_read, cache_write, reasoning) = row;
+        let (id, model, started_at, ended_at, input, output, cache_read, cache_write, reasoning) =
+            row;
         all_ids.push(format!("hermes:{id}"));
         let total = (input + output + cache_read + cache_write + reasoning).max(0) as u64;
         let started = epoch_secs_to_iso(started_at);
-        let ended = ended_at.map(epoch_secs_to_iso).unwrap_or_else(|| started.clone());
+        let ended = ended_at
+            .map(epoch_secs_to_iso)
+            .unwrap_or_else(|| started.clone());
         let title = derive_title("", "", "", &started);
         out.push(empty_session(
             format!("hermes:{id}"),
@@ -1113,7 +1290,12 @@ fn clean_user_message(raw: &str) -> Option<String> {
     s = strip_uuids(&s);
     s = strip_noise_tokens(&s);
     // Collapse whitespace.
-    let collapsed = s.split_whitespace().collect::<Vec<_>>().join(" ").trim().to_string();
+    let collapsed = s
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .to_string();
     if collapsed.is_empty() {
         return None;
     }
@@ -1170,14 +1352,43 @@ fn is_generic_phrase(s: &str) -> bool {
     if trimmed.chars().count() <= 2 {
         return true;
     }
-    if trimmed.chars().all(|c| c.is_ascii_digit() || c.is_whitespace()) {
+    if trimmed
+        .chars()
+        .all(|c| c.is_ascii_digit() || c.is_whitespace())
+    {
         return true;
     }
     let generics = [
-        "hi", "hello", "hey", "ok", "okay", "yes", "no", "thanks", "thank you", "thx",
-        "continue", "go on", "done", "test", "help", "why", "what", "great", "good",
-        "继续", "你好", "好的", "谢谢", "测试", "在吗", "嗯", "好", "发布新版本",
-        "release a new version", "publish a new version",
+        "hi",
+        "hello",
+        "hey",
+        "ok",
+        "okay",
+        "yes",
+        "no",
+        "thanks",
+        "thank you",
+        "thx",
+        "continue",
+        "go on",
+        "done",
+        "test",
+        "help",
+        "why",
+        "what",
+        "great",
+        "good",
+        "继续",
+        "你好",
+        "好的",
+        "谢谢",
+        "测试",
+        "在吗",
+        "嗯",
+        "好",
+        "发布新版本",
+        "release a new version",
+        "publish a new version",
     ];
     generics.contains(&trimmed)
 }
@@ -1188,7 +1399,9 @@ fn strip_embedded_block(input: &str, opening: &str, closing: &str) -> String {
     let mut result = input.to_string();
     loop {
         let lower = result.to_ascii_lowercase();
-        let Some(start) = lower.find(opening) else { break };
+        let Some(start) = lower.find(opening) else {
+            break;
+        };
         let end = if let Some(relative_end) = lower[start..].find(closing) {
             start + relative_end + closing.len()
         } else if let Some(relative_end) = lower[start..].find('>') {
@@ -1315,7 +1528,13 @@ fn local_time_label(iso: &str) -> String {
         Ok(dt) => dt.with_timezone(&Local),
         Err(_) => return String::new(),
     };
-    format!("{:02}/{:02} {:02}:{:02}", dt.month(), dt.day(), dt.hour(), dt.minute())
+    format!(
+        "{:02}/{:02} {:02}:{:02}",
+        dt.month(),
+        dt.day(),
+        dt.hour(),
+        dt.minute()
+    )
 }
 
 fn mtime_iso(path: &Path) -> String {
@@ -1345,7 +1564,9 @@ mod tests {
     #[test]
     fn cleans_uuids_paths_images_and_generic_phrases() {
         assert_eq!(
-            clean_user_message("fix the bug in /Users/wangsw/src/app 019dddf4-b360-7161-8d51-e36bb9c7e1a6"),
+            clean_user_message(
+                "fix the bug in /Users/wangsw/src/app 019dddf4-b360-7161-8d51-e36bb9c7e1a6"
+            ),
             Some("fix the bug in".to_string())
         );
         assert_eq!(
@@ -1359,7 +1580,10 @@ mod tests {
 
     #[test]
     fn rejects_system_and_agents_boilerplate() {
-        assert_eq!(clean_user_message("You are a coding agent that helps..."), None);
+        assert_eq!(
+            clean_user_message("You are a coding agent that helps..."),
+            None
+        );
         assert_eq!(clean_user_message("<system-reminder> do something"), None);
         assert_eq!(clean_user_message("read CLAUDE.md and AGENTS.md"), None);
     }
@@ -1367,7 +1591,12 @@ mod tests {
     #[test]
     fn derive_title_precedence() {
         assert_eq!(
-            derive_title("Add login", "add a login page", "myapp", "2026-08-10T12:00:00Z"),
+            derive_title(
+                "Add login",
+                "add a login page",
+                "myapp",
+                "2026-08-10T12:00:00Z"
+            ),
             "Add login"
         );
         assert_eq!(

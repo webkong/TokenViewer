@@ -1,7 +1,7 @@
+pub mod agent_config;
 pub mod git_engine;
 pub mod install;
 pub mod models;
-pub mod agent_config;
 pub mod scanner;
 pub mod storage;
 pub mod symlink;
@@ -11,10 +11,10 @@ use std::path::PathBuf;
 
 use crate::storage::Database;
 
+use self::agent_config::AgentRegistry;
 use self::git_engine::GitEngine;
 use self::install::SkillInstaller;
 use self::models::{SkillInstallRequest, SkillInstallResponse};
-use self::agent_config::AgentRegistry;
 use self::scanner::Scanner;
 use self::symlink::SymlinkManager;
 

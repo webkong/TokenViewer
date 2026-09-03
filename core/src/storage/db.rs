@@ -297,6 +297,50 @@ impl Database {
         Ok(())
     }
 
+    pub fn all_usage(&self) -> SqlResult<Vec<UsageRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, hour_start, source, model, project_key, project_ref,
+                    input_tokens, output_tokens, cached_input_tokens,
+                    cache_creation_input_tokens, reasoning_output_tokens,
+                    total_tokens, conversation_count
+             FROM usage ORDER BY hour_start, source, model, project_key",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(UsageRecord {
+                id: row.get(0)?, hour_start: row.get(1)?, source: row.get(2)?,
+                model: row.get(3)?, project_key: row.get(4)?, project_ref: row.get(5)?,
+                input_tokens: row.get::<_, i64>(6)? as u64,
+                output_tokens: row.get::<_, i64>(7)? as u64,
+                cached_input_tokens: row.get::<_, i64>(8)? as u64,
+                cache_creation_input_tokens: row.get::<_, i64>(9)? as u64,
+                reasoning_output_tokens: row.get::<_, i64>(10)? as u64,
+                total_tokens: row.get::<_, i64>(11)? as u64,
+                conversation_count: row.get::<_, i64>(12)? as u32,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn replace_usage(&self, records: &[UsageRecord]) -> SqlResult<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM usage", [])?;
+        for record in records {
+            let model = normalize_model(&record.model);
+            tx.execute(
+                "INSERT INTO usage (hour_start, source, model, project_key, project_ref,
+                    input_tokens, output_tokens, cached_input_tokens,
+                    cache_creation_input_tokens, reasoning_output_tokens,
+                    total_tokens, conversation_count)
+                 VALUES (?1, ?2, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                params![record.hour_start, record.source, model, record.project_key,
+                    record.input_tokens, record.output_tokens, record.cached_input_tokens,
+                    record.cache_creation_input_tokens, record.reasoning_output_tokens,
+                    record.total_tokens, record.conversation_count],
+            )?;
+        }
+        tx.commit()
+    }
+
     /// Clear processed usage data and sync cursors so the next sync replays
     /// the original raw files from scratch.
     pub fn clear_processed_data(&self) -> SqlResult<()> {
@@ -837,15 +881,20 @@ impl Database {
         }
         let source_ph = sources.iter().map(|_| "?").collect::<Vec<_>>().join(",");
         let sql = format!("SELECT id FROM sessions WHERE source IN ({source_ph})");
-        let source_params: Vec<&dyn rusqlite::ToSql> =
-            sources.iter().map(|source| source as &dyn rusqlite::ToSql).collect();
+        let source_params: Vec<&dyn rusqlite::ToSql> = sources
+            .iter()
+            .map(|source| source as &dyn rusqlite::ToSql)
+            .collect();
         let mut stmt = self.conn.prepare(&sql)?;
         let stored = stmt
             .query_map(source_params.as_slice(), |row| row.get::<_, String>(0))?
             .collect::<SqlResult<Vec<_>>>()?;
         drop(stmt);
 
-        for id in stored.into_iter().filter(|id| !current.contains(id.as_str())) {
+        for id in stored
+            .into_iter()
+            .filter(|id| !current.contains(id.as_str()))
+        {
             self.conn
                 .execute("DELETE FROM sessions WHERE id = ?1", params![id])?;
         }

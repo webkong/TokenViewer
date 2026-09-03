@@ -54,6 +54,8 @@ char* _Nullable tt_sessions_rename(CoreHandle* _Nullable handle, const char* _No
 
 char* _Nullable tt_device_sync_get_config(CoreHandle* _Nullable handle);
 char* _Nullable tt_device_sync_set_config(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_device_sync_set_provider_credentials(CoreHandle* _Nullable handle, const char* _Nonnull json);
+char* _Nullable tt_device_sync_clear_provider_credentials(CoreHandle* _Nullable handle);
 char* _Nullable tt_device_sync_test_connection(CoreHandle* _Nullable handle);
 char* _Nullable tt_device_sync_create_vault(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_device_sync_join_vault(CoreHandle* _Nullable handle, const char* _Nonnull json);

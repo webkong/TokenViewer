@@ -46,6 +46,7 @@ pub enum DeviceSyncErrorCode {
     NetworkUnreachable,
     RateLimited,
     ProtocolUnsupported,
+    RemoteDirectoryUnavailable,
     VaultNotFound,
     VaultAuthFailed,
     ObjectTooLarge,
@@ -74,6 +75,7 @@ impl DeviceSyncErrorCode {
             Self::NetworkUnreachable => "network_unreachable",
             Self::RateLimited => "rate_limited",
             Self::ProtocolUnsupported => "protocol_unsupported",
+            Self::RemoteDirectoryUnavailable => "remote_directory_unavailable",
             Self::VaultNotFound => "vault_not_found",
             Self::VaultAuthFailed => "vault_auth_failed",
             Self::ObjectTooLarge => "object_too_large",
@@ -102,6 +104,7 @@ impl DeviceSyncErrorCode {
             Self::NetworkUnreachable => "deviceSync.error.networkUnreachable",
             Self::RateLimited => "deviceSync.error.rateLimited",
             Self::ProtocolUnsupported => "deviceSync.error.protocolUnsupported",
+            Self::RemoteDirectoryUnavailable => "deviceSync.error.remoteDirectoryUnavailable",
             Self::VaultNotFound => "deviceSync.error.vaultNotFound",
             Self::VaultAuthFailed => "deviceSync.error.vaultAuthFailed",
             Self::ObjectTooLarge => "deviceSync.error.objectTooLarge",
@@ -189,6 +192,7 @@ pub enum SyncComponent {
     AgentLinks,
     SkillEnv,
     Preferences,
+    Usage,
 }
 
 impl SyncComponent {
@@ -198,6 +202,7 @@ impl SyncComponent {
             Self::AgentLinks => "agent_links",
             Self::SkillEnv => "skill_env",
             Self::Preferences => "preferences",
+            Self::Usage => "usage",
         }
     }
 }
@@ -310,7 +315,7 @@ impl Default for DeviceSyncConfig {
             vault_id: None,
             provider: None,
             content_source: default_content_source(),
-            components: vec![SyncComponent::AgentLinks, SyncComponent::Preferences],
+            components: vec![SyncComponent::Skills, SyncComponent::AgentLinks, SyncComponent::SkillEnv, SyncComponent::Preferences, SyncComponent::Usage],
             skill_scope: SkillScope::default(),
             environment_scope: EnvironmentScope::default(),
             auto_sync: false,
@@ -370,17 +375,44 @@ impl DeviceSyncConfig {
             return Err(DeviceSyncError::invalid_config("content_source"));
         }
         if let Some(provider) = self.provider.as_ref() {
-            if provider.kind != "local_folder" {
-                return Err(DeviceSyncError::new(
-                    DeviceSyncErrorCode::ProtocolUnsupported,
-                    false,
-                ));
-            }
-            if provider.local_root.is_none() {
-                return Err(DeviceSyncError::invalid_config("provider.local_root"));
-            }
-            if !valid_remote_prefix(&provider.remote_prefix) {
-                return Err(DeviceSyncError::invalid_config("provider.remote_prefix"));
+            match provider.kind.as_str() {
+                "local_folder" => {
+                    if provider.local_root.is_none() {
+                        return Err(DeviceSyncError::invalid_config("provider.local_root"));
+                    }
+                    if !valid_remote_prefix(&provider.remote_prefix) {
+                        return Err(DeviceSyncError::invalid_config("provider.remote_prefix"));
+                    }
+                }
+                "webdav" => {
+                    let endpoint = provider
+                        .endpoint
+                        .as_deref()
+                        .ok_or_else(|| DeviceSyncError::invalid_config("provider.endpoint"))?;
+                    crate::device_sync::store::validate_webdav_endpoint(
+                        endpoint,
+                        provider.insecure,
+                    )?;
+                    let username = provider
+                        .username
+                        .as_deref()
+                        .ok_or_else(|| DeviceSyncError::invalid_config("provider.username"))?;
+                    if username.is_empty()
+                        || username.contains(':')
+                        || username.chars().any(char::is_control)
+                    {
+                        return Err(DeviceSyncError::invalid_config("provider.username"));
+                    }
+                    if !valid_remote_prefix(&provider.remote_prefix) {
+                        return Err(DeviceSyncError::invalid_config("provider.remote_prefix"));
+                    }
+                }
+                _ => {
+                    return Err(DeviceSyncError::new(
+                        DeviceSyncErrorCode::ProtocolUnsupported,
+                        false,
+                    ));
+                }
             }
         } else if self.enabled {
             return Err(DeviceSyncError::new(
@@ -388,7 +420,7 @@ impl DeviceSyncConfig {
                 false,
             ));
         }
-        if self.components.len() > 4
+        if self.components.len() > 5
             || self
                 .components
                 .iter()
@@ -706,6 +738,8 @@ pub struct SnapshotRecords {
     pub skill_env: Vec<EnvironmentRecord>,
     #[serde(default)]
     pub preferences: Option<PreferencesRecord>,
+    #[serde(default)]
+    pub usage: Vec<crate::models::UsageRecord>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -877,6 +911,8 @@ pub struct PreviewSummary {
     pub agent_links: ChangeCounts,
     pub skill_env: ChangeCounts,
     pub preferences: ChangeCounts,
+    #[serde(default)]
+    pub usage: ChangeCounts,
     pub warnings: u64,
 }
 

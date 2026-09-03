@@ -2,6 +2,7 @@ import SwiftUI
 import ServiceManagement
 
 struct SettingsView: View {
+    private static let unencryptedVaultPassword = "tokenviewer-public-vault-v1"
     @AppStorage("syncFrequencyMinutes") private var syncFrequency: Int = 10
     @AppStorage("panelShowSummary") private var panelShowSummary = true
     @AppStorage("panelShowLimits") private var panelShowLimits = true
@@ -14,6 +15,7 @@ struct SettingsView: View {
     @AppStorage("sessionYoloConfirmed") private var sessionYoloConfirmed = false
     @AppStorage(SessionLaunchApplication.storageKey)
     private var sessionLaunchApplication = SessionLaunchApplication.terminal.rawValue
+    @AppStorage("deviceSyncProtectionMode") private var deviceSyncProtectionMode = "encrypted"
     @State private var pendingYoloSource: String? = nil
     @State private var launchAtLogin = false
     @State private var showRebuildAlert = false
@@ -21,6 +23,26 @@ struct SettingsView: View {
     @State private var codexHomes: [CodexHomeInfo] = []
     @State private var newCodexHome = ""
     @State private var isScanningCodexHomes = false
+    @State private var deviceSyncStatus: DeviceSyncStatus?
+    @State private var deviceSyncPreset: DeviceSyncProviderPreset = .nutstore
+    @State private var deviceSyncEnabled = false
+    @State private var deviceSyncProfileId = ""
+    @State private var deviceSyncEndpoint = DeviceSyncProviderPreset.nutstore.defaultEndpoint ?? ""
+    @State private var deviceSyncRemotePrefix = "tokenviewer-sync"
+    @State private var deviceSyncUsername = ""
+    @State private var deviceSyncPassword = ""
+    @State private var deviceSyncPasswordSaved = false
+    @State private var deviceSyncShowPassword = false
+    @State private var deviceSyncShowVaultSheet = false
+    @State private var deviceSyncVaultMode = "create"
+    @State private var deviceSyncVaultPassword = ""
+    @State private var deviceSyncActionLoading = false
+    @State private var deviceSyncPendingDirection: ManualSyncDirection?
+    @State private var isDeviceSyncLoading = false
+    @State private var deviceSyncDiagnosticCode: String?
+    @State private var deviceSyncDiagnosticArguments: [String: String] = [:]
+    @State private var deviceSyncDiagnosticRetryable = false
+    @State private var deviceSyncDiagnosticSuccess = false
     @ObservedObject private var theme = ThemeManager.shared
     @ObservedObject private var currency = CurrencyStore.shared
     @ObservedObject private var l10n = L10n.shared
@@ -46,6 +68,7 @@ struct SettingsView: View {
                     sidebarItem(id: "menuBar", title: l10n.menuBarSectionTitle, icon: "menubar.rectangle")
                     sidebarItem(id: "sessions", title: l10n.sessions, icon: "bubble.left.and.bubble.right")
                     sidebarItem(id: "chatgpt", title: l10n.codexHomesTitle, icon: "terminal")
+                    sidebarItem(id: "deviceSync", title: l10n.deviceSync, icon: "arrow.triangle.2.circlepath.icloud")
                     sidebarItem(id: "skills", title: l10n.skills, icon: "puzzlepiece.extension")
                     sidebarItem(id: "data", title: l10n.dataManagement, icon: "externaldrive")
                 }
@@ -84,6 +107,7 @@ struct SettingsView: View {
         case "menuBar": menuBarSection
         case "sessions": sessionsSection
         case "chatgpt": codexHomesSection
+        case "deviceSync": deviceSyncSection
         case "skills": skillsSection
         case "data": dataSection
         default: generalSection
@@ -100,7 +124,7 @@ struct SettingsView: View {
 
             HStack(spacing: 6) {
                 TextField(l10n.codexHomePlaceholder, text: $newCodexHome)
-                    .textFieldStyle(.roundedBorder)
+                    .tvSettingsInput()
                 Button(l10n.skillInstallChooseFolder) {
                     chooseCodexHome()
                 }
@@ -459,8 +483,8 @@ struct SettingsView: View {
                 .lineLimit(1)
             if agent.supportsYolo {
                 TextField(l10n.sessionYoloArgsPlaceholder, text: yoloArgsBinding(agent.source))
-                    .textFieldStyle(.roundedBorder)
                     .font(.system(size: 11, design: .monospaced))
+                    .tvSettingsInput()
                     .disabled(!(sessionYoloStore.config(for: agent.source)?.enabled ?? false))
                 Toggle("", isOn: yoloEnabledBinding(agent.source))
                     .labelsHidden()
@@ -585,6 +609,544 @@ struct SettingsView: View {
             }
         }
         .tint(TVColor.brand)
+    }
+
+    // MARK: Device Sync
+
+    private var deviceSyncSection: some View {
+        SettingsCard(title: l10n.deviceSync) {
+            Text(l10n.deviceSyncDescription)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+
+            if deviceSyncStatus?.recoveryBlocked == true {
+                Label(l10n.deviceSyncRecoveryRequired, systemImage: "exclamationmark.triangle")
+                    .font(.system(size: 11, weight: .medium)).foregroundStyle(.orange)
+                Divider()
+            }
+
+            Toggle(l10n.deviceSyncEnabled, isOn: $deviceSyncEnabled)
+
+            VStack(alignment: .leading, spacing: 12) {
+                Label(l10n.deviceSyncServerSettings, systemImage: "server.rack")
+                    .font(.system(size: 11, weight: .semibold))
+
+                HStack {
+                    Text(l10n.deviceSyncProvider)
+                        .font(.system(size: 11, weight: .medium))
+                    Spacer()
+                    Picker("", selection: $deviceSyncPreset) {
+                        Text(l10n.deviceSyncPresetNutstore).tag(DeviceSyncProviderPreset.nutstore)
+                        Text(l10n.deviceSyncPresetSynology).tag(DeviceSyncProviderPreset.synology)
+                        Text(l10n.deviceSyncPresetNextcloud).tag(DeviceSyncProviderPreset.nextcloud)
+                        Text(l10n.deviceSyncPresetKoofr).tag(DeviceSyncProviderPreset.koofr)
+                        Text(l10n.deviceSyncPresetCustomWebDAV).tag(DeviceSyncProviderPreset.customWebDAV)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .tvSelect(width: 210)
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(l10n.deviceSyncEndpoint)
+                        .font(.system(size: 11, weight: .medium))
+                    TextField(deviceSyncEndpointPlaceholder, text: $deviceSyncEndpoint)
+                        .font(.system(size: 11, design: .monospaced))
+                        .tvSettingsInput()
+                }
+
+                Text(deviceSyncProviderHint)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            .onChange(of: deviceSyncPreset) { previousPreset, preset in
+                if let endpoint = preset.defaultEndpoint {
+                    deviceSyncEndpoint = endpoint
+                } else if deviceSyncEndpoint == previousPreset.defaultEndpoint {
+                    deviceSyncEndpoint = ""
+                }
+                clearDeviceSyncDiagnostic()
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Label(l10n.deviceSyncRemotePrefix, systemImage: "folder")
+                    .font(.system(size: 11, weight: .semibold))
+                TextField(l10n.deviceSyncRemotePrefixPlaceholder, text: $deviceSyncRemotePrefix)
+                    .font(.system(size: 11, design: .monospaced))
+                    .tvSettingsInput()
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Label(l10n.deviceSyncCredentials, systemImage: "person.badge.key")
+                        .font(.system(size: 11, weight: .semibold))
+                    Spacer()
+                    if deviceSyncPasswordSaved {
+                        Label(l10n.deviceSyncPasswordSaved, systemImage: "checkmark.shield.fill")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.green)
+                    }
+                }
+
+                Text(l10n.deviceSyncCredentialsKeychainHint)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(l10n.deviceSyncUsername)
+                        .font(.system(size: 11, weight: .medium))
+                    TextField(l10n.deviceSyncUsernamePlaceholder, text: $deviceSyncUsername)
+                        .tvSettingsInput()
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(l10n.deviceSyncApplicationPassword)
+                        .font(.system(size: 11, weight: .medium))
+                    HStack(spacing: 6) {
+                        if deviceSyncShowPassword {
+                            TextField(deviceSyncPasswordFieldPlaceholder, text: $deviceSyncPassword)
+                                .tvSettingsInput()
+                        } else {
+                            SecureField(deviceSyncPasswordFieldPlaceholder, text: $deviceSyncPassword)
+                                .tvSettingsInput()
+                        }
+                        Button {
+                            deviceSyncShowPassword.toggle()
+                        } label: {
+                            TVSymbol(name: deviceSyncShowPassword ? "eye.slash" : "eye")
+                        }
+                        .tvIconButton()
+                        .help(deviceSyncShowPassword ? l10n.deviceSyncHidePassword : l10n.deviceSyncShowPassword)
+                        .accessibilityLabel(deviceSyncShowPassword ? l10n.deviceSyncHidePassword : l10n.deviceSyncShowPassword)
+                        if deviceSyncPasswordSaved {
+                            Button(role: .destructive) {
+                                clearDeviceSyncPassword()
+                            } label: {
+                                TVSymbol(name: "trash", color: .red)
+                            }
+                            .tvIconButton()
+                            .help(l10n.deviceSyncClearPassword)
+                            .accessibilityLabel(l10n.deviceSyncClearPassword)
+                        }
+                    }
+                }
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Label(l10n.deviceSyncProtection, systemImage: "lock.shield")
+                    .font(.system(size: 11, weight: .semibold))
+                Picker("", selection: $deviceSyncProtectionMode) {
+                    Text(l10n.deviceSyncEncrypted).tag("encrypted")
+                    Text(l10n.deviceSyncUnencrypted).tag("unencrypted")
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .disabled(deviceSyncStatus?.config.vaultId != nil)
+                Text(deviceSyncProtectionMode == "encrypted" ? l10n.deviceSyncEncryptedHint : l10n.deviceSyncUnencryptedHint)
+                    .font(.system(size: 10))
+                    .foregroundStyle(deviceSyncProtectionMode == "encrypted" ? Color.secondary : Color.orange)
+            }
+
+            Divider()
+
+            HStack(spacing: 8) {
+                Button(l10n.deviceSyncTestConnection) {
+                    testDeviceSyncConnection()
+                }
+                .tvActionButton(.secondary)
+                .disabled(isDeviceSyncLoading || !deviceSyncEnabled)
+
+                Button(l10n.save) {
+                    saveDeviceSyncConfiguration()
+                }
+                .tvActionButton(.primary)
+                .disabled(isDeviceSyncLoading)
+
+                if isDeviceSyncLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+
+            if deviceSyncDiagnosticSuccess {
+                HStack(spacing: 6) {
+                    TVSymbol(name: "checkmark.circle", color: .green)
+                    Text(l10n.deviceSyncConnectionSucceeded)
+                        .font(.system(size: 11))
+                    Spacer()
+                    if let report = deviceSyncConnectionReport {
+                        Text(report.writable ? l10n.deviceSyncWritable : l10n.deviceSyncReadOnly)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else if let code = deviceSyncDiagnosticCode {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        TVSymbol(name: "xmark.circle", color: .red)
+                        Text(l10n.deviceSyncErrorMessage(code))
+                            .font(.system(size: 11))
+                    }
+                    if let status = deviceSyncDiagnosticArguments["http_status"] {
+                        Text(l10n.deviceSyncHTTPStatus(status))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    if let operation = deviceSyncDiagnosticArguments["operation"] {
+                        Text(l10n.deviceSyncOperation(operation))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    if deviceSyncDiagnosticRetryable {
+                        Text(l10n.deviceSyncRetrySuggestion)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Divider()
+
+            HStack(spacing: 8) {
+                Button {
+                    runManualDeviceSync(direction: .pull)
+                } label: {
+                    Label(l10n.deviceSyncPullNow, systemImage: "arrow.down.circle")
+                }
+                .tvActionButton(.secondary)
+                .disabled(isDeviceSyncLoading || deviceSyncActionLoading || !deviceSyncEnabled)
+
+                Button {
+                    runManualDeviceSync(direction: .push)
+                } label: {
+                    Label(l10n.deviceSyncPushNow, systemImage: "arrow.up.circle")
+                }
+                .tvActionButton(.secondary)
+                .disabled(isDeviceSyncLoading || deviceSyncActionLoading || !deviceSyncEnabled)
+
+                if deviceSyncActionLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+        }
+        .onAppear {
+            loadDeviceSyncConfiguration()
+        }
+        .sheet(isPresented: $deviceSyncShowVaultSheet) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(deviceSyncVaultMode == "create" ? l10n.deviceSyncCreateVault : l10n.deviceSyncJoinVault)
+                    .font(.headline)
+                SecureField(l10n.deviceSyncVaultPassword, text: $deviceSyncVaultPassword)
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Spacer()
+                    Button(l10n.cancel) { deviceSyncShowVaultSheet = false }
+                    Button(l10n.save) { setupDeviceSyncVault() }.buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(24).frame(width: 360)
+        }
+    }
+
+    @State private var deviceSyncConnectionReport: DeviceSyncConnectionReport?
+
+    private func loadDeviceSyncConfiguration() {
+        guard !isDeviceSyncLoading else { return }
+        isDeviceSyncLoading = true
+        clearDeviceSyncDiagnostic()
+        Task { @MainActor in
+            defer { isDeviceSyncLoading = false }
+            do {
+                let status = try await CoreBridge.shared.deviceSyncGetConfig()
+                applyDeviceSyncStatus(status)
+                _ = try await CoreBridge.shared.deviceSyncRestoreProviderCredentialsIfAvailable()
+                deviceSyncPasswordSaved = try await DeviceSyncCredentialStore.shared.profileSecretAsync(
+                    profileId: status.config.profileId,
+                    kind: .webDAVPassword
+                ) != nil
+            } catch {
+                showDeviceSyncError(error)
+            }
+        }
+    }
+
+    private func applyDeviceSyncStatus(_ status: DeviceSyncStatus) {
+        deviceSyncStatus = status
+        deviceSyncEnabled = status.config.enabled
+        deviceSyncProfileId = status.config.profileId
+        guard let provider = status.config.provider,
+              provider.kind == DeviceSyncProviderConfig.webDAVKind else {
+            deviceSyncPreset = .nutstore
+            deviceSyncEndpoint = DeviceSyncProviderPreset.nutstore.defaultEndpoint ?? ""
+            deviceSyncRemotePrefix = "tokenviewer-sync"
+            deviceSyncUsername = ""
+            deviceSyncPasswordSaved = false
+            return
+        }
+        deviceSyncEndpoint = provider.endpoint ?? ""
+        deviceSyncRemotePrefix = provider.remotePrefix
+        deviceSyncUsername = provider.username ?? ""
+        deviceSyncPreset = DeviceSyncProviderPreset.detect(endpoint: deviceSyncEndpoint)
+    }
+
+    private var deviceSyncProviderHint: String {
+        switch deviceSyncPreset {
+        case .nutstore:
+            return l10n.deviceSyncHintNutstore
+        case .synology:
+            return l10n.deviceSyncHintSynology
+        case .nextcloud:
+            return l10n.deviceSyncHintNextcloud
+        case .koofr:
+            return l10n.deviceSyncHintKoofr
+        case .customWebDAV:
+            return l10n.deviceSyncHintCustomWebDAV
+        }
+    }
+
+    private var deviceSyncEndpointPlaceholder: String {
+        switch deviceSyncPreset {
+        case .synology:
+            return "https://nas.example.com:5006/"
+        case .nextcloud:
+            return "https://cloud.example.com/remote.php/dav/files/USERNAME/"
+        default:
+            return l10n.deviceSyncEndpointPlaceholder
+        }
+    }
+
+    private var deviceSyncUsesHTTP: Bool {
+        URLComponents(
+            string: deviceSyncEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        )?.scheme?.lowercased() == "http"
+    }
+
+    private var deviceSyncPasswordFieldPlaceholder: String {
+        deviceSyncPasswordSaved && deviceSyncPassword.isEmpty
+            ? l10n.deviceSyncReplacementPasswordPlaceholder
+            : l10n.deviceSyncPasswordPlaceholder
+    }
+
+    private func deviceSyncConfigFromForm() -> DeviceSyncConfig {
+        var config = deviceSyncStatus?.config
+            ?? DeviceSyncConfig(profileId: deviceSyncProfileId)
+        config.enabled = deviceSyncEnabled
+        config.profileId = deviceSyncProfileId.trimmingCharacters(in: .whitespacesAndNewlines)
+        config.provider = DeviceSyncProviderConfig(
+            kind: DeviceSyncProviderConfig.webDAVKind,
+            endpoint: deviceSyncEndpoint.trimmingCharacters(in: .whitespacesAndNewlines),
+            remotePrefix: deviceSyncRemotePrefix.trimmingCharacters(in: .whitespacesAndNewlines),
+            username: deviceSyncUsername.trimmingCharacters(in: .whitespacesAndNewlines),
+            insecure: deviceSyncUsesHTTP
+        )
+        // Basic setup syncs the complete current parsed state. Component and
+        // scope overrides remain an advanced protocol concern.
+        config.components = [.skills, .agentLinks, .skillEnv, .preferences, .usage]
+        config.autoSync = false
+        return config
+    }
+
+    private func persistDeviceSyncConfiguration() async throws -> DeviceSyncConfig {
+        let saved = try await CoreBridge.shared.deviceSyncSetConfig(deviceSyncConfigFromForm())
+        deviceSyncStatus = deviceSyncStatus.map { status in
+            DeviceSyncStatus(
+                config: saved,
+                identity: status.identity,
+                state: status.state,
+                remoteHeadFingerprint: status.remoteHeadFingerprint,
+                frontier: status.frontier,
+                recoveryBlocked: status.recoveryBlocked
+            )
+        }
+        return saved
+    }
+
+    private func saveDeviceSyncConfiguration() {
+        guard !isDeviceSyncLoading else { return }
+        isDeviceSyncLoading = true
+        clearDeviceSyncDiagnostic()
+        Task { @MainActor in
+            defer { isDeviceSyncLoading = false }
+            do {
+                let saved = try await persistDeviceSyncConfiguration()
+                if !deviceSyncPassword.isEmpty {
+                    try await CoreBridge.shared.deviceSyncSetWebDAVPassword(deviceSyncPassword)
+                    deviceSyncPassword = ""
+                    deviceSyncPasswordSaved = true
+                }
+                deviceSyncProfileId = saved.profileId
+                ToastCenter.shared.success(l10n.toastSaved)
+            } catch {
+                showDeviceSyncError(error)
+            }
+        }
+    }
+
+    private func testDeviceSyncConnection() {
+        guard !isDeviceSyncLoading else { return }
+        isDeviceSyncLoading = true
+        clearDeviceSyncDiagnostic()
+        Task { @MainActor in
+            defer { isDeviceSyncLoading = false }
+            do {
+                _ = try await persistDeviceSyncConfiguration()
+                if !deviceSyncPassword.isEmpty {
+                    try await CoreBridge.shared.deviceSyncSetWebDAVPassword(deviceSyncPassword)
+                    deviceSyncPassword = ""
+                    deviceSyncPasswordSaved = true
+                }
+                let report = try await CoreBridge.shared.deviceSyncTestConnection()
+                deviceSyncConnectionReport = report
+                deviceSyncDiagnosticSuccess = report.connected
+            } catch {
+                showDeviceSyncError(error)
+            }
+        }
+    }
+
+    private func clearDeviceSyncPassword() {
+        guard !isDeviceSyncLoading else { return }
+        isDeviceSyncLoading = true
+        clearDeviceSyncDiagnostic()
+        Task { @MainActor in
+            defer { isDeviceSyncLoading = false }
+            do {
+                try await CoreBridge.shared.deviceSyncClearWebDAVPassword()
+                deviceSyncPasswordSaved = false
+                deviceSyncPassword = ""
+            } catch {
+                showDeviceSyncError(error)
+            }
+        }
+    }
+
+    private func clearDeviceSyncDiagnostic() {
+        deviceSyncDiagnosticCode = nil
+        deviceSyncDiagnosticArguments = [:]
+        deviceSyncDiagnosticRetryable = false
+        deviceSyncDiagnosticSuccess = false
+        deviceSyncConnectionReport = nil
+    }
+
+    private enum ManualSyncDirection { case push, pull }
+
+    private func runManualDeviceSync(direction: ManualSyncDirection) {
+        guard !deviceSyncActionLoading else { return }
+        guard deviceSyncStatus?.config.vaultId != nil || deviceSyncProtectionMode == "unencrypted" else {
+            deviceSyncPendingDirection = direction
+            deviceSyncVaultMode = direction == .push ? "create" : "join"
+            deviceSyncShowVaultSheet = true
+            return
+        }
+        deviceSyncActionLoading = true
+        clearDeviceSyncDiagnostic()
+        Task { @MainActor in
+            defer { deviceSyncActionLoading = false }
+            do {
+                if deviceSyncPassword.isEmpty == false {
+                    _ = try await persistDeviceSyncConfiguration()
+                    try await CoreBridge.shared.deviceSyncSetWebDAVPassword(deviceSyncPassword)
+                    deviceSyncPassword = ""
+                    deviceSyncPasswordSaved = true
+                }
+                if deviceSyncProtectionMode == "unencrypted" {
+                    deviceSyncStatus = try await preparePasswordlessVault(direction: direction)
+                } else {
+                    let restoredMasterKey = try await CoreBridge.shared.deviceSyncRestoreMasterKeyIfAvailable()
+                    guard restoredMasterKey else {
+                        deviceSyncPendingDirection = direction
+                        deviceSyncVaultMode = "join"
+                        deviceSyncShowVaultSheet = true
+                        return
+                    }
+                }
+                let enabledIds = Self.currentEnabledAgentIds()
+                if direction == .push {
+                    let preview = try await CoreBridge.shared.deviceSyncPreviewPush(enabledAgentIds: enabledIds)
+                    _ = try await CoreBridge.shared.deviceSyncPush(
+                        previewToken: preview.previewToken,
+                        enabledAgentIds: enabledIds
+                    )
+                    deviceSyncDiagnosticSuccess = true
+                } else {
+                    let preview = try await CoreBridge.shared.deviceSyncPreviewPull(enabledAgentIds: enabledIds)
+                    _ = try await DeviceSyncApplyCoordinator.shared.apply(previewToken: preview.previewToken)
+                    deviceSyncDiagnosticSuccess = true
+                }
+            } catch {
+                showDeviceSyncError(error)
+            }
+        }
+    }
+
+    private static func currentEnabledAgentIds() -> [String] {
+        guard let data = UserDefaults.standard.string(forKey: "skillsEnabledProviders")?.data(using: .utf8),
+              let ids = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return ids
+    }
+
+    private func preparePasswordlessVault(direction: ManualSyncDirection) async throws -> DeviceSyncStatus {
+        if deviceSyncStatus?.config.vaultId != nil || direction == .pull {
+            return try await CoreBridge.shared.deviceSyncRawJoinVault(
+                password: Self.unencryptedVaultPassword
+            ).status
+        }
+        do {
+            return try await CoreBridge.shared.deviceSyncRawCreateVault(
+                password: Self.unencryptedVaultPassword
+            ).status
+        } catch {
+            return try await CoreBridge.shared.deviceSyncRawJoinVault(
+                password: Self.unencryptedVaultPassword
+            ).status
+        }
+    }
+
+    private func setupDeviceSyncVault() {
+        let password = deviceSyncVaultPassword
+        guard !password.isEmpty else { return }
+        Task { @MainActor in
+            do {
+                let status = deviceSyncVaultMode == "create"
+                    ? try await CoreBridge.shared.deviceSyncCreateVault(password: password)
+                    : try await CoreBridge.shared.deviceSyncJoinVault(password: password)
+                deviceSyncStatus = status
+                deviceSyncVaultPassword = ""
+                deviceSyncShowVaultSheet = false
+                if let direction = deviceSyncPendingDirection {
+                    deviceSyncPendingDirection = nil
+                    runManualDeviceSync(direction: direction)
+                }
+            } catch { showDeviceSyncError(error) }
+        }
+    }
+
+    private func showDeviceSyncError(_ error: Error) {
+        deviceSyncDiagnosticSuccess = false
+        deviceSyncConnectionReport = nil
+        if let bridgeError = error as? DeviceSyncBridgeError,
+           case let .core(payload) = bridgeError {
+            deviceSyncDiagnosticCode = payload.code
+            deviceSyncDiagnosticArguments = payload.arguments
+            deviceSyncDiagnosticRetryable = payload.retryable
+        } else if error is DeviceSyncCredentialError {
+            deviceSyncDiagnosticCode = "credential_missing"
+            deviceSyncDiagnosticArguments = [:]
+            deviceSyncDiagnosticRetryable = false
+        } else {
+            deviceSyncDiagnosticCode = "internal_error"
+            deviceSyncDiagnosticArguments = [:]
+            deviceSyncDiagnosticRetryable = false
+        }
     }
 
     // MARK: Data
@@ -786,7 +1348,7 @@ struct SettingsView: View {
                 Text(l10n.skillsSourceRoot).font(.system(size: 11, weight: .medium))
                 HStack(spacing: 6) {
                     TextField("~/.tokenviewer/skills", text: $skillsSourceRoot)
-                        .textFieldStyle(.roundedBorder)
+                        .tvSettingsInput()
                     Button(l10n.openInFinder) {
                         openSkillsSourceRootInFinder()
                     }
@@ -1115,8 +1677,8 @@ struct SettingsCard<Content: View>: View {
                 HStack(spacing: 8) {
                     Text(l10n.skillPathLabel).font(.caption2).foregroundStyle(.secondary).frame(width: 30, alignment: .leading)
                     TextField(agent.skillsPath, text: $skillsPath)
-                        .textFieldStyle(.roundedBorder)
                         .font(.system(size: 11))
+                        .tvSettingsInput()
                         .disabled(agent.hasParser == false && skillsPath.isEmpty)
                 }
 
@@ -1157,5 +1719,20 @@ struct SettingsCard<Content: View>: View {
                 linkType = agent.linkType
             }
         }
+    }
+}
+
+private struct TVSettingsInputModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .textFieldStyle(.roundedBorder)
+            .controlSize(.large)
+            .frame(height: 32)
+    }
+}
+
+fileprivate extension View {
+    func tvSettingsInput() -> some View {
+        modifier(TVSettingsInputModifier())
     }
 }

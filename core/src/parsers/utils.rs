@@ -574,7 +574,8 @@ pub fn resolve_local_data_path(home: &Path, rel: &str) -> PathBuf {
 /// missing result is never an error. An empty candidate list returns `home`.
 pub fn resolve_first_existing(home: &Path, rel_candidates: &[&str]) -> PathBuf {
     let paths: Vec<PathBuf> = rel_candidates.iter().map(|rel| home.join(rel)).collect();
-    first_existing(&paths).unwrap_or_else(|| paths.first().cloned().unwrap_or_else(|| home.to_path_buf()))
+    first_existing(&paths)
+        .unwrap_or_else(|| paths.first().cloned().unwrap_or_else(|| home.to_path_buf()))
 }
 
 #[cfg(test)]

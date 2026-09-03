@@ -226,7 +226,8 @@ final class DeviceSyncCredentialStore: @unchecked Sendable {
               !value.contains(":"),
               !value.contains("/"),
               !value.contains("\\"),
-              !value.contains("\0") else {
+              !value.contains("\0"),
+              value.rangeOfCharacter(from: .controlCharacters) == nil else {
             return false
         }
         return value.utf8.count <= 1024

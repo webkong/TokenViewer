@@ -1,5 +1,25 @@
 import Foundation
 
+struct DeviceSyncProviderCredentialScope: Equatable, Sendable {
+    let profileId: String
+    let endpoint: String?
+    let remotePrefix: String
+    let username: String?
+    let insecure: Bool
+
+    init?(config: DeviceSyncConfig) {
+        guard let provider = config.provider,
+              provider.kind == DeviceSyncProviderConfig.webDAVKind else {
+            return nil
+        }
+        self.profileId = config.profileId
+        self.endpoint = provider.endpoint
+        self.remotePrefix = provider.remotePrefix
+        self.username = provider.username
+        self.insecure = provider.insecure
+    }
+}
+
 extension CoreBridge {
     func deviceSyncGetConfig() async throws -> DeviceSyncStatus {
         let status = try await deviceSyncRawGetConfig()
@@ -15,7 +35,16 @@ extension CoreBridge {
 
     func deviceSyncSetConfig(_ config: DeviceSyncConfig) async throws -> DeviceSyncConfig {
         let result = try await DeviceSyncApplyCoordinator.shared.runDeviceSyncOperation { [self] in
-            try await deviceSyncRawSetConfig(config)
+            let previous = try await deviceSyncRawGetConfig()
+            let previousScope = DeviceSyncProviderCredentialScope(config: previous.config)
+            let nextScope = DeviceSyncProviderCredentialScope(config: config)
+            let result = try await deviceSyncRawSetConfig(config)
+            if previousScope == nextScope {
+                _ = try await deviceSyncRawRestoreProviderCredentialsIfAvailable()
+            } else {
+                _ = try await deviceSyncRawClearProviderCredentials()
+            }
+            return result
         }
         await DeviceSyncApplyCoordinator.shared.updateProfile(config.profileId)
         return result
@@ -23,7 +52,79 @@ extension CoreBridge {
 
     func deviceSyncTestConnection() async throws -> DeviceSyncConnectionReport {
         try await DeviceSyncApplyCoordinator.shared.runDeviceSyncOperation { [self] in
-            try await deviceSyncRawTestConnection()
+            _ = try await deviceSyncRawRestoreProviderCredentialsIfAvailable()
+            return try await deviceSyncRawTestConnection()
+        }
+    }
+
+    /// Save a WebDAV application password in Keychain and inject it into the
+    /// current CoreHandle. The password is never part of the Device Sync
+    /// config JSON or a snapshot.
+    func deviceSyncSetWebDAVPassword(_ password: String) async throws {
+        try await DeviceSyncApplyCoordinator.shared.runDeviceSyncOperation { [self] in
+            let status = try await deviceSyncRawGetConfig()
+            let profileId = status.config.profileId
+            let previous = try await DeviceSyncCredentialStore.shared.profileSecretAsync(
+                profileId: profileId,
+                kind: .webDAVPassword
+            )
+
+            _ = try await deviceSyncRawSetProviderCredentials(
+                profileId: profileId,
+                password: password
+            )
+            do {
+                try await DeviceSyncCredentialStore.shared.saveProfileSecretAsync(
+                    password,
+                    profileId: profileId,
+                    kind: .webDAVPassword
+                )
+            } catch {
+                do {
+                    if let previous {
+                        try await DeviceSyncCredentialStore.shared.saveProfileSecretAsync(
+                            previous,
+                            profileId: profileId,
+                            kind: .webDAVPassword
+                        )
+                    } else {
+                        try await DeviceSyncCredentialStore.shared.deleteProfileSecretAsync(
+                            profileId: profileId,
+                            kind: .webDAVPassword
+                        )
+                    }
+                } catch {
+                    // The original Keychain value is best-effort restored; the
+                    // caller still receives the write failure.
+                }
+                do {
+                    _ = try await deviceSyncRawClearProviderCredentials()
+                } catch {
+                    // The in-memory credential is cleared on the next handle
+                    // rebuild; the original Keychain value was restored above.
+                }
+                throw error
+            }
+        }
+    }
+
+    func deviceSyncClearWebDAVPassword() async throws {
+        try await DeviceSyncApplyCoordinator.shared.runDeviceSyncOperation { [self] in
+            let status = try await deviceSyncRawGetConfig()
+            _ = try await deviceSyncRawClearProviderCredentials()
+            try await DeviceSyncCredentialStore.shared.deleteProfileSecretAsync(
+                profileId: status.config.profileId,
+                kind: .webDAVPassword
+            )
+        }
+    }
+
+    /// Restore a saved provider password after the CoreHandle is recreated.
+    /// A missing Keychain item is a normal first-setup state and returns false.
+    @discardableResult
+    func deviceSyncRestoreProviderCredentialsIfAvailable() async throws -> Bool {
+        try await DeviceSyncApplyCoordinator.shared.runDeviceSyncOperation { [self] in
+            try await deviceSyncRawRestoreProviderCredentialsIfAvailable()
         }
     }
 
@@ -133,6 +234,47 @@ extension CoreBridge {
         )
     }
 
+    func deviceSyncRawSetProviderCredentials(
+        profileId: String,
+        password: String
+    ) async throws -> DeviceSyncCredentialMutationResponse {
+        try decodeDeviceSync(
+            await callDeviceSyncJSON(
+                DeviceSyncProviderCredentialsRequest(
+                    profileId: profileId,
+                    password: password
+                )
+            ) { tt_device_sync_set_provider_credentials($0, $1) },
+            as: DeviceSyncCredentialMutationResponse.self
+        )
+    }
+
+    func deviceSyncRawClearProviderCredentials() async throws -> DeviceSyncCredentialMutationResponse {
+        try decodeDeviceSync(
+            await callAsync { tt_device_sync_clear_provider_credentials($0) },
+            as: DeviceSyncCredentialMutationResponse.self
+        )
+    }
+
+    func deviceSyncRawRestoreProviderCredentialsIfAvailable() async throws -> Bool {
+        let status = try await deviceSyncRawGetConfig()
+        guard let provider = status.config.provider,
+              provider.kind == DeviceSyncProviderConfig.webDAVKind else {
+            return false
+        }
+        guard let password = try await DeviceSyncCredentialStore.shared.profileSecretAsync(
+            profileId: status.config.profileId,
+            kind: .webDAVPassword
+        ) else {
+            return false
+        }
+        _ = try await deviceSyncRawSetProviderCredentials(
+            profileId: status.config.profileId,
+            password: password
+        )
+        return true
+    }
+
     func deviceSyncRawTestConnection() async throws -> DeviceSyncConnectionReport {
         try decodeDeviceSync(
             await callAsync { tt_device_sync_test_connection($0) },
@@ -141,7 +283,8 @@ extension CoreBridge {
     }
 
     func deviceSyncRawCreateVault(password: String) async throws -> DeviceSyncVaultSession {
-        try decodeDeviceSync(
+        _ = try await deviceSyncRawRestoreProviderCredentialsIfAvailable()
+        return try decodeDeviceSync(
             await callDeviceSyncJSON(DeviceSyncPasswordRequest(password: password)) {
                 tt_device_sync_create_vault($0, $1)
             },
@@ -150,7 +293,8 @@ extension CoreBridge {
     }
 
     func deviceSyncRawJoinVault(password: String) async throws -> DeviceSyncVaultSession {
-        try decodeDeviceSync(
+        _ = try await deviceSyncRawRestoreProviderCredentialsIfAvailable()
+        return try decodeDeviceSync(
             await callDeviceSyncJSON(DeviceSyncPasswordRequest(password: password)) {
                 tt_device_sync_join_vault($0, $1)
             },
@@ -173,7 +317,8 @@ extension CoreBridge {
     }
 
     func deviceSyncRawPreviewPush(enabledAgentIds: [String]) async throws -> DeviceSyncPreviewResponse {
-        try decodeDeviceSync(
+        _ = try await deviceSyncRawRestoreProviderCredentialsIfAvailable()
+        return try decodeDeviceSync(
             await callDeviceSyncJSON(DeviceSyncPreviewRequest(enabledAgentIds: enabledAgentIds)) {
                 tt_device_sync_preview_push($0, $1)
             },
@@ -185,7 +330,8 @@ extension CoreBridge {
         previewToken: String,
         enabledAgentIds: [String]
     ) async throws -> DeviceSyncResult {
-        try decodeDeviceSync(
+        _ = try await deviceSyncRawRestoreProviderCredentialsIfAvailable()
+        return try decodeDeviceSync(
             await callDeviceSyncJSON(
                 DeviceSyncTokenRequest(
                     previewToken: previewToken,
@@ -197,7 +343,8 @@ extension CoreBridge {
     }
 
     func deviceSyncRawPreviewPull(enabledAgentIds: [String]) async throws -> DeviceSyncPreviewResponse {
-        try decodeDeviceSync(
+        _ = try await deviceSyncRawRestoreProviderCredentialsIfAvailable()
+        return try decodeDeviceSync(
             await callDeviceSyncJSON(DeviceSyncPreviewRequest(enabledAgentIds: enabledAgentIds)) {
                 tt_device_sync_preview_pull($0, $1)
             },
@@ -206,7 +353,8 @@ extension CoreBridge {
     }
 
     func deviceSyncRawPrepareApply(previewToken: String) async throws -> DeviceSyncPrepareApplyResponse {
-        try decodeDeviceSync(
+        _ = try await deviceSyncRawRestoreProviderCredentialsIfAvailable()
+        return try decodeDeviceSync(
             await callDeviceSyncJSON(
                 DeviceSyncTokenRequest(previewToken: previewToken, enabledAgentIds: [])
             ) { tt_device_sync_prepare_apply($0, $1) },
@@ -215,7 +363,8 @@ extension CoreBridge {
     }
 
     func deviceSyncRawCommitApply(transactionId: String) async throws -> DeviceSyncResult {
-        try decodeDeviceSync(
+        _ = try await deviceSyncRawRestoreProviderCredentialsIfAvailable()
+        return try decodeDeviceSync(
             await callDeviceSyncJSON(DeviceSyncTransactionRequest(transactionId: transactionId)) {
                 tt_device_sync_commit_apply($0, $1)
             },
@@ -249,7 +398,8 @@ extension CoreBridge {
     }
 
     func deviceSyncRawListSnapshots() async throws -> [DeviceSyncSnapshotListItem] {
-        try decodeDeviceSync(
+        _ = try await deviceSyncRawRestoreProviderCredentialsIfAvailable()
+        return try decodeDeviceSync(
             await callAsync { tt_device_sync_list_snapshots($0) },
             as: [DeviceSyncSnapshotListItem].self
         )

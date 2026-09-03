@@ -966,7 +966,10 @@ mod tests {
     fn normalizes_gpt_models_without_enumerating_each_release() {
         assert_eq!(normalize_kiro_model("gpt-5"), "gpt-5");
         assert_eq!(normalize_kiro_model("GPT_5_20260701_V1_0"), "gpt-5");
-        assert_eq!(normalize_kiro_model("GPT_4_1_MINI_20250101"), "gpt-4.1-mini");
+        assert_eq!(
+            normalize_kiro_model("GPT_4_1_MINI_20250101"),
+            "gpt-4.1-mini"
+        );
         assert_eq!(normalize_kiro_model("gpt-6-nano"), "gpt-6-nano");
     }
 

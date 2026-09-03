@@ -139,9 +139,10 @@ pub extern "C" fn tt_init(db_path: *const c_char) -> *mut CoreHandle {
                 let _ = git.set_sync_branch(&skills.git_branch);
             }
 
-            let device_sync = match crate::device_sync::DeviceSyncEngine::new(
+            let device_sync = match crate::device_sync::DeviceSyncEngine::new_with_db(
                 home_dir.clone(),
                 skills.source_root.clone(),
+                path.clone(),
             ) {
                 Ok(engine) => engine,
                 Err(_) => return std::ptr::null_mut(),
@@ -2040,6 +2041,12 @@ struct DeviceSyncMasterKeyRequest {
     master_key_b64: crate::device_sync::crypto::SecretString,
 }
 
+#[derive(serde::Deserialize)]
+struct DeviceSyncProviderCredentialsRequest {
+    profile_id: String,
+    password: crate::device_sync::crypto::SecretString,
+}
+
 #[derive(serde::Deserialize, Default)]
 struct DeviceSyncPreviewRequest {
     #[serde(default)]
@@ -2203,11 +2210,47 @@ pub extern "C" fn tt_device_sync_set_config(
     })
 }
 
+/// Inject a provider password for this process only. It is intentionally
+/// separate from the persisted config request so the secret cannot reach
+/// config.json or a snapshot.
+#[no_mangle]
+pub extern "C" fn tt_device_sync_set_provider_credentials(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let request = match parse_device_sync_json::<DeviceSyncProviderCredentialsRequest>(json) {
+        Ok(request) => request,
+        Err(error) => return device_sync_envelope::<serde_json::Value>(Err(error)),
+    };
+    with_device_sync(handle, move |_, engine| {
+        engine.set_webdav_credentials(
+            &request.profile_id,
+            request.password.as_str()?,
+        )?;
+        Ok(serde_json::json!({"configured": true}))
+    })
+}
+
+/// Clear all provider credentials held by this CoreHandle.
+#[no_mangle]
+pub extern "C" fn tt_device_sync_clear_provider_credentials(
+    handle: *mut CoreHandle,
+) -> *mut c_char {
+    with_device_sync(handle, |_, engine| {
+        engine.clear_provider_credentials()?;
+        Ok(serde_json::json!({"cleared": true}))
+    })
+}
+
 #[no_mangle]
 pub extern "C" fn tt_device_sync_test_connection(handle: *mut CoreHandle) -> *mut c_char {
     with_device_sync(handle, |_, engine| {
-        engine.test_connection()?;
-        Ok(serde_json::json!({"connected": true}))
+        let report = engine.test_connection()?;
+        Ok(serde_json::json!({
+            "connected": true,
+            "provider": report.provider,
+            "writable": report.writable,
+        }))
     })
 }
 

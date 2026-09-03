@@ -5,11 +5,56 @@ enum DeviceSyncComponent: String, Codable, CaseIterable, Hashable, Sendable {
     case agentLinks = "agent_links"
     case skillEnv = "skill_env"
     case preferences
+    case usage
 }
 
 enum DeviceSyncScopeMode: String, Codable, Hashable, Sendable {
     case all
     case selected
+}
+
+enum DeviceSyncProviderPreset: String, CaseIterable, Identifiable, Sendable {
+    case nutstore
+    case synology
+    case nextcloud
+    case koofr
+    case customWebDAV = "custom_webdav"
+
+    var id: String { rawValue }
+
+    var defaultEndpoint: String? {
+        switch self {
+        case .nutstore:
+            return "https://dav.jianguoyun.com/dav/"
+        case .koofr:
+            return "https://app.koofr.net/dav/Koofr/"
+        case .synology, .nextcloud, .customWebDAV:
+            return nil
+        }
+    }
+
+    static func detect(endpoint: String) -> DeviceSyncProviderPreset {
+        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+
+        if normalized == "https://dav.jianguoyun.com/dav" {
+            return .nutstore
+        }
+        if normalized == "https://app.koofr.net/dav/koofr" {
+            return .koofr
+        }
+
+        let components = URLComponents(string: trimmed)
+        let host = components?.host?.lowercased() ?? ""
+        let path = components?.path.lowercased() ?? ""
+        if path.contains("/remote.php/dav/files/") {
+            return .nextcloud
+        }
+        if components?.port == 5006 || host.hasSuffix(".synology.me") {
+            return .synology
+        }
+        return .customWebDAV
+    }
 }
 
 struct DeviceSyncSkillScope: Codable, Equatable, Sendable {
@@ -23,6 +68,20 @@ struct DeviceSyncEnvironmentScope: Codable, Equatable, Sendable {
 }
 
 struct DeviceSyncProviderConfig: Codable, Equatable, Sendable {
+    static let webDAVKind = "webdav"
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case endpoint
+        case remotePrefix
+        case localRoot
+        case username
+        case bucket
+        case region
+        case pathStyle
+        case insecure
+    }
+
     var kind: String
     var endpoint: String?
     var remotePrefix: String
@@ -54,6 +113,19 @@ struct DeviceSyncProviderConfig: Codable, Equatable, Sendable {
         self.pathStyle = pathStyle
         self.insecure = insecure
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try container.decode(String.self, forKey: .kind)
+        endpoint = try container.decodeIfPresent(String.self, forKey: .endpoint)
+        remotePrefix = try container.decodeIfPresent(String.self, forKey: .remotePrefix) ?? ""
+        localRoot = try container.decodeIfPresent(String.self, forKey: .localRoot)
+        username = try container.decodeIfPresent(String.self, forKey: .username)
+        bucket = try container.decodeIfPresent(String.self, forKey: .bucket)
+        region = try container.decodeIfPresent(String.self, forKey: .region)
+        pathStyle = try container.decodeIfPresent(Bool.self, forKey: .pathStyle)
+        insecure = try container.decodeIfPresent(Bool.self, forKey: .insecure) ?? false
+    }
 }
 
 struct DeviceSyncConfig: Codable, Equatable, Sendable {
@@ -63,7 +135,7 @@ struct DeviceSyncConfig: Codable, Equatable, Sendable {
     var vaultId: String?
     var provider: DeviceSyncProviderConfig?
     var contentSource: String = "cloud"
-    var components: [DeviceSyncComponent] = [.agentLinks, .preferences]
+    var components: [DeviceSyncComponent] = [.skills, .agentLinks, .skillEnv, .preferences, .usage]
     var skillScope: DeviceSyncSkillScope = .init()
     var environmentScope: DeviceSyncEnvironmentScope = .init()
     var autoSync: Bool = false
@@ -74,7 +146,7 @@ struct DeviceSyncConfig: Codable, Equatable, Sendable {
         vaultId: String? = nil,
         provider: DeviceSyncProviderConfig? = nil,
         contentSource: String = "cloud",
-        components: [DeviceSyncComponent] = [.agentLinks, .preferences],
+        components: [DeviceSyncComponent] = [.skills, .agentLinks, .skillEnv, .preferences, .usage],
         skillScope: DeviceSyncSkillScope = .init(),
         environmentScope: DeviceSyncEnvironmentScope = .init(),
         autoSync: Bool = false
@@ -206,6 +278,11 @@ struct DeviceSyncPasswordRequest: Encodable {
     let password: String
 }
 
+struct DeviceSyncProviderCredentialsRequest: Encodable {
+    let profileId: String
+    let password: String
+}
+
 struct DeviceSyncMasterKeyRequest: Encodable {
     let masterKeyB64: String
 }
@@ -219,8 +296,21 @@ struct DeviceSyncRestoreResponse: Codable, Equatable, Sendable {
     let restored: Bool
 }
 
+struct DeviceSyncCredentialMutationResponse: Codable, Equatable, Sendable {
+    let configured: Bool?
+    let cleared: Bool?
+}
+
 struct DeviceSyncConnectionReport: Codable, Equatable, Sendable {
     let connected: Bool
+    let provider: String
+    let writable: Bool
+
+    init(connected: Bool, provider: String = DeviceSyncProviderConfig.webDAVKind, writable: Bool = true) {
+        self.connected = connected
+        self.provider = provider
+        self.writable = writable
+    }
 }
 
 struct DeviceSyncChangeCounts: Codable, Equatable, Sendable {
@@ -236,7 +326,23 @@ struct DeviceSyncPreviewSummary: Codable, Equatable, Sendable {
     let agentLinks: DeviceSyncChangeCounts
     let skillEnv: DeviceSyncChangeCounts
     let preferences: DeviceSyncChangeCounts
+    let usage: DeviceSyncChangeCounts
     let warnings: UInt64
+
+    private enum CodingKeys: String, CodingKey {
+        case skills, agentLinks, skillEnv, preferences, usage, warnings
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        skills = try c.decode(DeviceSyncChangeCounts.self, forKey: .skills)
+        agentLinks = try c.decode(DeviceSyncChangeCounts.self, forKey: .agentLinks)
+        skillEnv = try c.decode(DeviceSyncChangeCounts.self, forKey: .skillEnv)
+        preferences = try c.decode(DeviceSyncChangeCounts.self, forKey: .preferences)
+        usage = try c.decodeIfPresent(DeviceSyncChangeCounts.self, forKey: .usage)
+            ?? DeviceSyncChangeCounts(added: 0, updated: 0, deleted: 0, conflicts: 0, skipped: 0)
+        warnings = try c.decode(UInt64.self, forKey: .warnings)
+    }
 }
 
 struct DeviceSyncPreviewItem: Codable, Equatable, Sendable, Identifiable {

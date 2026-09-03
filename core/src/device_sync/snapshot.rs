@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use crate::skills::SkillsCore;
+use crate::storage::Database;
 
 use super::archive::{build_skill_archive, ArchiveWarning};
 use super::crypto::{canonical_json, sha256_hex};
@@ -37,13 +38,25 @@ pub fn build_snapshot(
     request: &SnapshotBuildRequest,
     baseline: Option<&SnapshotPayload>,
 ) -> Result<SnapshotBuildResult, DeviceSyncError> {
-    build_snapshot_with_clock(
+    build_snapshot_with_db(skills, home_dir, config, request, baseline, None)
+}
+
+pub fn build_snapshot_with_db(
+    skills: &SkillsCore,
+    home_dir: &Path,
+    config: &DeviceSyncConfig,
+    request: &SnapshotBuildRequest,
+    baseline: Option<&SnapshotPayload>,
+    db: Option<&Database>,
+) -> Result<SnapshotBuildResult, DeviceSyncError> {
+    build_snapshot_with_clock_and_db(
         skills,
         home_dir,
         config,
         request,
         Hlc::now(request.device_id.clone()),
         baseline,
+        db,
     )
 }
 
@@ -54,6 +67,18 @@ pub fn build_snapshot_with_clock(
     request: &SnapshotBuildRequest,
     clock: Hlc,
     baseline: Option<&SnapshotPayload>,
+) -> Result<SnapshotBuildResult, DeviceSyncError> {
+    build_snapshot_with_clock_and_db(skills, home_dir, config, request, clock, baseline, None)
+}
+
+pub fn build_snapshot_with_clock_and_db(
+    skills: &SkillsCore,
+    home_dir: &Path,
+    config: &DeviceSyncConfig,
+    request: &SnapshotBuildRequest,
+    clock: Hlc,
+    baseline: Option<&SnapshotPayload>,
+    db: Option<&Database>,
 ) -> Result<SnapshotBuildResult, DeviceSyncError> {
     config.validate()?;
     if request.parent_ids.len() > 2
@@ -152,6 +177,22 @@ pub fn build_snapshot_with_clock(
             "preferences".to_string(),
             component_summary(&records.preferences, 1)?,
         );
+    }
+
+    if config.has_component(SyncComponent::Usage) {
+        let usage = db
+            .map(|database| database.all_usage())
+            .transpose()
+            .map_err(|error| DeviceSyncError::apply_failed(error.to_string()))?
+            .unwrap_or_default()
+            .into_iter()
+            .map(|mut record| { record.id = None; record.project_ref.clear(); record })
+            .collect::<Vec<_>>();
+        components.insert(
+            "usage".to_string(),
+            component_summary(&usage, usage.len() as u64)?,
+        );
+        records.usage = usage;
     }
 
     let mut manifest = SnapshotManifest::new(
@@ -255,6 +296,7 @@ pub fn local_fingerprint(manifest: &SnapshotManifest) -> Result<String, DeviceSy
                 "enabled_agent_ids": &record.enabled_agent_ids,
                 "tombstone": record.metadata.tombstone,
             })),
+            "usage": &manifest.records.usage,
         }
     });
     Ok(sha256_hex(&canonical_json(&value)?))
@@ -636,6 +678,12 @@ fn refresh_component_summaries(manifest: &mut SnapshotManifest) -> Result<(), De
                 summary.sha256 = sha256_hex(&bytes);
                 summary.records = u64::from(manifest.records.preferences.is_some());
             }
+            "usage" => {
+                let bytes = canonical_json(&manifest.records.usage)?;
+                summary.bytes = bytes.len() as u64;
+                summary.sha256 = sha256_hex(&bytes);
+                summary.records = manifest.records.usage.len() as u64;
+            }
             _ => {}
         }
     }
@@ -861,6 +909,7 @@ mod tests {
                 enabled_agent_ids: vec!["codex".to_string()],
                 metadata: previous_metadata.clone(),
             }),
+            usage: Vec::new(),
         };
         let mut current = SnapshotRecords {
             skills: vec![SkillRecord {
@@ -883,6 +932,7 @@ mod tests {
                 enabled_agent_ids: vec!["codex".to_string()],
                 metadata: next_metadata,
             }),
+            usage: Vec::new(),
         };
 
         preserve_unchanged_metadata(&mut current, &baseline);

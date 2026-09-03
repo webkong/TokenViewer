@@ -12,6 +12,7 @@ use uuid::Uuid;
 use crate::skills::agent_config::expand_path;
 use crate::skills::symlink::single_file_marker_path;
 use crate::skills::SkillsCore;
+use crate::storage::Database;
 
 use super::archive::unpack_archive;
 use super::config::{
@@ -34,9 +35,10 @@ use super::models::{
     MAX_REMOTE_LIST_OBJECTS, PREVIEW_TTL_SECONDS, PROTOCOL_VERSION,
 };
 use super::skill_env::SkillEnvironmentStore;
-use super::snapshot::{build_snapshot, build_snapshot_with_clock, SnapshotBuildRequest};
+use super::snapshot::{build_snapshot_with_clock_and_db, SnapshotBuildRequest};
 use super::store::{
-    LocalFolderStore, ObjectKey, ObjectMeta, ObjectPrefix, ObjectStore, PutCondition,
+    ConnectionReport, LocalFolderStore, ObjectKey, ObjectMeta, ObjectPrefix, ObjectStore,
+    PutCondition, WebDavCredentials, WebDavStore,
 };
 
 #[derive(Debug)]
@@ -44,10 +46,12 @@ pub struct DeviceSyncEngine {
     paths: DeviceSyncPaths,
     home_dir: PathBuf,
     source_root: PathBuf,
+    db_path: Option<PathBuf>,
     config: DeviceSyncConfig,
     identity: DeviceIdentity,
     state: DeviceSyncState,
     vault_key: Option<VaultKey>,
+    webdav_credentials: Option<RuntimeProviderCredentials>,
     previews: HashMap<String, PreviewRecord>,
     transactions: HashMap<String, PendingTransaction>,
     recovery_block: Option<RecoveryBlock>,
@@ -182,6 +186,13 @@ struct RemoteView {
 struct RecoveryBlock {
     operation_id: Option<String>,
     recovery_path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeProviderCredentials {
+    profile_id: String,
+    provider_scope: String,
+    webdav: WebDavCredentials,
 }
 
 const SNAPSHOT_HEADER_READ_BYTES: u64 = 12 + 64 * 1024;
@@ -330,6 +341,14 @@ fn detect_orphan_transaction_root(source_root: &Path) -> Option<RecoveryBlock> {
 
 impl DeviceSyncEngine {
     pub fn new(home_dir: PathBuf, source_root: PathBuf) -> Result<Self, DeviceSyncError> {
+        Self::new_with_db_option(home_dir, source_root, None)
+    }
+
+    pub fn new_with_db(home_dir: PathBuf, source_root: PathBuf, db_path: PathBuf) -> Result<Self, DeviceSyncError> {
+        Self::new_with_db_option(home_dir, source_root, Some(db_path))
+    }
+
+    fn new_with_db_option(home_dir: PathBuf, source_root: PathBuf, db_path: Option<PathBuf>) -> Result<Self, DeviceSyncError> {
         let paths = DeviceSyncPaths::new(&home_dir);
         paths.ensure_root()?;
         let identity = load_or_create_identity(&paths)?;
@@ -358,10 +377,12 @@ impl DeviceSyncEngine {
             paths,
             home_dir,
             source_root,
+            db_path,
             config,
             identity,
             state,
             vault_key: None,
+            webdav_credentials: None,
             previews: HashMap::new(),
             transactions: HashMap::new(),
             recovery_block,
@@ -495,19 +516,67 @@ impl DeviceSyncEngine {
     pub fn set_config(&mut self, config: DeviceSyncConfig) -> Result<(), DeviceSyncError> {
         self.ensure_operation_allowed()?;
         config.validate()?;
-        if self.config.vault_id != config.vault_id {
+        let vault_changed = self.config.vault_id != config.vault_id;
+        let provider_changed = provider_credential_scope(&self.config)
+            != provider_credential_scope(&config)
+            || self.config.profile_id != config.profile_id;
+        save_config(&self.paths, &config)?;
+        if vault_changed {
             self.vault_key = None;
         }
-        save_config(&self.paths, &config)?;
+        if provider_changed {
+            self.webdav_credentials = None;
+        }
         self.config = config;
         Ok(())
     }
 
-    pub fn test_connection(&self) -> Result<(), DeviceSyncError> {
+    pub fn set_webdav_credentials(
+        &mut self,
+        profile_id: &str,
+        password: &str,
+    ) -> Result<(), DeviceSyncError> {
+        self.ensure_operation_allowed()?;
+        if self.config.profile_id != profile_id {
+            return Err(DeviceSyncError::invalid_config("credential profile_id"));
+        }
+        let provider = self
+            .config
+            .provider
+            .as_ref()
+            .ok_or_else(|| DeviceSyncError::new(DeviceSyncErrorCode::CredentialMissing, false))?;
+        if provider.kind != "webdav" {
+            return Err(DeviceSyncError::new(
+                DeviceSyncErrorCode::ProtocolUnsupported,
+                false,
+            ));
+        }
+        let username = provider
+            .username
+            .as_deref()
+            .ok_or_else(|| DeviceSyncError::invalid_config("provider.username"))?;
+        let webdav = WebDavCredentials::new(username, password)?;
+        let provider_scope = provider_credential_scope(&self.config)
+            .ok_or_else(|| DeviceSyncError::invalid_config("provider.kind"))?;
+        self.webdav_credentials = Some(RuntimeProviderCredentials {
+            profile_id: profile_id.to_string(),
+            provider_scope,
+            webdav,
+        });
+        Ok(())
+    }
+
+    pub fn clear_provider_credentials(&mut self) -> Result<(), DeviceSyncError> {
+        self.ensure_operation_allowed()?;
+        self.webdav_credentials = None;
+        Ok(())
+    }
+
+    pub fn test_connection(&self) -> Result<ConnectionReport, DeviceSyncError> {
         self.ensure_operation_allowed()?;
         self.ensure_enabled()?;
         let store = self.store()?;
-        store.test_connection().map(|_| ())
+        store.test_connection()
     }
 
     pub fn create_vault(&mut self, password: &str) -> Result<(), DeviceSyncError> {
@@ -517,7 +586,7 @@ impl DeviceSyncEngine {
         let vault_id = config
             .vault_id
             .clone()
-            .unwrap_or_else(|| Uuid::new_v4().to_string());
+            .unwrap_or_else(|| "default".to_string());
         config.vault_id = Some(vault_id.clone());
         config.validate()?;
         let metadata = create_vault_metadata(&vault_id, &self.identity.device_id, password)?;
@@ -536,13 +605,15 @@ impl DeviceSyncEngine {
     pub fn join_vault(&mut self, password: &str) -> Result<(), DeviceSyncError> {
         self.ensure_operation_allowed()?;
         self.ensure_enabled()?;
-        let vault_id = self
-            .config
+        let mut config = self.config.clone();
+        let vault_id = config
             .vault_id
             .clone()
-            .ok_or_else(|| DeviceSyncError::new(DeviceSyncErrorCode::InvalidConfig, false))?;
-        let store = self.store()?;
-        let key = object_key_for_config(&self.config, "vault.json")?;
+            .unwrap_or_else(|| "default".to_string());
+        config.vault_id = Some(vault_id.clone());
+        config.validate()?;
+        let store = self.store_for_config(&config)?;
+        let key = object_key_for_config(&config, "vault.json")?;
         let bytes = get_object(&*store, &key, MAX_METADATA_BYTES)?;
         let metadata: super::models::VaultMetadata = serde_json::from_slice(&bytes)
             .map_err(|_| DeviceSyncError::new(DeviceSyncErrorCode::VaultAuthFailed, false))?;
@@ -554,6 +625,8 @@ impl DeviceSyncEngine {
         }
         let vault_key = unwrap_vault_key(&metadata, password)?;
         self.vault_key = Some(vault_key);
+        save_config(&self.paths, &config)?;
+        self.config = config;
         Ok(())
     }
 
@@ -1646,6 +1719,16 @@ impl DeviceSyncEngine {
             )?;
         }
 
+        if transaction.payload.components_contains(SyncComponent::Usage) {
+            if let Some(path) = &self.db_path {
+                let database = Database::open(path)
+                    .map_err(|error| DeviceSyncError::apply_failed(error.to_string()))?;
+                database
+                    .replace_usage(&transaction.payload.manifest.records.usage)
+                    .map_err(|error| DeviceSyncError::apply_failed(error.to_string()))?;
+            }
+        }
+
         #[cfg(test)]
         if self.fail_after_links {
             return Err(DeviceSyncError::apply_failed(
@@ -1740,16 +1823,22 @@ impl DeviceSyncEngine {
         baseline: Option<&SnapshotPayload>,
         clock: Option<Hlc>,
     ) -> Result<super::snapshot::SnapshotBuildResult, DeviceSyncError> {
+        let database = self
+            .db_path
+            .as_ref()
+            .map(|path| Database::open(path).map_err(|error| DeviceSyncError::apply_failed(error.to_string())))
+            .transpose()?;
         match clock {
-            Some(clock) => build_snapshot_with_clock(
+            Some(clock) => build_snapshot_with_clock_and_db(
                 skills,
                 &self.home_dir(),
                 &self.config,
                 &request,
                 clock,
                 baseline,
+                database.as_ref(),
             ),
-            None => build_snapshot(skills, &self.home_dir(), &self.config, &request, baseline),
+            None => super::snapshot::build_snapshot_with_db(skills, &self.home_dir(), &self.config, &request, baseline, database.as_ref()),
         }
     }
 
@@ -2351,17 +2440,48 @@ impl DeviceSyncEngine {
             .provider
             .as_ref()
             .ok_or_else(|| DeviceSyncError::new(DeviceSyncErrorCode::CredentialMissing, false))?;
-        if provider.kind != "local_folder" {
-            return Err(DeviceSyncError::new(
+        match provider.kind.as_str() {
+            "local_folder" => {
+                let root = provider
+                    .local_root
+                    .clone()
+                    .ok_or_else(|| DeviceSyncError::invalid_config("provider.local_root"))?;
+                Ok(Box::new(LocalFolderStore::new(root)?))
+            }
+            "webdav" => {
+                let endpoint = provider
+                    .endpoint
+                    .as_deref()
+                    .ok_or_else(|| DeviceSyncError::invalid_config("provider.endpoint"))?;
+                let provider_scope = provider_credential_scope(config)
+                    .ok_or_else(|| DeviceSyncError::invalid_config("provider.kind"))?;
+                let credentials = self
+                    .webdav_credentials
+                    .as_ref()
+                    .filter(|credentials| {
+                        credentials.profile_id == config.profile_id
+                            && credentials.provider_scope == provider_scope
+                    })
+                    .map(|credentials| credentials.webdav.clone())
+                    .ok_or_else(|| {
+                        DeviceSyncError::new(DeviceSyncErrorCode::CredentialMissing, false)
+                    })?;
+                let store = if provider.insecure {
+                    WebDavStore::new_allowing_http(
+                        endpoint,
+                        &provider.remote_prefix,
+                        credentials,
+                    )?
+                } else {
+                    WebDavStore::new(endpoint, &provider.remote_prefix, credentials)?
+                };
+                Ok(Box::new(store))
+            }
+            _ => Err(DeviceSyncError::new(
                 DeviceSyncErrorCode::ProtocolUnsupported,
                 false,
-            ));
+            )),
         }
-        let root = provider
-            .local_root
-            .clone()
-            .ok_or_else(|| DeviceSyncError::invalid_config("provider.local_root"))?;
-        Ok(Box::new(LocalFolderStore::new(root)?))
     }
 
     fn require_vault_key(&self) -> Result<&VaultKey, DeviceSyncError> {
@@ -2441,6 +2561,22 @@ fn object_key_for_config(
     path.push('/');
     path.push_str(suffix);
     ObjectKey::from_path(&path)
+}
+
+/// Identifies the non-secret provider configuration to which an in-memory
+/// credential belongs. Keeping this separate from the password prevents a
+/// credential from surviving a profile, endpoint, prefix, or username change.
+fn provider_credential_scope(config: &DeviceSyncConfig) -> Option<String> {
+    let provider = config.provider.as_ref()?;
+    (provider.kind == "webdav").then(|| {
+        format!(
+            "webdav\n{}\n{}\n{}\n{}",
+            provider.endpoint.as_deref().unwrap_or_default(),
+            provider.remote_prefix,
+            provider.username.as_deref().unwrap_or_default(),
+            provider.insecure,
+        )
+    })
 }
 
 fn object_prefix_for_config(
@@ -2659,6 +2795,10 @@ fn push_summary(payload: &SnapshotPayload) -> (PreviewSummary, Vec<PreviewItem>)
             destructive: record.metadata.tombstone,
         });
     }
+    if !payload.manifest.records.usage.is_empty() {
+        summary.usage.added = payload.manifest.records.usage.len() as u64;
+        items.push(preview_item("usage", "replace", "parsed_usage", true));
+    }
     (summary, items)
 }
 
@@ -2839,6 +2979,10 @@ fn diff_payloads(
             "skillsEnabledProviders",
             false,
         ));
+    }
+    if local.manifest.records.usage != remote.manifest.records.usage {
+        summary.usage.updated = remote.manifest.records.usage.len() as u64;
+        items.push(preview_item("usage", "replace", "parsed_usage", true));
     }
     Ok((summary, items))
 }
@@ -3898,6 +4042,35 @@ mod tests {
             DeviceSyncEngine::for_test(home.path(), source_root, config).unwrap();
         engine.vault_key = Some(key);
         engine
+    }
+
+    #[test]
+    fn new_devices_create_and_join_the_default_vault_without_a_known_id() {
+        let remote = TempDir::new().unwrap();
+        let home_a = TempDir::new().unwrap();
+        let home_b = TempDir::new().unwrap();
+        let source_a = home_a.path().join(".tokenviewer/skills");
+        let source_b = home_b.path().join(".tokenviewer/skills");
+        fs::create_dir_all(&source_a).unwrap();
+        fs::create_dir_all(&source_b).unwrap();
+
+        let mut config_a = DeviceSyncConfig::for_local_test(remote.path(), "placeholder");
+        config_a.enabled = true;
+        config_a.vault_id = None;
+        let mut config_b = config_a.clone();
+        config_b.profile_id = "profile-b".to_string();
+
+        let mut engine_a = DeviceSyncEngine::for_test(home_a.path(), source_a, config_a).unwrap();
+        let mut engine_b = DeviceSyncEngine::for_test(home_b.path(), source_b, config_b).unwrap();
+        engine_a.create_vault("shared-password").unwrap();
+        engine_b.join_vault("shared-password").unwrap();
+
+        assert_eq!(engine_a.config().vault_id.as_deref(), Some("default"));
+        assert_eq!(engine_b.config().vault_id.as_deref(), Some("default"));
+        assert_eq!(
+            engine_a.vault_key.as_ref().unwrap().as_bytes(),
+            engine_b.vault_key.as_ref().unwrap().as_bytes()
+        );
     }
 
     #[test]

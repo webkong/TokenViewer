@@ -567,8 +567,8 @@ fn codex_scans_flat_archived_sessions() {
     let codex_home = home.join(".codex");
     // Codex-Manager archives sessions FLAT (no YYYY/MM/DD nesting), which the
     // strict sessions/ walk would miss.
-    let archived = codex_home
-        .join("archived_sessions/rollout-2026-08-05T00-00-00-archived-uuid.jsonl");
+    let archived =
+        codex_home.join("archived_sessions/rollout-2026-08-05T00-00-00-archived-uuid.jsonl");
     write_text(
         &archived,
         concat!(
@@ -580,7 +580,10 @@ fn codex_scans_flat_archived_sessions() {
     let homes = vec![codex_home_info(&codex_home)];
     let (records, _) = codex::parse_with_homes(&home, None, &homes).unwrap();
     assert_eq!(
-        records.iter().map(|record| record.total_tokens).sum::<u64>(),
+        records
+            .iter()
+            .map(|record| record.total_tokens)
+            .sum::<u64>(),
         35
     );
 }

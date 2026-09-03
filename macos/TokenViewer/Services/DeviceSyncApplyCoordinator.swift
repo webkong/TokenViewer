@@ -1122,7 +1122,9 @@ final class DeviceSyncApplyCoordinator: ObservableObject {
             if current && isRecoveryFailureCode(failure.code) {
                 markRecoveryBlocked(failure)
             }
-            throw failure
+            // Non-apply callers need the original structured bridge payload
+            // so the UI can show HTTP status, retryability, and the real code.
+            throw error
         }
     }
 

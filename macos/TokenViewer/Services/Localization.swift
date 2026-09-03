@@ -214,6 +214,81 @@ final class L10n: ObservableObject {
     func activeCount(_ n: Int) -> String { isZh ? "23 个支持工具中 \(n) 个活跃" : "\(n) of 23 supported tools active" }
     var data: String { isZh ? "数据" : "Data" }
     var dataManagement: String { isZh ? "数据管理" : "Data Management" }
+    var deviceSync: String { isZh ? "设备同步" : "Device Sync" }
+    var deviceSyncDescription: String {
+        isZh
+            ? "通过 WebDAV 同步当前配置、Skills 和已解析用量。账号凭据只保存在本机钥匙串。"
+            : "Sync current settings, Skills, and parsed usage over WebDAV. Account credentials stay in this Mac's Keychain."
+    }
+    var deviceSyncProfile: String { isZh ? "同步配置" : "Sync Profile" }
+    var deviceSyncRecoveryRequired: String { isZh ? "需要先完成恢复" : "Recovery required" }
+    var deviceSyncEnabled: String { isZh ? "启用设备同步" : "Enable Device Sync" }
+    var deviceSyncProvider: String { isZh ? "存储服务" : "Storage service" }
+    var deviceSyncVaultSetup: String { isZh ? "Vault 安全设置" : "Vault security" }
+    var deviceSyncCreateVault: String { isZh ? "创建 Vault" : "Create Vault" }
+    var deviceSyncJoinVault: String { isZh ? "加入 Vault" : "Join Vault" }
+    var deviceSyncVaultPassword: String { isZh ? "Vault 密码" : "Vault password" }
+    var deviceSyncProtection: String { isZh ? "同步数据保护" : "Sync data protection" }
+    var deviceSyncEncrypted: String { isZh ? "加密" : "Encrypted" }
+    var deviceSyncUnencrypted: String { isZh ? "不加密" : "Unencrypted" }
+    var deviceSyncEncryptedHint: String { isZh ? "首次推送时创建加密密钥；其他设备使用相同密码加入 Vault。" : "Create an encryption password on the first push; other devices join the Vault with the same password." }
+    var deviceSyncUnencryptedHint: String { isZh ? "无需 Vault 密码。WebDAV 访问者可恢复同步内容，仅建议在可信服务器上使用。" : "No Vault password is required. WebDAV users can recover the synced content; use only with a trusted server." }
+    var deviceSyncPushNow: String { isZh ? "手动推送" : "Push now" }
+    var deviceSyncPullNow: String { isZh ? "拉取同步" : "Pull sync" }
+    var deviceSyncPushSucceeded: String { isZh ? "已推送当前配置" : "Current configuration pushed" }
+    var deviceSyncPullSucceeded: String { isZh ? "已完成拉取同步" : "Pull sync completed" }
+    var deviceSyncPresetNutstore: String { isZh ? "坚果云" : "Nutstore" }
+    var deviceSyncPresetSynology: String { isZh ? "群晖 NAS" : "Synology NAS" }
+    var deviceSyncPresetNextcloud: String { "Nextcloud" }
+    var deviceSyncPresetKoofr: String { "Koofr" }
+    var deviceSyncPresetCustomWebDAV: String { isZh ? "自定义 WebDAV" : "Custom WebDAV" }
+    var deviceSyncServerSettings: String { isZh ? "服务器" : "Server" }
+    var deviceSyncCredentials: String { isZh ? "账号与凭据" : "Account & Credentials" }
+    var deviceSyncCredentialsKeychainHint: String {
+        isZh ? "凭据只保存在本机钥匙串，不会写入同步配置。" : "Credentials stay in this Mac's Keychain and are never written to the sync configuration."
+    }
+    var deviceSyncEndpoint: String { isZh ? "WebDAV 地址" : "WebDAV endpoint" }
+    var deviceSyncEndpointPlaceholder: String { isZh ? "https://dav.example.com/dav/" : "https://dav.example.com/dav/" }
+    var deviceSyncRemotePrefix: String { isZh ? "远端目录前缀" : "Remote prefix" }
+    var deviceSyncRemotePrefixPlaceholder: String { isZh ? "tokenviewer-sync" : "tokenviewer-sync" }
+    var deviceSyncUsername: String { isZh ? "用户名" : "Username" }
+    var deviceSyncUsernamePlaceholder: String { isZh ? "输入账号或邮箱" : "Enter account or email" }
+    var deviceSyncApplicationPassword: String { isZh ? "密码 / 应用密码" : "Password / App password" }
+    var deviceSyncPasswordPlaceholder: String { isZh ? "输入密码或应用密码" : "Enter password or app password" }
+    var deviceSyncReplacementPasswordPlaceholder: String { isZh ? "输入新密码以替换已保存凭据" : "Enter a new password to replace the saved credential" }
+    var deviceSyncPasswordSaved: String { isZh ? "已安全保存到钥匙串" : "Securely saved in Keychain" }
+    var deviceSyncShowPassword: String { isZh ? "显示密码" : "Show password" }
+    var deviceSyncHidePassword: String { isZh ? "隐藏密码" : "Hide password" }
+    var deviceSyncClearPassword: String { isZh ? "移除已保存凭据" : "Remove saved credential" }
+    var deviceSyncHintNutstore: String {
+        isZh ? "账号填写坚果云邮箱；请在安全设置中创建第三方应用密码。" : "Use your Nutstore email and create a third-party app password in Security Settings."
+    }
+    var deviceSyncHintSynology: String {
+        isZh ? "先在 NAS 启用 WebDAV Server；推荐使用 HTTPS 地址和默认端口 5006，QuickConnect 地址不可用。" : "Enable WebDAV Server on the NAS first. Use an HTTPS address (default port 5006); QuickConnect URLs are not supported."
+    }
+    var deviceSyncHintNextcloud: String {
+        isZh ? "请从 Nextcloud 文件设置中复制个人 WebDAV 地址，并优先使用应用密码。" : "Copy your personal WebDAV URL from Nextcloud Files settings and prefer an app password."
+    }
+    var deviceSyncHintKoofr: String {
+        isZh ? "账号填写 Koofr 登录邮箱；连接 WebDAV 必须使用应用专用密码。" : "Use your Koofr login email. WebDAV connections require an application-specific password."
+    }
+    var deviceSyncHintCustomWebDAV: String {
+        isZh ? "填写完整的 HTTP 或 HTTPS WebDAV 地址。" : "Enter the full HTTP or HTTPS WebDAV endpoint."
+    }
+    var deviceSyncTestConnection: String { isZh ? "测试连接" : "Test Connection" }
+    var deviceSyncConnectionSucceeded: String { isZh ? "连接成功" : "Connection succeeded" }
+    var deviceSyncWritable: String { isZh ? "可写" : "Writable" }
+    var deviceSyncReadOnly: String { isZh ? "只读" : "Read-only" }
+    func deviceSyncHTTPStatus(_ status: String) -> String {
+        isZh ? "HTTP 状态：\(status)" : "HTTP status: \(status)"
+    }
+    func deviceSyncOperation(_ operation: String) -> String {
+        isZh ? "请求操作：\(operation)" : "Request operation: \(operation)"
+    }
+
+    var deviceSyncRetrySuggestion: String {
+        isZh ? "请检查网络后稍后重试。" : "Check the network and try again later."
+    }
     var directory: String { isZh ? "目录" : "Directory" }
     var add: String { isZh ? "添加" : "Add" }
     var openInFinder: String { isZh ? "在 Finder 中打开" : "Open in Finder" }
@@ -582,9 +657,13 @@ final class L10n: ObservableObject {
         case "rate_limited":
             return isZh ? "设备同步请求过于频繁，请稍后重试。" : "Device Sync requests are being rate limited. Try again later."
         case "protocol_unsupported":
-            return isZh ? "设备同步协议版本不受支持。" : "The Device Sync protocol version is unsupported."
+            return isZh ? "WebDAV 服务不支持当前请求。" : "The WebDAV service does not support this request."
+        case "remote_directory_unavailable":
+            return isZh
+                ? "远端目录不存在或无法访问，请检查 WebDAV 地址和远端目录前缀。"
+                : "The remote directory does not exist or cannot be accessed. Check the WebDAV endpoint and remote prefix."
         case "vault_not_found":
-            return isZh ? "未找到设备同步 Vault。" : "The Device Sync vault could not be found."
+            return isZh ? "未找到可拉取的远端同步数据。" : "No remote sync data is available to pull."
         case "integrity_failed":
             return isZh ? "设备同步数据完整性校验失败。" : "Device Sync data failed its integrity check."
         case "remote_changed":

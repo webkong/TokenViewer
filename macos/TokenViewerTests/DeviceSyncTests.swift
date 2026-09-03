@@ -13,6 +13,7 @@ final class DeviceSyncTests: XCTestCase {
             "network_unreachable",
             "rate_limited",
             "protocol_unsupported",
+            "remote_directory_unavailable",
             "vault_not_found",
             "vault_auth_failed",
             "object_too_large",
@@ -115,6 +116,78 @@ final class DeviceSyncTests: XCTestCase {
         XCTAssertNil(object["session_token"])
     }
 
+    func testDeviceSyncProviderConfigDefaultsInsecureAndIgnoresUnknownFields() throws {
+        let data = Data(
+            """
+            {
+              "kind": "webdav",
+              "endpoint": "https://dav.example.com/dav/",
+              "remote_prefix": "tokenviewer-sync",
+              "username": "user@example.com",
+              "future_provider_field": "ignored"
+            }
+            """.utf8
+        )
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let provider = try decoder.decode(DeviceSyncProviderConfig.self, from: data)
+
+        XCTAssertEqual(provider.kind, DeviceSyncProviderConfig.webDAVKind)
+        XCTAssertEqual(provider.remotePrefix, "tokenviewer-sync")
+        XCTAssertFalse(provider.insecure)
+    }
+
+    func testDeviceSyncProviderCredentialScopeChangesWithProfileAndEndpoint() {
+        let provider = DeviceSyncProviderConfig(
+            kind: DeviceSyncProviderConfig.webDAVKind,
+            endpoint: "https://dav.example.com/dav/",
+            remotePrefix: "tokenviewer-sync",
+            username: "user@example.com"
+        )
+        let base = DeviceSyncConfig(profileId: "profile-a", provider: provider)
+        let same = DeviceSyncProviderCredentialScope(config: base)
+        XCTAssertEqual(same, DeviceSyncProviderCredentialScope(config: base))
+
+        var endpointChanged = base
+        endpointChanged.provider?.endpoint = "https://dav.example.com/other/"
+        XCTAssertNotEqual(same, DeviceSyncProviderCredentialScope(config: endpointChanged))
+
+        var profileChanged = base
+        profileChanged.profileId = "profile-b"
+        XCTAssertNotEqual(same, DeviceSyncProviderCredentialScope(config: profileChanged))
+
+        var transportChanged = base
+        transportChanged.provider?.insecure = true
+        XCTAssertNotEqual(same, DeviceSyncProviderCredentialScope(config: transportChanged))
+        XCTAssertNil(DeviceSyncProviderCredentialScope(config: DeviceSyncConfig(profileId: "local")))
+    }
+
+    func testDeviceSyncProviderCredentialEnvelopeAndConnectionReportDecode() throws {
+        let configuredData = Data(
+            """
+            {"ok":true,"data":{"configured":true,"cleared":null},"error":null}
+            """.utf8
+        )
+        let reportData = Data(
+            """
+            {"ok":true,"data":{"connected":true,"provider":"webdav","writable":true},"error":null}
+            """.utf8
+        )
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let configured = try decoder.decode(
+            DeviceSyncEnvelope<DeviceSyncCredentialMutationResponse>.self,
+            from: configuredData
+        )
+        let report = try decoder.decode(
+            DeviceSyncEnvelope<DeviceSyncConnectionReport>.self,
+            from: reportData
+        )
+
+        XCTAssertTrue(configured.data?.configured == true)
+        XCTAssertEqual(report.data, DeviceSyncConnectionReport(connected: true))
+    }
+
     func testDeviceSyncCredentialAccountsAreProfileAndVaultScoped() throws {
         XCTAssertEqual(
             try DeviceSyncCredentialStore.profileAccount(
@@ -136,6 +209,52 @@ final class DeviceSyncTests: XCTestCase {
         XCTAssertThrowsError(
             try DeviceSyncCredentialStore.vaultAccount(vaultId: "vault:id")
         )
+        XCTAssertThrowsError(
+            try DeviceSyncCredentialStore.profileAccount(
+                profileId: "profile\n id",
+                kind: .webDAVPassword
+            )
+        )
+        XCTAssertThrowsError(
+            try DeviceSyncCredentialStore.profileAccount(
+                profileId: "profile\u{7f}id",
+                kind: .webDAVPassword
+            )
+        )
+    }
+
+    func testDeviceSyncNutstorePresetAndHTTPStatusLocalization() {
+        XCTAssertEqual(
+            DeviceSyncProviderPreset.nutstore.defaultEndpoint,
+            "https://dav.jianguoyun.com/dav/"
+        )
+        XCTAssertEqual(
+            DeviceSyncProviderPreset.koofr.defaultEndpoint,
+            "https://app.koofr.net/dav/Koofr/"
+        )
+        XCTAssertNil(DeviceSyncProviderPreset.synology.defaultEndpoint)
+        XCTAssertNil(DeviceSyncProviderPreset.nextcloud.defaultEndpoint)
+        XCTAssertEqual(
+            DeviceSyncProviderPreset.detect(endpoint: "https://nas.example.com:5006/"),
+            .synology
+        )
+        XCTAssertEqual(
+            DeviceSyncProviderPreset.detect(endpoint: "https://cloud.example.com/remote.php/dav/files/alice/"),
+            .nextcloud
+        )
+        XCTAssertEqual(
+            DeviceSyncProviderPreset.detect(endpoint: "https://dav.example.com/custom/"),
+            .customWebDAV
+        )
+        let originalLanguage = L10n.shared.language
+        defer { L10n.shared.language = originalLanguage }
+
+        L10n.shared.language = .zh
+        XCTAssertEqual(L10n.shared.deviceSyncHTTPStatus("412"), "HTTP 状态：412")
+        XCTAssertEqual(L10n.shared.deviceSyncOperation("propfind"), "请求操作：propfind")
+        L10n.shared.language = .en
+        XCTAssertEqual(L10n.shared.deviceSyncHTTPStatus("412"), "HTTP status: 412")
+        XCTAssertEqual(L10n.shared.deviceSyncOperation("propfind"), "Request operation: propfind")
     }
 
     func testDeviceSyncPreviewItemUsesStableIdentity() {
@@ -245,6 +364,30 @@ final class DeviceSyncTests: XCTestCase {
         XCTAssertEqual(coordinator.sessionGate.profileId, "new-profile")
         XCTAssertEqual(coordinator.recoveryState, .ready)
         XCTAssertEqual(coordinator.state, .idle)
+    }
+
+    func testDeviceSyncOperationPreservesStructuredBridgeError() async throws {
+        let coordinator = DeviceSyncApplyCoordinator(
+            core: FakeDeviceSyncApplyCore(),
+            preferenceStore: FakeDeviceSyncPreferenceStore(),
+            journalDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("TokenViewerDeviceSyncTests-\(UUID().uuidString)")
+        )
+        let payload = DeviceSyncErrorPayload(
+            code: "authentication_failed",
+            messageKey: "deviceSync.error.authenticationFailed",
+            arguments: ["http_status": "401"],
+            retryable: false,
+            operationId: nil
+        )
+
+        await XCTAssertThrowsErrorAsync(
+            try await coordinator.runDeviceSyncOperation {
+                throw DeviceSyncBridgeError.core(payload)
+            }
+        ) { error in
+            XCTAssertEqual(error as? DeviceSyncBridgeError, .core(payload))
+        }
     }
 
     func testKeychainRetrySucceedsAfterTransientFailure() throws {

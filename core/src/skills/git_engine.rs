@@ -253,8 +253,7 @@ impl GitEngine {
                 .into();
         }
         if message.contains("404") {
-            return "Repository not found (404). Check the repository URL and token access."
-                .into();
+            return "Repository not found (404). Check the repository URL and token access.".into();
         }
         error.to_string()
     }
@@ -1172,9 +1171,9 @@ impl GitEngine {
                     "Remote changes were integrated, but local Skills changes conflict while being restored. The stash was kept for recovery: {e}"
                 )
             })?;
-        self.repo
-            .stash_drop(index)
-            .map_err(|e| format!("Local changes were restored but the preserved stash could not be removed: {e}"))
+        self.repo.stash_drop(index).map_err(|e| {
+            format!("Local changes were restored but the preserved stash could not be removed: {e}")
+        })
     }
 
     fn integrate_remote(
@@ -1194,26 +1193,32 @@ impl GitEngine {
             return Ok(());
         }
 
-        let merge_base = self
-            .repo
-            .merge_base(head_oid, remote_oid)
-            .map_err(|e| RebaseFailure::Error(format!("Failed to compare local and remote history: {e}")))?;
+        let merge_base = self.repo.merge_base(head_oid, remote_oid).map_err(|e| {
+            RebaseFailure::Error(format!("Failed to compare local and remote history: {e}"))
+        })?;
         if merge_base == remote_oid {
             return Ok(());
         }
         if merge_base == head_oid {
             let local_ref = format!("refs/heads/{branch}");
             self.repo
-                .reference(&local_ref, remote_oid, true, "TokenViewer fast-forward pull")
-                .map_err(|e| RebaseFailure::Error(format!("Failed to fast-forward local branch: {e}")))?;
+                .reference(
+                    &local_ref,
+                    remote_oid,
+                    true,
+                    "TokenViewer fast-forward pull",
+                )
+                .map_err(|e| {
+                    RebaseFailure::Error(format!("Failed to fast-forward local branch: {e}"))
+                })?;
             self.repo
                 .set_head(&local_ref)
                 .map_err(|e| RebaseFailure::Error(format!("Failed to update local HEAD: {e}")))?;
             let mut checkout = CheckoutBuilder::new();
             checkout.force();
-            self.repo
-                .checkout_head(Some(&mut checkout))
-                .map_err(|e| RebaseFailure::Error(format!("Failed to check out remote Skills: {e}")))?;
+            self.repo.checkout_head(Some(&mut checkout)).map_err(|e| {
+                RebaseFailure::Error(format!("Failed to check out remote Skills: {e}"))
+            })?;
             return Ok(());
         }
 
@@ -1236,7 +1241,9 @@ impl GitEngine {
         while let Some(operation) = rebase.next() {
             if let Err(error) = operation {
                 let _ = rebase.abort();
-                return Err(RebaseFailure::Error(format!("Failed to apply local commit: {error}")));
+                return Err(RebaseFailure::Error(format!(
+                    "Failed to apply local commit: {error}"
+                )));
             }
             let index = self
                 .repo
@@ -1251,7 +1258,9 @@ impl GitEngine {
             drop(index);
             if let Err(error) = rebase.commit(None, &signature, None) {
                 let _ = rebase.abort();
-                return Err(RebaseFailure::Error(format!("Failed to commit rebased Skills: {error}")));
+                return Err(RebaseFailure::Error(format!(
+                    "Failed to commit rebased Skills: {error}"
+                )));
             }
         }
         rebase
@@ -1291,7 +1300,10 @@ impl GitEngine {
                 if let Some(stash_oid) = stash_oid {
                     self.restore_stash(stash_oid)?;
                 }
-                return Err(format!("Remote branch '{}' has no commits", self.sync_branch()));
+                return Err(format!(
+                    "Remote branch '{}' has no commits",
+                    self.sync_branch()
+                ));
             }
             Err(error) => {
                 if let Some(stash_oid) = stash_oid {
@@ -1310,10 +1322,15 @@ impl GitEngine {
         if let Some(stash_oid) = stash_oid {
             if let Err(message) = self.restore_stash(stash_oid) {
                 let mut status = GitStatusInfo::conflicted(&message);
-                status.changes = self.conflict_paths().unwrap_or_default().into_iter().map(|file_path| PendingChange {
-                    file_path,
-                    change_type: "conflicted".to_string(),
-                }).collect();
+                status.changes = self
+                    .conflict_paths()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|file_path| PendingChange {
+                        file_path,
+                        change_type: "conflicted".to_string(),
+                    })
+                    .collect();
                 return Ok(status);
             }
         }
@@ -1461,11 +1478,15 @@ impl GitEngine {
         if self.has_remote() {
             let head_oid = self.repo.head().ok().and_then(|head| head.target());
             let remote_parent = self.fetch_remote_head(token)?;
-            let base_oid = remote_parent.or(head_oid).ok_or("Filtered sync requires an initial commit")?;
+            let base_oid = remote_parent
+                .or(head_oid)
+                .ok_or("Filtered sync requires an initial commit")?;
             if let Some(commit_oid) = self
                 .commit_filtered_snapshot(filter, base_oid, remote_parent, user_name, user_email)
                 .map_err(|failure| match failure {
-                    RebaseFailure::Conflicted(paths) => format!("Filtered Skills conflict: {}", paths.join(", ")),
+                    RebaseFailure::Conflicted(paths) => {
+                        format!("Filtered Skills conflict: {}", paths.join(", "))
+                    }
                     RebaseFailure::Error(message) => message,
                 })?
             {
@@ -1485,7 +1506,9 @@ impl GitEngine {
         match self.repo.find_reference(&remote_ref) {
             Ok(reference) => Ok(reference.target()),
             Err(error) if error.code() == ErrorCode::NotFound => Ok(None),
-            Err(error) => Err(format!("Failed to find remote branch {remote_ref}: {error}")),
+            Err(error) => Err(format!(
+                "Failed to find remote branch {remote_ref}: {error}"
+            )),
         }
     }
 
@@ -1554,7 +1577,11 @@ impl GitEngine {
     }
 
     fn push(&self, token: Option<&str>, force: bool) -> Result<(), String> {
-        debug_log!(" push: start, has_token={}, force={}", token.is_some(), force);
+        debug_log!(
+            " push: start, has_token={}, force={}",
+            token.is_some(),
+            force
+        );
         let mut remote = self
             .repo
             .find_remote("origin")
@@ -1578,9 +1605,7 @@ impl GitEngine {
 
         remote
             .push(&[&refspec], Some(&mut push_options))
-            .map_err(|e| {
-                format!("Failed to push: {}", Self::friendly_remote_error(&e))
-            })?;
+            .map_err(|e| format!("Failed to push: {}", Self::friendly_remote_error(&e)))?;
         let pushed_oid = self
             .repo
             .head()
@@ -1592,7 +1617,11 @@ impl GitEngine {
                 &format!("refs/remotes/origin/{remote_branch}"),
                 pushed_oid,
                 true,
-                if force { "TokenViewer force pushed" } else { "TokenViewer pushed" },
+                if force {
+                    "TokenViewer force pushed"
+                } else {
+                    "TokenViewer pushed"
+                },
             )
             .map_err(|e| format!("Failed to update remote tracking branch: {e}"))?;
         self.ensure_upstream_tracking(&remote_branch)?;
@@ -2341,11 +2370,7 @@ mod tests {
             .output()
             .unwrap();
         fs::create_dir_all(local.join("local-only-skill")).unwrap();
-        fs::write(
-            local.join("local-only-skill/SKILL.md"),
-            "local only\n",
-        )
-        .unwrap();
+        fs::write(local.join("local-only-skill/SKILL.md"), "local only\n").unwrap();
 
         let mut engine = GitEngine::open(&local).unwrap();
         let status = engine.force_pull(None, None, None).unwrap();
@@ -2430,8 +2455,14 @@ mod tests {
         let status = engine.pull(None, None, None).unwrap();
 
         assert_eq!(status.status, "modified", "{:?}", status.message);
-        assert_eq!(fs::read_to_string(local.join("README.md")).unwrap(), "# Local worktree\n");
-        assert_eq!(fs::read_to_string(local.join("remote-only.txt")).unwrap(), "remote\n");
+        assert_eq!(
+            fs::read_to_string(local.join("README.md")).unwrap(),
+            "# Local worktree\n"
+        );
+        assert_eq!(
+            fs::read_to_string(local.join("remote-only.txt")).unwrap(),
+            "remote\n"
+        );
         assert!(local.join("local-only-skill/SKILL.md").exists());
         let mut stash_count = 0;
         engine
@@ -2467,7 +2498,13 @@ mod tests {
             .output()
             .unwrap();
         Command::new("git")
-            .args(["clone", "--branch", "main", remote.to_str().unwrap(), peer.to_str().unwrap()])
+            .args([
+                "clone",
+                "--branch",
+                "main",
+                remote.to_str().unwrap(),
+                peer.to_str().unwrap(),
+            ])
             .output()
             .unwrap();
         Command::new("git")
@@ -2506,7 +2543,9 @@ mod tests {
 
         fs::write(local.join("README.md"), "# Local push\n").unwrap();
         let mut engine = GitEngine::open(&local).unwrap();
-        let status = engine.stage_and_push("safe push", None, None, None).unwrap();
+        let status = engine
+            .stage_and_push("safe push", None, None, None)
+            .unwrap();
 
         assert_eq!(status.status, "idle");
         let ancestor = Command::new("git")
@@ -2539,7 +2578,13 @@ mod tests {
         let remote = root.path().join("remote.git");
         let local = root.path().join("local");
         Command::new("git")
-            .args(["init", "--bare", "--initial-branch", "main", remote.to_str().unwrap()])
+            .args([
+                "init",
+                "--bare",
+                "--initial-branch",
+                "main",
+                remote.to_str().unwrap(),
+            ])
             .output()
             .unwrap();
         let mut engine = GitEngine::init(&local).unwrap();
@@ -2547,7 +2592,9 @@ mod tests {
         fs::create_dir_all(local.join("first-skill")).unwrap();
         fs::write(local.join("first-skill/SKILL.md"), "first\n").unwrap();
 
-        let status = engine.stage_and_push("initial push", None, None, None).unwrap();
+        let status = engine
+            .stage_and_push("initial push", None, None, None)
+            .unwrap();
 
         assert_eq!(status.status, "idle");
         let remote_file = Command::new("git")

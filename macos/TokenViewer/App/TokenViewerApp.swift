@@ -38,15 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = CoreBridge.shared
         let deviceSyncCoordinator = DeviceSyncApplyCoordinator.shared
         Task { @MainActor in
-            do {
-                _ = try await deviceSyncCoordinator.restoreMasterKeyIfAvailable()
-            } catch {
-                // The coordinator publishes the block while normal usage views
-                // continue to launch.
-                if !deviceSyncCoordinator.isRecoveryBlocked {
-                    deviceSyncCoordinator.markRecoveryBlocked(error)
-                }
-            }
+            // Do not touch Device Sync Keychain items during launch. Reading
+            // the master key can invoke macOS Keychain authentication; vault
+            // credentials are restored only for an explicit sync or recovery.
             do {
                 _ = try await deviceSyncCoordinator.recoverPendingApply()
             } catch {

@@ -358,8 +358,14 @@ fn parse_event(
                 return;
             };
 
-            let input = usage.get("inputTokens").and_then(|x| x.as_u64()).unwrap_or(0);
-            let output = usage.get("outputTokens").and_then(|x| x.as_u64()).unwrap_or(0);
+            let input = usage
+                .get("inputTokens")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
+            let output = usage
+                .get("outputTokens")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0);
             let cache_read = usage
                 .get("cacheReadTokens")
                 .and_then(|x| x.as_u64())
@@ -530,7 +536,9 @@ mod tests {
     }
 
     fn header_json(id: &str) -> String {
-        format!(r#"{{"type":"session","version":0,"id":"{id}","createdAt":1786678123061,"delegationDepth":0}}"#)
+        format!(
+            r#"{{"type":"session","version":0,"id":"{id}","createdAt":1786678123061,"delegationDepth":0}}"#
+        )
     }
 
     fn fork_header_json(id: &str, parent_id: &str, seed_length: u64) -> String {
@@ -666,7 +674,10 @@ mod tests {
         }
 
         assert!(done, "backlog should drain within a few passes");
-        assert!(exhausted_passes >= 1, "budget should be exhausted mid-backlog");
+        assert!(
+            exhausted_passes >= 1,
+            "budget should be exhausted mid-backlog"
+        );
         // Every message counted exactly once despite the mid-file stops.
         assert_eq!(grand_total, 60);
     }
@@ -796,9 +807,10 @@ mod tests {
 
         let cursor = FileCursor::from_json(Some(&cursor_json));
         let child_key = child_path.to_string_lossy().replace('\\', "/");
-        assert!(cursor.dsh_fork_seed_lengths.iter().any(|(path, seed)| {
-            path.replace('\\', "/") == child_key && *seed == 2
-        }));
+        assert!(cursor
+            .dsh_fork_seed_lengths
+            .iter()
+            .any(|(path, seed)| { path.replace('\\', "/") == child_key && *seed == 2 }));
 
         let (records2, _) = parse(home, Some(&cursor_json)).unwrap();
         assert!(records2.is_empty());

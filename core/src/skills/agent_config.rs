@@ -260,6 +260,51 @@ impl AgentRegistry {
             .unwrap_or(false)
     }
 
+    /// Replace the portable Agent -> Skill association set during a Device
+    /// Sync apply. Absolute Agent paths and generated link files are kept out
+    /// of this API; callers rebuild those links from the local registry.
+    pub fn replace_linked_skills(
+        &mut self,
+        linked: std::collections::BTreeMap<String, Vec<String>>,
+    ) -> Result<(), String> {
+        let mut normalized = HashMap::new();
+        for (source, mut skill_ids) in linked {
+            let canonical = canonical_source(&source).to_string();
+            if canonical.is_empty() || canonical.contains('/') || canonical.contains('\\') {
+                return Err("Invalid Agent source".to_string());
+            }
+            skill_ids.retain(|skill_id| {
+                !skill_id.is_empty()
+                    && skill_id != "."
+                    && skill_id != ".."
+                    && !skill_id.contains('/')
+                    && !skill_id.contains('\\')
+            });
+            skill_ids.sort();
+            skill_ids.dedup();
+            if !skill_ids.is_empty() {
+                normalized.insert(canonical, skill_ids);
+            }
+        }
+        self.persist_linked_skills(&normalized)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_installed_for_test(
+        &mut self,
+        source: &str,
+        installed: bool,
+    ) -> Result<(), String> {
+        let canonical = canonical_source(source);
+        let agent = self
+            .builtin
+            .iter_mut()
+            .find(|agent| agent.source == canonical)
+            .ok_or_else(|| format!("Unknown test Agent: {}", canonical))?;
+        agent.is_installed = installed;
+        Ok(())
+    }
+
     // ── Persistence ──
 
     fn overrides_path(&self) -> PathBuf {
@@ -985,12 +1030,7 @@ mod tests {
             "~/.claude/skills",
             LinkType::Directory,
         );
-        let codex = AgentConfig::custom(
-            "codex",
-            "ChatGPT",
-            "~/.codex/skills",
-            LinkType::Directory,
-        );
+        let codex = AgentConfig::custom("codex", "ChatGPT", "~/.codex/skills", LinkType::Directory);
 
         // A skills destination alone is not installation evidence.
         fs::create_dir_all(home.path().join(".claude/skills")).unwrap();

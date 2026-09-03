@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// 一条 token 用量记录（最小聚合单位：30 分钟桶）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UsageRecord {
     pub id: Option<i64>,
     pub hour_start: String,

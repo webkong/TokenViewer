@@ -1,6 +1,8 @@
 mod local;
+mod webdav;
 
 pub use local::LocalFolderStore;
+pub use webdav::{validate_webdav_endpoint, WebDavCredentials, WebDavStore};
 
 use std::fmt;
 use std::io::{Read, Write};
