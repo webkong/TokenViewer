@@ -715,7 +715,12 @@ impl ObjectStore for WebDavStore {
             return Err(DeviceSyncError::invalid_config("object list cursor"));
         }
         let url = self.url_for_prefix(prefix)?;
-        let entries = match self.propfind(&url, "1") {
+        // List all descendants, matching LocalFolderStore::list (which walks
+        // the whole subtree) and the ObjectStore contract relied on by
+        // remote_view: it must surface nested <device-id>/head.json under the
+        // devices prefix, not only direct children. Depth:infinity returns
+        // every object under the prefix; the bounded parser caps the response.
+        let entries = match self.propfind(&url, "infinity") {
             Ok(entries) => entries,
             // A list prefix does not exist until the first object under it is
             // written. Object-store semantics expose that state as an empty
@@ -742,10 +747,18 @@ impl ObjectStore for WebDavStore {
             {
                 return Err(integrity_error("duplicate or unexpected WebDAV object"));
             }
-            let meta = if let Some(size) = entry.size {
+            // Prefer a strong ETag straight from PROPFIND. Some servers omit
+            // getetag in Depth:1 responses (or publish only a weak ETag)
+            // even though they serve a strong one on HEAD/GET. Using a missing
+            // ETag downstream makes a head update fall back to
+            // If-None-Match: *, which 412s for an object that already exists.
+            // Fall back to head(), which rescues a real strong ETag when
+            // available and otherwise synthesizes a content digest so callers
+            // still see a stable meta.etag.
+            let meta = if entry.size.is_some() && is_strong_etag(entry.etag.as_deref()) {
                 ObjectMeta {
                     key,
-                    size,
+                    size: entry.size.unwrap(),
                     etag: entry.etag,
                 }
             } else {

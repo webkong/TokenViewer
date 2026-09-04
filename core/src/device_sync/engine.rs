@@ -595,7 +595,20 @@ impl DeviceSyncEngine {
         let key = object_key_for_config(&config, "vault.json")?;
         let bytes_len = bytes.len() as u64;
         let mut source = Cursor::new(bytes);
-        store.put(&key, &mut source, bytes_len, PutCondition::IfNoneMatch)?;
+        if let Err(error) = store.put(&key, &mut source, bytes_len, PutCondition::IfNoneMatch) {
+            // A conditional-create failure usually means the remote vault
+            // metadata is already there; confirm with a HEAD so the user gets
+            // the actionable code instead of a generic staleness error.
+            if error.code == DeviceSyncErrorCode::RemoteChanged
+                && store.head(&key).ok().flatten().is_some()
+            {
+                return Err(DeviceSyncError::new(
+                    DeviceSyncErrorCode::VaultAlreadyExists,
+                    false,
+                ));
+            }
+            return Err(error);
+        }
         self.vault_key = Some(unwrap_vault_key(&metadata, password)?);
         save_config(&self.paths, &config)?;
         self.config = config;
@@ -634,12 +647,13 @@ impl DeviceSyncEngine {
         &mut self,
         skills: &SkillsCore,
         enabled_agent_ids: &[String],
+        rebuild: bool,
     ) -> Result<PreviewResponse, DeviceSyncError> {
         self.ensure_operation_allowed()?;
         self.ensure_enabled()?;
         let vault_key = self.require_vault_key()?;
         let remote = self.remote_view(vault_key, true)?;
-        let parent_ids = self.validate_push_base(&remote)?;
+        let parent_ids = self.validate_push_base(&remote, rebuild)?;
         let baseline = parent_ids
             .first()
             .and_then(|snapshot_id| remote.snapshots.get(snapshot_id));
@@ -749,6 +763,7 @@ impl DeviceSyncEngine {
         skills: &SkillsCore,
         enabled_agent_ids: &[String],
         preview_token: &str,
+        rebuild: bool,
     ) -> Result<SyncResult, DeviceSyncError> {
         self.ensure_operation_allowed()?;
         self.ensure_enabled()?;
@@ -791,7 +806,7 @@ impl DeviceSyncEngine {
                 true,
             ));
         }
-        let expected_parent = self.validate_push_base(&remote)?;
+        let expected_parent = self.validate_push_base(&remote, rebuild)?;
         if expected_parent != payload.manifest.parent_ids {
             return Err(DeviceSyncError::new(
                 DeviceSyncErrorCode::StalePreview,
@@ -1928,7 +1943,11 @@ impl DeviceSyncEngine {
         })
     }
 
-    fn validate_push_base(&self, remote: &RemoteView) -> Result<Vec<String>, DeviceSyncError> {
+    fn validate_push_base(
+        &self,
+        remote: &RemoteView,
+        allow_rebuild: bool,
+    ) -> Result<Vec<String>, DeviceSyncError> {
         if remote.frontier.len() > 1 {
             return Err(DeviceSyncError::new(
                 DeviceSyncErrorCode::ConflictRequiresResolution,
@@ -1943,10 +1962,15 @@ impl DeviceSyncEngine {
             ));
         }
         if frontier.is_none() && self.state.applied_snapshot_id.is_some() {
-            return Err(DeviceSyncError::new(
-                DeviceSyncErrorCode::RemoteChanged,
-                true,
-            ));
+            if !allow_rebuild {
+                return Err(DeviceSyncError::new(
+                    DeviceSyncErrorCode::RemoteChanged,
+                    true,
+                ));
+            }
+            // Rebuild mode: the remote vault holds no recognizable snapshots
+            // while this device still remembers a baseline. Treat the push as
+            // a fresh root instead of dead-ending the user.
         }
         Ok(frontier.into_iter().collect())
     }
@@ -4292,8 +4316,8 @@ mod tests {
 
         engine_a.create_vault("link-strategy-password").unwrap();
         engine_b.join_vault("link-strategy-password").unwrap();
-        let push = engine_a.preview_push(&skills_a, &[]).unwrap();
-        engine_a.push(&skills_a, &[], &push.preview_token).unwrap();
+        let push = engine_a.preview_push(&skills_a, &[], false).unwrap();
+        engine_a.push(&skills_a, &[], &push.preview_token, false).unwrap();
         let pull = engine_b.preview_pull(&skills_b, &[]).unwrap();
         let transaction = engine_b
             .prepare_apply(&skills_b, &pull.preview_token)
@@ -4741,8 +4765,8 @@ mod tests {
 
         engine_a.create_vault("link-rollback-password").unwrap();
         engine_b.join_vault("link-rollback-password").unwrap();
-        let push = engine_a.preview_push(&skills_a, &[]).unwrap();
-        engine_a.push(&skills_a, &[], &push.preview_token).unwrap();
+        let push = engine_a.preview_push(&skills_a, &[], false).unwrap();
+        engine_a.push(&skills_a, &[], &push.preview_token, false).unwrap();
         let pull = engine_b.preview_pull(&skills_b, &[]).unwrap();
         let transaction = engine_b
             .prepare_apply(&skills_b, &pull.preview_token)
@@ -4833,8 +4857,8 @@ mod tests {
         engine_b
             .join_vault("single-file-rollback-password")
             .unwrap();
-        let push = engine_a.preview_push(&skills_a, &[]).unwrap();
-        engine_a.push(&skills_a, &[], &push.preview_token).unwrap();
+        let push = engine_a.preview_push(&skills_a, &[], false).unwrap();
+        engine_a.push(&skills_a, &[], &push.preview_token, false).unwrap();
         let pull = engine_b.preview_pull(&skills_b, &[]).unwrap();
         let transaction = engine_b
             .prepare_apply(&skills_b, &pull.preview_token)

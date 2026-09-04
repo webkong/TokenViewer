@@ -437,6 +437,25 @@ fn handle_propfind(
                 entries.entry(child).or_insert(true);
             }
         }
+    } else if depth == "infinity" {
+        // Recursive listing: every descendant under the target, files and
+        // collections alike, as a real WebDAV server returns for Depth:infinity
+        // and as LocalFolderStore::list walks the whole subtree.
+        let prefix = if key.is_empty() {
+            String::new()
+        } else {
+            format!("{key}/")
+        };
+        for object_key in state.objects.keys() {
+            if object_key.starts_with(&prefix) {
+                entries.entry(object_key.clone()).or_insert(false);
+            }
+        }
+        for collection in &state.collections {
+            if collection.starts_with(&prefix) {
+                entries.entry(collection.clone()).or_insert(true);
+            }
+        }
     }
 
     let mut xml = String::from("<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\">");
@@ -665,10 +684,14 @@ fn webdav_object_store_contract_covers_all_operations() {
     let page = store.list(&prefix, None).unwrap();
     assert_eq!(page.objects.len(), 1);
     assert_eq!(page.objects[0].key, key);
+    // The ObjectStore list contract is recursive (LocalFolderStore::list walks
+    // every descendant), so listing the broad `sync` prefix returns the nested
+    // object rather than only direct children.
     let root_page = store
         .list(&ObjectPrefix::from_path("sync").unwrap(), None)
         .unwrap();
-    assert!(root_page.objects.is_empty());
+    assert_eq!(root_page.objects.len(), 1);
+    assert_eq!(root_page.objects[0].key, key);
 
     let mut replacement = &b"replacement"[..];
     let replacement_len = replacement.len() as u64;
@@ -840,6 +863,67 @@ fn webdav_if_match_rejects_server_without_strong_etag() {
     let mut downloaded = Vec::new();
     store.get_bounded(&key, 64, &mut downloaded).unwrap();
     assert_eq!(downloaded, original);
+}
+
+#[test]
+fn webdav_list_returns_nested_objects_matching_local_store_semantics() {
+    let server = MockWebDav::new(RangeMode::Honor);
+    let store = store(&server.endpoint);
+    let devices = ObjectPrefix::from_path("sync/devices").unwrap();
+    store.create_prefix(&devices).unwrap();
+
+    let head_key = ObjectKey::from_path("sync/devices/device-a/head.json").unwrap();
+    let body = b"{\"head\":true}";
+    store
+        .put(
+            &head_key,
+            &mut &body[..],
+            body.len() as u64,
+            PutCondition::IfNoneMatch,
+        )
+        .unwrap();
+
+    let page = store.list(&devices, None).unwrap();
+    // The engine's remote_view lists the `devices` prefix and expects the
+    // nested <device-id>/head.json objects (LocalFolderStore::list walks the
+    // whole subtree). A Depth:1 PROPFIND only returns direct children, so a
+    // complying WebDAV list must recurse to discover existing heads.
+    assert!(
+        page.objects.iter().any(|meta| meta.key == head_key),
+        "list must return nested head.json objects under the devices prefix"
+    );
+}
+
+#[test]
+fn webdav_list_yields_a_usable_etag_when_propfind_omits_getetag() {
+    let server = MockWebDav::new(RangeMode::Honor);
+    server.set_suppress_etag(true);
+    let store = store(&server.endpoint);
+    let devices = ObjectPrefix::from_path("sync/devices").unwrap();
+    store.create_prefix(&devices).unwrap();
+
+    let key = ObjectKey::from_path("sync/devices/device-a/head.json").unwrap();
+    let body = b"{\"device\":\"a\"}";
+    store
+        .put(
+            &key,
+            &mut &body[..],
+            body.len() as u64,
+            PutCondition::IfNoneMatch,
+        )
+        .unwrap();
+
+    let page = store.list(&devices, None).unwrap();
+    assert_eq!(page.objects.len(), 1);
+    // PROPFIND omitted getetag, but list must still yield a stable etag so a
+    // later conditional PUT can use If-Match instead of falling back to
+    // If-None-Match on an object that already exists (which would 412).
+    let listed = &page.objects[0];
+    assert!(
+        listed.etag.is_some(),
+        "PROPFIND without getetag must not produce a None etag"
+    );
+    assert_eq!(store.head(&key).unwrap().unwrap().etag, listed.etag);
 }
 
 #[test]

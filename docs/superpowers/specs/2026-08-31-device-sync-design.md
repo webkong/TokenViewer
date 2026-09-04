@@ -2,7 +2,7 @@
 
 **日期**：2026-08-31
 **状态**：待实现，方案可交付 Luna
-**范围**：在 TokenViewer 中增加 Skills 与相关配置的跨设备加密同步，不同步用量数据库、Agent 会话或云存储凭据。
+**范围**：在 TokenViewer 中增加 Skills、相关配置与已解析用量聚合的跨设备同步；默认端到端加密，也允许用户显式选择无密码、无保密性模式；不同步 Agent 会话或云存储凭据。
 
 ## 1. 目标
 
@@ -21,7 +21,7 @@ Device Sync 用于把一台设备上的 Skill 工作环境安全地带到另一�
 
 以下内容不在本功能范围内：
 
-- 不同步 `~/.tokenviewer/data.db`、用量记录、限额、会话、日志或缓存；
+- 不同步整个 `~/.tokenviewer/data.db`、限额、会话、日志或缓存；仅同步 `usage` 表中的已解析聚合记录，且移除本机 `project_ref`；
 - 不同步 Git Token、WebDAV 密码、S3 Access Key/Secret、Session Token 或 Keychain 原始内容；
 - 不同步 `.zshrc`、`.bashrc`，只在本机沿用现有 `SkillEnvironmentManager` 配置 source block；
 - 不同步真实软链接，也不把一台设备的绝对 Agent 路径直接写到另一台设备；
@@ -61,7 +61,8 @@ TokenViewer 当前相关状态如下：
 | Agent 关联 | `~/.tokenviewer/skills-manager/linked_skills.json` | `agent_id -> skill_ids` 逻辑映射 |
 | Agent 覆盖 | `agent_overrides.json` | 仅同步可移植字段，不同步绝对路径 |
 | Agent 可见性 | UserDefaults `skillsEnabledProviders` | 排序后的 Agent ID 集合 |
-| 环境变量 | `~/.tokenviewer/skill-env.sh` | 解析后的 `name -> value`，远端始终加密 |
+| 环境变量 | `~/.tokenviewer/skill-env.sh` | 解析后的 `name -> value`；加密模式下受 E2EE 保护，无密码模式下不提供保密性 |
+| 已解析用量 | `usage` 表 | 同步聚合字段与 `project_key`，不上传本机 `project_ref` |
 | Shell 接入 | `.zshrc` / `.bashrc` 中 source block | 不同步；恢复后调用现有管理器确保存在 |
 | Skill Git 设置 | `skills_config.json` + Keychain Token | 不进入 Device Sync 快照 |
 | 真实 Agent 链接 | 各 Agent 的 Skills 目录 | 不打包；恢复时调用 `SymlinkManager` 重建 |
@@ -151,7 +152,7 @@ accounts:
   <vault-id>:master-key
 ```
 
-同步密码只在创建/加入 Vault 时进入内存；默认不持久化。Vault Master Key 以 `kSecAttrAccessibleWhenUnlocked` 保存。日志只允许 profile ID、provider、HTTP status、对象 key 的哈希或非敏感后缀，不得记录密码、Authorization header、签名 canonical request、环境变量值或 Vault Key。
+加密模式下，同步密码只在创建/加入 Vault 时进入内存；默认不持久化。Vault Master Key 以 `kSecAttrAccessibleWhenUnlocked` 保存。无密码模式使用公开协议密钥维持相同快照、完整性和多设备 Head 格式，不写入 Keychain，也不提供保密性；界面必须明确提示只适用于可信 WebDAV。日志只允许 profile ID、provider、HTTP status、对象 key 的哈希或非敏感后缀，不得记录密码、Authorization header、签名 canonical request、环境变量值或私有 Vault Key。
 
 `config.json` 示例：
 
@@ -619,13 +620,15 @@ failed(error)
 
 页面结构：
 
-1. 状态：Vault、当前设备、上次同步、远端状态、错误或冲突；
-2. 存储：WebDAV / S3 segmented control；
-3. S3 preset：AWS S3 / Huawei OBS / MinIO or Custom；
-4. 凭据：固定 label、SecureField、Reveal icon、内联校验；
-5. 内容：Cloud / Git 单选，以及 Skills、Agent links、Environment、Preferences 组件；
-6. 操作：测试连接、保存、创建/加入 Vault、立即同步；
-7. 历史：第四阶段提供历史与清理入口。
+1. 开关：启用或停用设备同步；
+2. 服务器：先选择存储服务，再显示并填写该服务对应的 WebDAV 地址；地址以 `http://` 开头时直接使用 HTTP，以 `https://` 开头时使用 HTTPS 并校验证书，不提供额外 HTTP 开关；
+3. 远端目录前缀；
+4. 账号与凭证：用户名和密码；
+5. 同步数据保护：加密或不加密 segmented control；加密模式按首次推送/首次拉取分别创建或加入 Vault；
+6. 连接操作：测试连接、保存；
+7. 手动同步：拉取、推送；
+8. 内容：默认同步当前 Skills、Agent links、Environment、Preferences 与已解析 usage；高级设置仅保留 Cloud/Git 来源、组件与同步范围；profile 与默认 Vault ID 由程序管理，不在基础表单展示；
+9. 历史：第四阶段提供历史与清理入口。
 
 交互要求：
 

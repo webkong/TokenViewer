@@ -263,11 +263,13 @@ struct DeviceSyncEnvelope<Payload: Codable>: Codable {
 
 struct DeviceSyncPreviewRequest: Encodable {
     let enabledAgentIds: [String]
+    var rebuild: Bool = false
 }
 
 struct DeviceSyncTokenRequest: Encodable {
     let previewToken: String
     let enabledAgentIds: [String]
+    var rebuild: Bool = false
 }
 
 struct DeviceSyncTransactionRequest: Encodable {

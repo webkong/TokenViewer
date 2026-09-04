@@ -349,58 +349,129 @@ private struct SkillCompactGroupRow: View {
     let isExpanded: Bool
     @ObservedObject var viewModel: SkillManagerViewModel
     let onToggle: () -> Void
+    @ObservedObject private var l10n = L10n.shared
 
-    private var activeAgents: [AgentConfig] {
-        let ids = group.skills.reduce(into: Set<String>()) { result, skill in
+    /// The folder is the linkable unit ("主 skill"): linking the container
+    /// symlinks the whole folder, so every sub-skill is used together with the
+    /// agent. `linkID` is the container name (e.g. "team-operating-system"),
+    /// which `create_skill_link` resolves under `source_root`.
+    private var operationSkillID: String { group.linkID }
+
+    /// Agents that currently have this skill through any of its sub-skills.
+    private var activeAgentIDs: Set<String> {
+        group.skills.reduce(into: Set<String>()) { result, skill in
             result.formUnion(viewModel.skillAgentIDs(for: skill))
         }
-        return viewModel.visibleAgents.filter { ids.contains($0.source) }
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "folder.fill")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(TVColor.brand)
-                .frame(width: 36, height: 36)
-                .background(TVColor.brand.opacity(0.1), in: RoundedRectangle(cornerRadius: 9))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(TVColor.brand)
+                    .frame(width: 36, height: 36)
+                    .background(TVColor.brand.opacity(0.1), in: RoundedRectangle(cornerRadius: 9))
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(group.title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .lineLimit(1)
-                Text(L10n.shared.skillChildCount(group.skills.count))
-                    .font(.system(size: 11))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(group.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(1)
+                    Text(L10n.shared.skillChildCount(group.skills.count))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onToggle)
 
-            HStack(spacing: -6) {
-                ForEach(Array(activeAgents.prefix(3))) { agent in
-                    AgentIcon(source: agent.source, size: 18)
-                        .frame(width: 24, height: 24)
-                        .background(Color(nsColor: .controlBackgroundColor), in: Circle())
-                        .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
-                }
-                if activeAgents.count > 3 {
-                    Text("+\(activeAgents.count - 3)")
-                        .font(.system(size: 9, weight: .semibold))
-                        .frame(width: 24, height: 24)
-                        .background(.quaternary, in: Circle())
-                        .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
-                }
-            }
-            .frame(minWidth: 58, alignment: .trailing)
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .rotationEffect(.degrees(isExpanded ? 90 : 0))
+            agentLinkTags
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onToggle)
+    }
+
+    // MARK: - Folder-level agent link chips
+
+    private var agentLinkTags: some View {
+        let agents = viewModel.visibleAgents
+        let linked = agents.filter { viewModel.isSkillLinked(skillID: operationSkillID, agentID: $0.source) }
+        let active = agents.filter { activeAgentIDs.contains($0.source) && !linked.contains($0) }
+        let inactive = agents.filter { !activeAgentIDs.contains($0.source) }
+
+        return Group {
+            if agents.isEmpty {
+                Text(l10n.skillNoAgentsEnabled)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else {
+                FlowLayout(itemSpacing: 4, rowSpacing: 4) {
+                    ForEach(linked + active + inactive) { agent in
+                        agentLinkChip(
+                            agent: agent,
+                            isLinked: linked.contains(agent),
+                            isSource: active.contains(agent)
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private func agentLinkChip(agent: AgentConfig, isLinked: Bool, isSource: Bool) -> some View {
+        Button {
+            if isLinked {
+                viewModel.unlinkSkill(skillID: operationSkillID, agentID: agent.source)
+            } else {
+                // Folder-level link: link the whole container (all sub-skills
+                // together), so no per-child compatibility check.
+                viewModel.linkSkill(skillID: operationSkillID, agentID: agent.source)
+            }
+        } label: {
+            let tint = AgentRegistry.shared.brandColor(for: agent.source)
+            HStack(spacing: 3) {
+                AgentIcon(source: agent.source, size: 12)
+                Text(agent.displayName)
+                    .font(.caption2)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(linkBackground(tint: tint, isLinked: isLinked, isSource: isSource))
+            .foregroundStyle(linkForeground(tint: tint, isLinked: isLinked, isSource: isSource))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule().strokeBorder(
+                    (isLinked || isSource ? tint : Color.gray).opacity(isLinked || isSource ? 0.22 : 0.08),
+                    lineWidth: 0.5
+                )
+            )
+        }
+        .buttonStyle(.plain)
+        .quickHelp(linkTooltip(isLinked: isLinked, isSource: isSource, agent: agent))
+    }
+
+    private func linkBackground(tint: Color, isLinked: Bool, isSource: Bool) -> Color {
+        if isLinked { return tint.opacity(0.18) }
+        if isSource { return tint.opacity(0.14) }
+        return Color.gray.opacity(0.1)
+    }
+
+    private func linkForeground(tint: Color, isLinked: Bool, isSource: Bool) -> Color {
+        if isLinked || isSource { return tint }
+        return .secondary
+    }
+
+    private func linkTooltip(isLinked: Bool, isSource: Bool, agent: AgentConfig) -> String {
+        if isLinked { return l10n.skillUnlinkTip(agent.displayName) }
+        if isSource { return l10n.skillSourceLinkTip(agent.displayName) }
+        return l10n.skillLinkTip(agent.displayName)
     }
 }
 

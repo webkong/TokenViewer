@@ -153,20 +153,25 @@ extension CoreBridge {
         try await DeviceSyncApplyCoordinator.shared.restoreMasterKeyIfAvailable()
     }
 
-    func deviceSyncPreviewPush(enabledAgentIds: [String]) async throws -> DeviceSyncPreviewResponse {
+    func deviceSyncPreviewPush(
+        enabledAgentIds: [String],
+        rebuild: Bool = false
+    ) async throws -> DeviceSyncPreviewResponse {
         try await DeviceSyncApplyCoordinator.shared.runDeviceSyncOperation { [self] in
-            try await deviceSyncRawPreviewPush(enabledAgentIds: enabledAgentIds)
+            try await deviceSyncRawPreviewPush(enabledAgentIds: enabledAgentIds, rebuild: rebuild)
         }
     }
 
     func deviceSyncPush(
         previewToken: String,
-        enabledAgentIds: [String]
+        enabledAgentIds: [String],
+        rebuild: Bool = false
     ) async throws -> DeviceSyncResult {
         try await DeviceSyncApplyCoordinator.shared.runDeviceSyncOperation { [self] in
             try await deviceSyncRawPush(
                 previewToken: previewToken,
-                enabledAgentIds: enabledAgentIds
+                enabledAgentIds: enabledAgentIds,
+                rebuild: rebuild
             )
         }
     }
@@ -316,10 +321,15 @@ extension CoreBridge {
         return true
     }
 
-    func deviceSyncRawPreviewPush(enabledAgentIds: [String]) async throws -> DeviceSyncPreviewResponse {
+    func deviceSyncRawPreviewPush(
+        enabledAgentIds: [String],
+        rebuild: Bool = false
+    ) async throws -> DeviceSyncPreviewResponse {
         _ = try await deviceSyncRawRestoreProviderCredentialsIfAvailable()
         return try decodeDeviceSync(
-            await callDeviceSyncJSON(DeviceSyncPreviewRequest(enabledAgentIds: enabledAgentIds)) {
+            await callDeviceSyncJSON(
+                DeviceSyncPreviewRequest(enabledAgentIds: enabledAgentIds, rebuild: rebuild)
+            ) {
                 tt_device_sync_preview_push($0, $1)
             },
             as: DeviceSyncPreviewResponse.self
@@ -328,14 +338,16 @@ extension CoreBridge {
 
     func deviceSyncRawPush(
         previewToken: String,
-        enabledAgentIds: [String]
+        enabledAgentIds: [String],
+        rebuild: Bool = false
     ) async throws -> DeviceSyncResult {
         _ = try await deviceSyncRawRestoreProviderCredentialsIfAvailable()
         return try decodeDeviceSync(
             await callDeviceSyncJSON(
                 DeviceSyncTokenRequest(
                     previewToken: previewToken,
-                    enabledAgentIds: enabledAgentIds
+                    enabledAgentIds: enabledAgentIds,
+                    rebuild: rebuild
                 )
             ) { tt_device_sync_push($0, $1) },
             as: DeviceSyncResult.self

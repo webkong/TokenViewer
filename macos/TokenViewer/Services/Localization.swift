@@ -234,6 +234,14 @@ final class L10n: ObservableObject {
     var deviceSyncEncryptedHint: String { isZh ? "首次推送时创建加密密钥；其他设备使用相同密码加入 Vault。" : "Create an encryption password on the first push; other devices join the Vault with the same password." }
     var deviceSyncUnencryptedHint: String { isZh ? "无需 Vault 密码。WebDAV 访问者可恢复同步内容，仅建议在可信服务器上使用。" : "No Vault password is required. WebDAV users can recover the synced content; use only with a trusted server." }
     var deviceSyncPushNow: String { isZh ? "手动推送" : "Push now" }
+    var deviceSyncRebuildRemote: String { isZh ? "以本机数据重建远端" : "Rebuild Remote from This Mac" }
+    var deviceSyncRebuildConfirmTitle: String { isZh ? "重建远端同步数据？" : "Rebuild remote sync data?" }
+    var deviceSyncRebuildConfirmMessage: String {
+        isZh
+            ? "远端没有可识别的同步数据，而本机仍保留同步基线。确认后将以本机当前数据新建快照并推送，云端现有的设备同步数据会被替换。此操作不可撤销。"
+            : "The remote vault has no recognizable sync data while this Mac still holds a sync baseline. Confirming will create a fresh snapshot from local data and push it, replacing existing remote Device Sync data. This cannot be undone."
+    }
+    var deviceSyncRebuildConfirmAction: String { isZh ? "重建并推送" : "Rebuild and Push" }
     var deviceSyncPullNow: String { isZh ? "拉取同步" : "Pull sync" }
     var deviceSyncPushSucceeded: String { isZh ? "已推送当前配置" : "Current configuration pushed" }
     var deviceSyncPullSucceeded: String { isZh ? "已完成拉取同步" : "Pull sync completed" }
@@ -671,6 +679,10 @@ final class L10n: ObservableObject {
                 : "The remote directory does not exist or cannot be accessed. Check the WebDAV endpoint and remote prefix."
         case "vault_not_found":
             return isZh ? "未找到可拉取的远端同步数据。" : "No remote sync data is available to pull."
+        case "vault_already_exists":
+            return isZh
+                ? "远端已存在同步库，请改用加入同步库，或更换远端目录后重试。"
+                : "A sync vault already exists remotely. Join it instead, or choose a different remote directory."
         case "integrity_failed":
             return isZh ? "设备同步数据完整性校验失败。" : "Device Sync data failed its integrity check."
         case "remote_changed":

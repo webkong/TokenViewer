@@ -38,6 +38,8 @@ struct SettingsView: View {
     @State private var deviceSyncVaultPassword = ""
     @State private var deviceSyncActionLoading = false
     @State private var deviceSyncPendingDirection: ManualSyncDirection?
+    @State private var deviceSyncFailedDirection: ManualSyncDirection?
+    @State private var deviceSyncShowRebuildConfirm = false
     @State private var isDeviceSyncLoading = false
     @State private var deviceSyncDiagnosticCode: String?
     @State private var deviceSyncDiagnosticArguments: [String: String] = [:]
@@ -808,6 +810,28 @@ struct SettingsView: View {
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                     }
+                    if code == "remote_changed", deviceSyncFailedDirection == .push {
+                        Button {
+                            deviceSyncShowRebuildConfirm = true
+                        } label: {
+                            Text(l10n.deviceSyncRebuildRemote)
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .buttonStyle(.link)
+                        .padding(.top, 1)
+                    }
+                }
+                .confirmationDialog(
+                    l10n.deviceSyncRebuildConfirmTitle,
+                    isPresented: $deviceSyncShowRebuildConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button(l10n.deviceSyncRebuildConfirmAction, role: .destructive) {
+                        runManualDeviceSync(direction: .push, rebuild: true)
+                    }
+                    Button(l10n.cancel, role: .cancel) {}
+                } message: {
+                    Text(l10n.deviceSyncRebuildConfirmMessage)
                 }
             }
 
@@ -1033,11 +1057,12 @@ struct SettingsView: View {
         deviceSyncDiagnosticRetryable = false
         deviceSyncDiagnosticSuccess = false
         deviceSyncConnectionReport = nil
+        deviceSyncFailedDirection = nil
     }
 
     private enum ManualSyncDirection { case push, pull }
 
-    private func runManualDeviceSync(direction: ManualSyncDirection) {
+    private func runManualDeviceSync(direction: ManualSyncDirection, rebuild: Bool = false) {
         guard !deviceSyncActionLoading else { return }
         guard deviceSyncStatus?.config.vaultId != nil || deviceSyncProtectionMode == "unencrypted" else {
             deviceSyncPendingDirection = direction
@@ -1069,10 +1094,14 @@ struct SettingsView: View {
                 }
                 let enabledIds = Self.currentEnabledAgentIds()
                 if direction == .push {
-                    let preview = try await CoreBridge.shared.deviceSyncPreviewPush(enabledAgentIds: enabledIds)
+                    let preview = try await CoreBridge.shared.deviceSyncPreviewPush(
+                        enabledAgentIds: enabledIds,
+                        rebuild: rebuild
+                    )
                     _ = try await CoreBridge.shared.deviceSyncPush(
                         previewToken: preview.previewToken,
-                        enabledAgentIds: enabledIds
+                        enabledAgentIds: enabledIds,
+                        rebuild: rebuild
                     )
                     deviceSyncDiagnosticSuccess = true
                 } else {
@@ -1082,6 +1111,7 @@ struct SettingsView: View {
                 }
             } catch {
                 showDeviceSyncError(error)
+                deviceSyncFailedDirection = direction
             }
         }
     }
@@ -1133,6 +1163,7 @@ struct SettingsView: View {
     private func showDeviceSyncError(_ error: Error) {
         deviceSyncDiagnosticSuccess = false
         deviceSyncConnectionReport = nil
+        deviceSyncFailedDirection = nil
         if let bridgeError = error as? DeviceSyncBridgeError,
            case let .core(payload) = bridgeError {
             deviceSyncDiagnosticCode = payload.code

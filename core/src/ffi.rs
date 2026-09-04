@@ -2051,6 +2051,10 @@ struct DeviceSyncProviderCredentialsRequest {
 struct DeviceSyncPreviewRequest {
     #[serde(default)]
     enabled_agent_ids: Vec<String>,
+    /// Rebuild mode: allow pushing a fresh root when the remote vault holds
+    /// no snapshots but local state still remembers a baseline.
+    #[serde(default)]
+    rebuild: bool,
 }
 
 #[derive(serde::Deserialize)]
@@ -2058,6 +2062,8 @@ struct DeviceSyncTokenRequest {
     preview_token: String,
     #[serde(default)]
     enabled_agent_ids: Vec<String>,
+    #[serde(default)]
+    rebuild: bool,
 }
 
 #[derive(serde::Deserialize)]
@@ -2314,7 +2320,7 @@ pub extern "C" fn tt_device_sync_preview_push(
         Err(error) => return device_sync_envelope::<serde_json::Value>(Err(error)),
     };
     with_device_sync(handle, move |handle, engine| {
-        engine.preview_push(&handle.skills, &request.enabled_agent_ids)
+        engine.preview_push(&handle.skills, &request.enabled_agent_ids, request.rebuild)
     })
 }
 
@@ -2343,6 +2349,7 @@ pub extern "C" fn tt_device_sync_push(handle: *mut CoreHandle, json: *const c_ch
             &handle.skills,
             &request.enabled_agent_ids,
             &request.preview_token,
+            request.rebuild,
         )
     })
 }

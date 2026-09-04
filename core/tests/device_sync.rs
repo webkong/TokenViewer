@@ -174,8 +174,8 @@ fn remote_frontier_clock_is_observed_without_adopting_remote_identity() {
     let mut engine_a =
         DeviceSyncEngine::new(home_a.path().to_path_buf(), source_a.clone()).unwrap();
     engine_a.join_vault("remote-clock-password").unwrap();
-    let push = engine_a.preview_push(&skills_a, &[]).unwrap();
-    engine_a.push(&skills_a, &[], &push.preview_token).unwrap();
+    let push = engine_a.preview_push(&skills_a, &[], false).unwrap();
+    engine_a.push(&skills_a, &[], &push.preview_token, false).unwrap();
     let remote_clock = engine_a.state().clock;
 
     let mut engine_b =
@@ -199,12 +199,12 @@ fn remote_frontier_clock_is_observed_without_adopting_remote_identity() {
     engine_b
         .commit_apply(&mut skills_b, &transaction.transaction_id)
         .unwrap();
-    let next = engine_b.preview_push(&skills_b, &[]).unwrap();
+    let next = engine_b.preview_push(&skills_b, &[], false).unwrap();
     let next_clock = engine_b.state().clock;
     assert_eq!(next_clock.device_id, engine_b.identity().device_id);
     assert_eq!(next_clock.wall_ms, remote_clock.wall_ms);
     assert!(next_clock.counter > remote_clock.counter);
-    engine_b.push(&skills_b, &[], &next.preview_token).unwrap();
+    engine_b.push(&skills_b, &[], &next.preview_token, false).unwrap();
 }
 
 #[test]
@@ -359,10 +359,10 @@ fn non_frontier_header_parent_tampering_is_rejected_before_frontier_calculation(
     .unwrap();
 
     engine.create_vault("ancestor-header-password").unwrap();
-    let first = engine.preview_push(&skills, &[]).unwrap();
-    let first_result = engine.push(&skills, &[], &first.preview_token).unwrap();
-    let second = engine.preview_push(&skills, &[]).unwrap();
-    engine.push(&skills, &[], &second.preview_token).unwrap();
+    let first = engine.preview_push(&skills, &[], false).unwrap();
+    let first_result = engine.push(&skills, &[], &first.preview_token, false).unwrap();
+    let second = engine.preview_push(&skills, &[], false).unwrap();
+    engine.push(&skills, &[], &second.preview_token, false).unwrap();
 
     let first_snapshot_id = first_result.snapshot_id.unwrap();
     let snapshot_path = remote
@@ -529,7 +529,7 @@ fn encrypted_snapshot_rejects_compression_bomb_before_local_publish() {
     .unwrap();
     engine.create_vault("compression-bomb-password").unwrap();
 
-    let error = engine.preview_push(&skills, &[]).unwrap_err();
+    let error = engine.preview_push(&skills, &[], false).unwrap_err();
     assert_eq!(error.code, DeviceSyncErrorCode::ObjectTooLarge);
     assert!(walkdir::WalkDir::new(remote.path())
         .into_iter()
@@ -734,10 +734,10 @@ fn two_local_homes_can_push_preview_and_apply_without_plaintext_snapshot() {
     engine_a.create_vault("correct horse").unwrap();
     engine_b.join_vault("correct horse").unwrap();
 
-    let preview = engine_a.preview_push(&skills_a, &[]).unwrap();
+    let preview = engine_a.preview_push(&skills_a, &[], false).unwrap();
     assert!(preview.summary.skills.added >= 1);
     let pushed = engine_a
-        .push(&skills_a, &[], &preview.preview_token)
+        .push(&skills_a, &[], &preview.preview_token, false)
         .unwrap();
     assert!(pushed.snapshot_id.is_some());
     let remote_bytes = fs::read_dir(remote.path())
@@ -751,7 +751,7 @@ fn two_local_homes_can_push_preview_and_apply_without_plaintext_snapshot() {
         .iter()
         .all(|bytes| !bytes.windows(10).any(|window| window == b"secret body")));
 
-    let unchanged_push = engine_a.preview_push(&skills_a, &[]).unwrap();
+    let unchanged_push = engine_a.preview_push(&skills_a, &[], false).unwrap();
     assert_eq!(unchanged_push.summary.skills.added, 0);
     assert_eq!(unchanged_push.summary.skills.updated, 0);
 
@@ -796,8 +796,8 @@ fn linear_remote_history_beyond_256_pushes_still_supports_status_and_preview() {
 
     engine.create_vault("deep-history-password").unwrap();
     for _ in 0..257 {
-        let preview = engine.preview_push(&skills, &[]).unwrap();
-        engine.push(&skills, &[], &preview.preview_token).unwrap();
+        let preview = engine.preview_push(&skills, &[], false).unwrap();
+        engine.push(&skills, &[], &preview.preview_token, false).unwrap();
     }
 
     let status = engine.status().unwrap();
@@ -826,10 +826,10 @@ fn preview_rejects_corrupted_large_ancestor_payloads() {
     .unwrap();
 
     engine.create_vault("large-ancestor-password").unwrap();
-    let first = engine.preview_push(&skills, &[]).unwrap();
-    let first_result = engine.push(&skills, &[], &first.preview_token).unwrap();
-    let second = engine.preview_push(&skills, &[]).unwrap();
-    let second_result = engine.push(&skills, &[], &second.preview_token).unwrap();
+    let first = engine.preview_push(&skills, &[], false).unwrap();
+    let first_result = engine.push(&skills, &[], &first.preview_token, false).unwrap();
+    let second = engine.preview_push(&skills, &[], false).unwrap();
+    let second_result = engine.push(&skills, &[], &second.preview_token, false).unwrap();
 
     let first_snapshot_id = first_result.snapshot_id.unwrap();
     let snapshot_path = remote
@@ -844,7 +844,7 @@ fn preview_rejects_corrupted_large_ancestor_payloads() {
 
     let status = engine.status().unwrap();
     assert_eq!(status.frontier, vec![second_result.snapshot_id.unwrap()]);
-    let error = engine.preview_push(&skills, &[]).unwrap_err();
+    let error = engine.preview_push(&skills, &[], false).unwrap_err();
     assert_eq!(error.code, DeviceSyncErrorCode::ObjectTooLarge);
 }
 
@@ -886,9 +886,9 @@ fn apply_without_skills_component_preserves_local_skills() {
 
     engine_a.create_vault("component-scope-password").unwrap();
     engine_b.join_vault("component-scope-password").unwrap();
-    let preview = engine_a.preview_push(&skills_a, &[]).unwrap();
+    let preview = engine_a.preview_push(&skills_a, &[], false).unwrap();
     engine_a
-        .push(&skills_a, &[], &preview.preview_token)
+        .push(&skills_a, &[], &preview.preview_token, false)
         .unwrap();
     let pull = engine_b.preview_pull(&skills_b, &[]).unwrap();
     let transaction = engine_b
@@ -941,9 +941,9 @@ fn commit_apply_rejects_local_changes_after_prepare() {
 
     engine_a.create_vault("stale-commit-password").unwrap();
     engine_b.join_vault("stale-commit-password").unwrap();
-    let preview = engine_a.preview_push(&skills_a, &[]).unwrap();
+    let preview = engine_a.preview_push(&skills_a, &[], false).unwrap();
     engine_a
-        .push(&skills_a, &[], &preview.preview_token)
+        .push(&skills_a, &[], &preview.preview_token, false)
         .unwrap();
     let pull = engine_b.preview_pull(&skills_b, &[]).unwrap();
     let transaction = engine_b
@@ -1008,9 +1008,9 @@ fn apply_failure_restores_skills_and_leaves_original_environment_path_untouched(
     .unwrap();
     engine_a.create_vault("apply-failure-password").unwrap();
     engine_b.join_vault("apply-failure-password").unwrap();
-    let preview = engine_a.preview_push(&skills_a, &[]).unwrap();
+    let preview = engine_a.preview_push(&skills_a, &[], false).unwrap();
     engine_a
-        .push(&skills_a, &[], &preview.preview_token)
+        .push(&skills_a, &[], &preview.preview_token, false)
         .unwrap();
     let pull = engine_b.preview_pull(&skills_b, &[]).unwrap();
     let transaction = engine_b
@@ -1068,9 +1068,9 @@ fn occupied_skill_target_is_not_deleted_during_apply() {
     .unwrap();
     engine_a.create_vault("occupied-target-password").unwrap();
     engine_b.join_vault("occupied-target-password").unwrap();
-    let preview = engine_a.preview_push(&skills_a, &[]).unwrap();
+    let preview = engine_a.preview_push(&skills_a, &[], false).unwrap();
     engine_a
-        .push(&skills_a, &[], &preview.preview_token)
+        .push(&skills_a, &[], &preview.preview_token, false)
         .unwrap();
     let pull = engine_b.preview_pull(&skills_b, &[]).unwrap();
     let transaction = engine_b
@@ -1125,9 +1125,9 @@ fn pending_apply_journal_is_recovered_after_engine_restart() {
     .unwrap();
     engine_a.create_vault("recovery-password").unwrap();
     engine_b.join_vault("recovery-password").unwrap();
-    let preview = engine_a.preview_push(&skills_a, &[]).unwrap();
+    let preview = engine_a.preview_push(&skills_a, &[], false).unwrap();
     engine_a
-        .push(&skills_a, &[], &preview.preview_token)
+        .push(&skills_a, &[], &preview.preview_token, false)
         .unwrap();
     let pull = engine_b.preview_pull(&skills_b, &[]).unwrap();
     engine_b
@@ -1184,8 +1184,8 @@ fn committed_apply_survives_state_save_failure_and_converges_after_restart() {
 
     engine_a.create_vault("committed-state-save-password").unwrap();
     engine_b.join_vault("committed-state-save-password").unwrap();
-    let push = engine_a.preview_push(&skills_a, &[]).unwrap();
-    let pushed = engine_a.push(&skills_a, &[], &push.preview_token).unwrap();
+    let push = engine_a.preview_push(&skills_a, &[], false).unwrap();
+    let pushed = engine_a.push(&skills_a, &[], &push.preview_token, false).unwrap();
     let pull = engine_b.preview_pull(&skills_b, &[]).unwrap();
     let transaction = engine_b
         .prepare_apply(&skills_b, &pull.preview_token)
@@ -1269,8 +1269,8 @@ fn deleting_a_skill_emits_a_tombstone_and_removes_it_on_pull() {
     let initial_status = engine_a.status().unwrap();
     assert!(initial_status.remote_head_fingerprint.is_some());
     assert!(initial_status.frontier.is_empty());
-    let first = engine_a.preview_push(&skills_a, &[]).unwrap();
-    let first_result = engine_a.push(&skills_a, &[], &first.preview_token).unwrap();
+    let first = engine_a.preview_push(&skills_a, &[], false).unwrap();
+    let first_result = engine_a.push(&skills_a, &[], &first.preview_token, false).unwrap();
     let pushed_status = engine_a.status().unwrap();
     assert_eq!(
         pushed_status.frontier,
@@ -1278,10 +1278,10 @@ fn deleting_a_skill_emits_a_tombstone_and_removes_it_on_pull() {
     );
     fs::remove_dir_all(source_a.join("alpha")).unwrap();
 
-    let second = engine_a.preview_push(&skills_a, &[]).unwrap();
+    let second = engine_a.preview_push(&skills_a, &[], false).unwrap();
     assert_eq!(second.summary.skills.deleted, 1);
     engine_a
-        .push(&skills_a, &[], &second.preview_token)
+        .push(&skills_a, &[], &second.preview_token, false)
         .unwrap();
 
     let pull = engine_b.preview_pull(&skills_b, &[]).unwrap();
@@ -1334,8 +1334,8 @@ fn git_pull_records_pending_content_without_creating_empty_links() {
 
     engine_a.create_vault("git-pending-password").unwrap();
     engine_b.join_vault("git-pending-password").unwrap();
-    let push = engine_a.preview_push(&skills_a, &[]).unwrap();
-    engine_a.push(&skills_a, &[], &push.preview_token).unwrap();
+    let push = engine_a.preview_push(&skills_a, &[], false).unwrap();
+    engine_a.push(&skills_a, &[], &push.preview_token, false).unwrap();
     let pull = engine_b.preview_pull(&skills_b, &[]).unwrap();
     let transaction = engine_b
         .prepare_apply(&skills_b, &pull.preview_token)

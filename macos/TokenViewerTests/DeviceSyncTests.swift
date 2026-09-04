@@ -16,6 +16,7 @@ final class DeviceSyncTests: XCTestCase {
             "remote_directory_unavailable",
             "vault_not_found",
             "vault_auth_failed",
+            "vault_already_exists",
             "object_too_large",
             "archive_unsafe",
             "integrity_failed",
