@@ -314,6 +314,46 @@ impl WebDavStore {
         parse_propfind_xml(&xml)
     }
 
+    /// Recursively lists every file under `url` using only Depth:1 PROPFIND
+    /// requests. Many real WebDAV servers (e.g. Nextcloud) reject
+    /// `Depth: infinity` with 403, so the store walks one collection level at
+    /// a time instead — Depth:1 is a mandatory part of the WebDAV spec.
+    fn propfind_recursive(&self, url: &Url) -> Result<Vec<DavEntry>, DeviceSyncError> {
+        let mut files = Vec::new();
+        let mut descended: HashSet<Vec<String>> = HashSet::new();
+        self.collect_files(url, &mut files, &mut descended)?;
+        Ok(files)
+    }
+
+    fn collect_files(
+        &self,
+        url: &Url,
+        files: &mut Vec<DavEntry>,
+        descended: &mut HashSet<Vec<String>>,
+    ) -> Result<(), DeviceSyncError> {
+        let target_path = decode_path_segments(url.path())?;
+        let entries = self.propfind(url, "1")?;
+        let mut subdirs = Vec::new();
+        for entry in entries {
+            if !entry.collection {
+                files.push(entry);
+                continue;
+            }
+            let entry_url = href_to_url(&self.endpoint, &entry.href)?;
+            let entry_path = decode_path_segments(entry_url.path())?;
+            // Never recurse into the target collection itself, and descend each
+            // child collection exactly once (decoded path guards against hrefs
+            // that only differ by a trailing slash).
+            if entry_path != target_path && descended.insert(entry_path.clone()) {
+                subdirs.push(entry_url);
+            }
+        }
+        for subdir in subdirs {
+            self.collect_files(&subdir, files, descended)?;
+        }
+        Ok(())
+    }
+
     fn head_raw(&self, key: &ObjectKey) -> Result<Option<ObjectMeta>, DeviceSyncError> {
         let url = self.url_for_key(key)?;
         let headers = self.common_headers();
@@ -718,9 +758,10 @@ impl ObjectStore for WebDavStore {
         // List all descendants, matching LocalFolderStore::list (which walks
         // the whole subtree) and the ObjectStore contract relied on by
         // remote_view: it must surface nested <device-id>/head.json under the
-        // devices prefix, not only direct children. Depth:infinity returns
-        // every object under the prefix; the bounded parser caps the response.
-        let entries = match self.propfind(&url, "infinity") {
+        // devices prefix, not only direct children. Depth:1 recursion returns
+        // every object under the prefix without relying on `Depth: infinity`,
+        // which several servers reject with 403.
+        let entries = match self.propfind_recursive(&url) {
             Ok(entries) => entries,
             // A list prefix does not exist until the first object under it is
             // written. Object-store semantics expose that state as an empty

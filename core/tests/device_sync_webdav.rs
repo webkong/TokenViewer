@@ -27,6 +27,7 @@ struct MockState {
     methods: Vec<String>,
     next_etag: u64,
     reject_auth: bool,
+    reject_infinity: bool,
     suppress_etag: bool,
     forced_status: HashMap<String, u16>,
 }
@@ -98,6 +99,10 @@ impl MockWebDav {
 
     fn set_suppress_etag(&self, suppress: bool) {
         self.state.lock().unwrap().suppress_etag = suppress;
+    }
+
+    fn set_reject_infinity(&self, reject: bool) {
+        self.state.lock().unwrap().reject_infinity = reject;
     }
 
     fn methods(&self) -> Vec<String> {
@@ -418,6 +423,10 @@ fn handle_propfind(
         .get("depth")
         .map(String::as_str)
         .unwrap_or("0");
+    if depth == "infinity" && state.reject_infinity {
+        respond(stream, 403, &[], b"");
+        return;
+    }
     let mut entries = BTreeMap::new();
     entries.insert(key.to_string(), target_is_collection);
     if depth == "1" {
@@ -891,6 +900,32 @@ fn webdav_list_returns_nested_objects_matching_local_store_semantics() {
     assert!(
         page.objects.iter().any(|meta| meta.key == head_key),
         "list must return nested head.json objects under the devices prefix"
+    );
+}
+
+#[test]
+fn webdav_list_recurses_with_depth_one_when_infinity_is_forbidden() {
+    let server = MockWebDav::new(RangeMode::Honor);
+    server.set_reject_infinity(true);
+    let store = store(&server.endpoint);
+    let devices = ObjectPrefix::from_path("sync/devices").unwrap();
+    store.create_prefix(&devices).unwrap();
+
+    let head_key = ObjectKey::from_path("sync/devices/device-a/head.json").unwrap();
+    let body = b"{\"head\":true}";
+    store
+        .put(
+            &head_key,
+            &mut &body[..],
+            body.len() as u64,
+            PutCondition::IfNoneMatch,
+        )
+        .unwrap();
+
+    let page = store.list(&devices, None).unwrap();
+    assert!(
+        page.objects.iter().any(|meta| meta.key == head_key),
+        "list must return nested head.json without Depth: infinity"
     );
 }
 
