@@ -5,6 +5,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use base64::Engine as _;
 use git2::{build::RepoBuilder, Cred, FetchOptions, RemoteCallbacks};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -803,14 +804,18 @@ fn sparse_clone_paths(
 
 fn configure_github_auth(command: &mut Command, token: Option<&str>) -> Result<(), String> {
     if let Some(token) = validated_github_token(token)? {
+        // GitHub's git-over-HTTPS endpoint requires HTTP Basic auth; it rejects
+        // `Authorization: Bearer`, which is only valid against the REST/GraphQL API.
         // Pass the credential through the child environment rather than argv so it is not
         // exposed in the process list. Scope the header to GitHub HTTPS requests only.
+        let basic = base64::engine::general_purpose::STANDARD
+            .encode(format!("x-access-token:{}", token).as_bytes());
         command
             .env("GIT_CONFIG_COUNT", "1")
             .env("GIT_CONFIG_KEY_0", "http.https://github.com/.extraheader")
             .env(
                 "GIT_CONFIG_VALUE_0",
-                format!("Authorization: Bearer {}", token),
+                format!("AUTHORIZATION: Basic {}", basic),
             );
     }
     Ok(())
@@ -826,11 +831,36 @@ fn validated_github_token(token: Option<&str>) -> Result<Option<String>, String>
 
 fn command_failure(context: &str, output: &std::process::Output) -> String {
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if !stderr.is_empty() && is_network_failure(&stderr) {
+        return format!(
+            "{}: Could not connect to the Git server. Check your network connection or proxy/VPN settings.",
+            context
+        );
+    }
     if stderr.is_empty() {
         format!("{}: process exited with {}", context, output.status)
     } else {
         format!("{}: {}", context, stderr)
     }
+}
+
+fn is_network_failure(stderr: &str) -> bool {
+    let lower = stderr.to_ascii_lowercase();
+    [
+        "couldn't connect",
+        "could not connect",
+        "failed to connect",
+        "unable to access",
+        "connection timed out",
+        "network is unreachable",
+        "no route to host",
+        "connection reset",
+        "could not resolve host",
+        "name or service not known",
+        "operation timed out",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
 }
 
 fn find_skill_dirs(root: &Path) -> Result<Vec<PathBuf>, String> {
@@ -1125,9 +1155,14 @@ mod tests {
                 )
             })
             .collect::<HashMap<_, _>>();
+        let expected = format!(
+            "AUTHORIZATION: Basic {}",
+            base64::engine::general_purpose::STANDARD
+                .encode("x-access-token:secret-token".as_bytes())
+        );
         assert_eq!(
             env.get("GIT_CONFIG_VALUE_0").and_then(Option::as_deref),
-            Some("Authorization: Bearer secret-token")
+            Some(expected.as_str())
         );
     }
 
@@ -1162,5 +1197,14 @@ mod tests {
         assert_eq!(candidates[0].id, "alpha");
         assert_eq!(candidates[0].source_dir, "skills/alpha");
         assert_eq!(candidates[1].id, "zeta");
+    }
+
+    #[test]
+    fn network_failures_are_detected_for_friendly_error() {
+        assert!(is_network_failure(
+            "fatal: unable to access 'https://github.com/x/y.git/': Failed to connect to github.com port 443 after 75016 ms: Couldn't connect to server"
+        ));
+        assert!(is_network_failure("fatal: Could not resolve host: github.com"));
+        assert!(!is_network_failure("remote: invalid credentials\nfatal: Authentication failed"));
     }
 }
