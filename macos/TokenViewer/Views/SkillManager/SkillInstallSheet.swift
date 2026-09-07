@@ -115,6 +115,7 @@ struct SkillInstallSheet: View {
                 .toggleStyle(.checkbox)
                 .font(.system(size: 12))
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
     }
@@ -201,6 +202,7 @@ struct SkillInstallSheet: View {
                             .toggleStyle(.checkbox)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 2)
                 }
                 .frame(maxHeight: 160)
