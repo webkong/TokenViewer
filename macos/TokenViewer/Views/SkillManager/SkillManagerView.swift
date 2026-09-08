@@ -198,7 +198,7 @@ struct SkillManagerView: View {
                     .controlSize(.mini)
                     .font(.system(size: 12))
 
-                Text(L10n.shared.skillResultCount(viewModel.filteredSkills.count))
+                Text(L10n.shared.skillResultCount(viewModel.filteredManagementUnitCount))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()

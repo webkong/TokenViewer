@@ -122,9 +122,36 @@ struct SkillEntry: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+extension SkillEntry {
+    /// A directory that contains multiple nested Skills is managed as one unit.
+    var managementContainerName: String? {
+        guard relativePath.count > 1 else { return nil }
+        return relativePath.first
+    }
+
+    var managementContainerPath: String? {
+        guard let containerName = managementContainerName else { return nil }
+        var rootURL = URL(fileURLWithPath: sourceDir, isDirectory: true)
+        for _ in relativePath {
+            rootURL.deleteLastPathComponent()
+        }
+        return rootURL
+            .appendingPathComponent(containerName, isDirectory: true)
+            .standardized.path
+    }
+
+    var managementGroupID: String {
+        if let containerPath = managementContainerPath {
+            return "container::\(containerPath)"
+        }
+        return "skill::\(URL(fileURLWithPath: sourceDir, isDirectory: true).standardized.path)"
+    }
+}
+
 struct SkillMarkdownPreview: Identifiable, Hashable, Sendable {
     let id = UUID()
     let skill: SkillEntry
+    let rootPath: String
     let filePath: String
 }
 

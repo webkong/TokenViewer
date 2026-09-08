@@ -80,6 +80,7 @@ enum TVActionButtonRole: Equatable {
     case secondary
     case warning
     case destructive
+    case destructiveSecondary
 }
 
 struct TVActionButtonStyle: ButtonStyle {
@@ -98,7 +99,10 @@ struct TVActionButtonStyle: ButtonStyle {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 9)
-                    .strokeBorder(borderColor, lineWidth: role == .secondary ? 0.7 : 0)
+                    .strokeBorder(
+                        borderColor,
+                        lineWidth: role == .secondary || role == .destructiveSecondary ? 0.7 : 0
+                    )
             )
             .contentShape(RoundedRectangle(cornerRadius: 9))
             .opacity(isEnabled ? 1 : 0.48)
@@ -112,15 +116,24 @@ struct TVActionButtonStyle: ButtonStyle {
         case .secondary: Color(nsColor: .controlBackgroundColor)
         case .warning: Color(red: 0.92, green: 0.35, blue: 0.05) // #EA580C orange-red
         case .destructive: .red
+        case .destructiveSecondary: .red.opacity(0.08)
         }
     }
 
     private var foregroundColor: Color {
-        role == .secondary ? .primary : .white
+        switch role {
+        case .secondary: .primary
+        case .destructiveSecondary: .red
+        default: .white
+        }
     }
 
     private var borderColor: Color {
-        role == .secondary ? Color.primary.opacity(0.14) : .clear
+        switch role {
+        case .secondary: Color.primary.opacity(0.14)
+        case .destructiveSecondary: Color.red.opacity(0.22)
+        default: .clear
+        }
     }
 }
 

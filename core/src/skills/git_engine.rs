@@ -2139,6 +2139,123 @@ mod tests {
         );
     }
 
+    /// A filtered push must neither delete an unselected remote Skill nor restore
+    /// that Skill into the worktree when it was intentionally deleted locally.
+    #[test]
+    fn test_filtered_push_preserves_unselected_remote_skill_and_local_deletion() {
+        let root = TempDir::new().unwrap();
+        let remote = root.path().join("remote.git");
+        let local = root.path().join("local");
+
+        Command::new("git")
+            .args([
+                "init",
+                "--bare",
+                "--initial-branch",
+                "main",
+                remote.to_str().unwrap(),
+            ])
+            .output()
+            .unwrap();
+        fs::create_dir_all(&local).unwrap();
+        init_git_repo(&local);
+        let mut engine = GitEngine::open(&local).unwrap();
+        engine.set_remote_url(remote.to_str().unwrap()).unwrap();
+        for (name, body) in [
+            ("deleted-unselected", "# Deleted\n"),
+            ("selected-skill", "# Selected\n"),
+        ] {
+            fs::create_dir_all(local.join(name)).unwrap();
+            fs::write(local.join(name).join("SKILL.md"), body).unwrap();
+        }
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(&local)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "Add skills"])
+            .current_dir(&local)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["push", "-u", "origin", "HEAD"])
+            .current_dir(&local)
+            .output()
+            .unwrap();
+
+        let filter = SkillSyncFilter {
+            include_prefixes: Vec::new(),
+            include_skill_ids: vec!["selected-skill".to_string()],
+        };
+        engine
+            .stage_and_push_filtered("sync", &filter, None, None, None)
+            .unwrap();
+
+        // Delete content outside the filter and update the selected Skill so the
+        // second sync creates and adopts a real filtered commit.
+        fs::remove_dir_all(local.join("deleted-unselected")).unwrap();
+        fs::remove_file(local.join("README.md")).unwrap();
+        fs::write(
+            local.join("selected-skill").join("SKILL.md"),
+            "# Selected updated\n",
+        )
+        .unwrap();
+        engine
+            .stage_and_push_filtered("sync2", &filter, None, None, None)
+            .unwrap();
+
+        let remote_unselected = Command::new("git")
+            .args([
+                "--git-dir",
+                remote.to_str().unwrap(),
+                "show",
+                "main:deleted-unselected/SKILL.md",
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            remote_unselected.status.success(),
+            "filtered sync deleted an unselected Skill from the remote"
+        );
+        assert!(
+            !local.join("deleted-unselected").exists(),
+            "deleted skill reappeared locally"
+        );
+        let remote_readme = Command::new("git")
+            .args([
+                "--git-dir",
+                remote.to_str().unwrap(),
+                "show",
+                "main:README.md",
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            remote_readme.status.success(),
+            "filtered sync deleted a root file outside the filter"
+        );
+        assert!(
+            !local.join("README.md").exists(),
+            "deleted root file reappeared locally"
+        );
+
+        let remote_selected = Command::new("git")
+            .args([
+                "--git-dir",
+                remote.to_str().unwrap(),
+                "show",
+                "main:selected-skill/SKILL.md",
+            ])
+            .output()
+            .unwrap();
+        assert!(remote_selected.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&remote_selected.stdout),
+            "# Selected updated\n"
+        );
+    }
+
     #[test]
     fn test_open_or_init_does_not_commit_existing_skills_before_filtering() {
         let dir = TempDir::new().unwrap();

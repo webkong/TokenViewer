@@ -378,7 +378,8 @@ final class L10n: ObservableObject {
     var skillMoreActions: String { isZh ? "更多功能" : "More Actions" }
     var skillManageAgentsTip: String { isZh ? "前往设置添加或移除参与 Skills 管理的 Agent" : "Open Settings to add or remove Agents from Skills management" }
     var skillDetails: String { isZh ? "Skill 详情" : "Skill Details" }
-    var skillSelectForDetails: String { isZh ? "展开分组并选择一个 Skill 查看详情" : "Expand a group and select a Skill to view details" }
+    var skillSelectForDetails: String { isZh ? "选择一个 Skill 查看详情" : "Select a Skill to view details" }
+    var skillShowChildren: String { isZh ? "展开子技能" : "Show child skills" }
     var skillLocation: String { isZh ? "位置" : "Location" }
     var skillStatus: String { isZh ? "状态" : "Status" }
     var skillReady: String { isZh ? "已就绪" : "Ready" }
@@ -435,6 +436,9 @@ final class L10n: ObservableObject {
     var skillShowBuiltIn: String { isZh ? "显示内置技能" : "Show built-in skills" }
     func skillChildCount(_ count: Int) -> String {
         isZh ? "\(count) 个子技能" : "\(count) child skill(s)"
+    }
+    func skillContainerDescription(_ count: Int) -> String {
+        isZh ? "包含 \(count) 个子技能，作为一个整体同步、整理和使用。" : "Contains \(count) child skill(s), managed and synced as one unit."
     }
     var skillEnvironmentTitle: String { isZh ? "环境变量" : "Environment Variables" }
     var skillEnvironmentSecureNote: String { isZh ? "保存到用户 Shell 环境配置" : "Saved to the user shell environment" }

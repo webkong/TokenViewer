@@ -12,12 +12,12 @@ actor SkillPreviewCache {
     private var fileTasks: [String: Task<SkillFileLoadResult, Never>] = [:]
 
     func preparedPreview(for preview: SkillMarkdownPreview) async -> PreparedSkillPreview {
-        let key = Self.cacheKey(for: preview.skill)
+        let key = Self.cacheKey(for: preview)
         let task: Task<PreparedSkillPreview, Never>
         if let existing = previewTasks[key] {
             task = existing
         } else {
-            let created = Self.makePreviewTask(for: preview.skill, priority: .userInitiated)
+            let created = Self.makePreviewTask(for: preview, priority: .userInitiated)
             previewTasks[key] = created
             task = created
         }
@@ -51,32 +51,33 @@ actor SkillPreviewCache {
         fileTasks.removeAll()
     }
 
-    static func descriptor(for skill: SkillEntry) -> SkillMarkdownPreview {
+    static func descriptor(for skill: SkillEntry, rootPath: String? = nil) -> SkillMarkdownPreview {
         let skillDir = standardizedPath(skill.sourceDir)
+        let previewRoot = standardizedPath(rootPath ?? skillDir)
         return SkillMarkdownPreview(
             skill: skill,
+            rootPath: previewRoot,
             filePath: URL(fileURLWithPath: skillDir).appendingPathComponent("SKILL.md").path
         )
     }
 
     private static func makePreviewTask(
-        for skill: SkillEntry,
+        for preview: SkillMarkdownPreview,
         priority: TaskPriority
     ) -> Task<PreparedSkillPreview, Never> {
         Task.detached(priority: priority) {
             if Task.isCancelled {
                 return PreparedSkillPreview(
                     fileTree: nil,
-                    primaryFilePath: Self.descriptor(for: skill).filePath,
+                    primaryFilePath: preview.filePath,
                     primaryContent: .unreadable("Cancelled")
                 )
             }
 
-            let descriptor = Self.descriptor(for: skill)
-            let rootPath = Self.standardizedPath(skill.sourceDir)
+            let rootPath = Self.standardizedPath(preview.rootPath)
             let primaryPath = Self.primaryFilePath(
                 in: rootPath,
-                fallback: descriptor.filePath
+                fallback: preview.filePath
             )
             var remainingNodes = Self.maximumNodesPerSkill
             let tree = Self.buildTree(
@@ -192,8 +193,8 @@ actor SkillPreviewCache {
         (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
     }
 
-    private static func cacheKey(for skill: SkillEntry) -> String {
-        "\(skill.id)|\(standardizedPath(skill.sourceDir))"
+    private static func cacheKey(for preview: SkillMarkdownPreview) -> String {
+        "\(preview.skill.id)|\(standardizedPath(preview.rootPath))"
     }
 
     private static func standardizedPath(_ path: String) -> String {

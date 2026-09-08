@@ -228,6 +228,10 @@ final class SkillManagerViewModel: ObservableObject {
         }
     }
 
+    var filteredManagementUnitCount: Int {
+        Set(filteredSkills.map(\.managementGroupID)).count
+    }
+
     func ensureValidFilter() {
         guard selectedFilter != Self.allFilter,
               selectedFilter != Self.globalFilter else { return }
