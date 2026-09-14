@@ -3190,8 +3190,16 @@ fn copy_path(source: &Path, destination: &Path) -> Result<(), DeviceSyncError> {
         std::os::unix::fs::symlink(target, destination)
             .map_err(|error| DeviceSyncError::apply_failed(error.to_string()))?;
         #[cfg(windows)]
-        std::os::windows::fs::symlink_file(target, destination)
+        {
+            use std::os::windows::fs::FileTypeExt;
+
+            if metadata.file_type().is_symlink_dir() {
+                std::os::windows::fs::symlink_dir(target, destination)
+            } else {
+                std::os::windows::fs::symlink_file(target, destination)
+            }
             .map_err(|error| DeviceSyncError::apply_failed(error.to_string()))?;
+        }
     } else if metadata.is_dir() {
         fs::create_dir_all(destination)
             .map_err(|error| DeviceSyncError::apply_failed(error.to_string()))?;
@@ -3799,6 +3807,17 @@ fn remove_path_for_restore(path: &Path) -> Result<(), DeviceSyncError> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(DeviceSyncError::apply_failed(error.to_string())),
     };
+    #[cfg(windows)]
+    if metadata.file_type().is_symlink() {
+        use std::os::windows::fs::FileTypeExt;
+
+        return if metadata.file_type().is_symlink_dir() {
+            fs::remove_dir(path)
+        } else {
+            fs::remove_file(path)
+        }
+        .map_err(|error| DeviceSyncError::apply_failed(error.to_string()));
+    }
     if metadata.file_type().is_dir() {
         fs::remove_dir_all(path).map_err(|error| DeviceSyncError::apply_failed(error.to_string()))
     } else {
