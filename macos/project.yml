@@ -7,8 +7,8 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "0.3.6"
-    CURRENT_PROJECT_VERSION: 30600
+    MARKETING_VERSION: "0.3.7"
+    CURRENT_PROJECT_VERSION: 30700
     SWIFT_VERSION: "5.9"
     TOKENVIEWER_RUST_TARGET: aarch64-apple-darwin
 
