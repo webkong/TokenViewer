@@ -227,8 +227,12 @@ fn archive_is_deterministic_keeps_allowed_hidden_files_and_skips_external_links(
     fs::write(skill.join(".claude/config"), "keep").unwrap();
     fs::write(skill.join(".git/secret"), "skip").unwrap();
 
+    let external_file = dir.path().join("outside.txt");
+    fs::write(&external_file, "outside").unwrap();
     #[cfg(unix)]
-    std::os::unix::fs::symlink("/etc/passwd", skill.join("external-link")).unwrap();
+    std::os::unix::fs::symlink(&external_file, skill.join("external-link")).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_file(&external_file, skill.join("external-link")).unwrap();
 
     let first = build_skill_archive(dir.path(), &["alpha".to_string()]).unwrap();
     let second = build_skill_archive(dir.path(), &["alpha".to_string()]).unwrap();
