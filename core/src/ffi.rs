@@ -63,9 +63,14 @@ pub extern "C" fn tt_init(db_path: *const c_char) -> *mut CoreHandle {
         Err(_) => return std::ptr::null_mut(),
     };
 
-    let path = PathBuf::from(path_str);
+    let path = match crate::skills::agent_config::expand_path(path_str) {
+        Ok(path) => path,
+        Err(_) => return std::ptr::null_mut(),
+    };
     if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
+        if std::fs::create_dir_all(parent).is_err() {
+            return std::ptr::null_mut();
+        }
     }
 
     let home_dir = path
@@ -105,20 +110,22 @@ pub extern "C" fn tt_init(db_path: *const c_char) -> *mut CoreHandle {
                         .map(|path| display_path(path, &home_dir))
                 })
                 .unwrap_or(default_source_root.clone());
-            let source_root = env_source_root
+            let source_root_raw = env_source_root
                 .as_deref()
-                .and_then(|raw| crate::skills::agent_config::expand_path(raw).ok())
-                .or_else(|| {
-                    persisted_source_root_raw
-                        .as_deref()
-                        .and_then(|raw| crate::skills::agent_config::expand_path(raw).ok())
-                })
+                .or(persisted_source_root_raw.as_deref())
                 .or_else(|| {
                     persisted_config
                         .as_ref()
-                        .and_then(|c| c.source_root.clone())
-                })
-                .unwrap_or_else(|| home_dir.join(".tokenviewer").join("skills"));
+                        .and_then(|c| c.source_root.as_ref())
+                        .and_then(|path| path.to_str())
+                });
+            let source_root = match source_root_raw {
+                Some(raw) => match crate::path_policy::absolute_path(raw, &home_dir) {
+                    Ok(path) => path,
+                    Err(_) => return std::ptr::null_mut(),
+                },
+                None => home_dir.join(".tokenviewer").join("skills"),
+            };
 
             let mut skills = match crate::skills::SkillsCore::new(&db, source_root, config_dir) {
                 Ok(skills) => skills,

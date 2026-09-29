@@ -1579,7 +1579,16 @@ struct SkillEnvironmentEditor: View {
             return
         }
 
-        let snapshot = values
+        let snapshot: [String: String]
+        do {
+            snapshot = try Dictionary(uniqueKeysWithValues: values.map { name, value in
+                (name, try SkillPathPolicy.environmentValue(value, for: name))
+            })
+        } catch {
+            statusIsError = true
+            statusMessage = l10n.skillPathInvalid
+            return
+        }
         let variables = variables
         isSaving = true
         statusMessage = nil

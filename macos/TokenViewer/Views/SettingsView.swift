@@ -1387,6 +1387,10 @@ struct SettingsView: View {
                     Button(l10n.save) {
                         AppFocus.clear()
                         let trimmedPath = skillsSourceRoot.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard (try? SkillPathPolicy.absolutePath(trimmedPath)) != nil else {
+                            ToastCenter.shared.error(l10n.skillPathInvalid)
+                            return
+                        }
                         let oldPath = lastSavedSkillsSourceRoot
                         if !oldPath.isEmpty,
                            !trimmedPath.isEmpty,
@@ -1514,7 +1518,10 @@ struct SettingsView: View {
         AppFocus.clear()
         let rawPath = skillsSourceRoot.trimmingCharacters(in: .whitespacesAndNewlines)
         let path = rawPath.isEmpty ? "~/.tokenviewer/skills" : rawPath
-        let expandedPath = (NSString(string: path).expandingTildeInPath as NSString).standardizingPath
+        guard let expandedPath = try? SkillPathPolicy.absolutePath(path) else {
+            ToastCenter.shared.error(l10n.skillPathInvalid)
+            return
+        }
         let url = URL(fileURLWithPath: expandedPath, isDirectory: true)
 
         do {
@@ -1529,6 +1536,10 @@ struct SettingsView: View {
         _ path: String,
         successMessage: String? = nil
     ) {
+        guard (try? SkillPathPolicy.absolutePath(path)) != nil else {
+            ToastCenter.shared.error(l10n.skillPathInvalid)
+            return
+        }
         let payload: [String: String] = ["source_root": path]
         guard let data = try? JSONSerialization.data(withJSONObject: payload),
               let resultData = CoreBridge.shared.skillsSetGitConfig(data),
@@ -1545,7 +1556,7 @@ struct SettingsView: View {
     }
 
     private func standardizedSkillsPath(_ path: String) -> String {
-        (NSString(string: path).expandingTildeInPath as NSString).standardizingPath
+        (try? SkillPathPolicy.absolutePath(path)) ?? path
     }
 
     private func skillsPathsAreNested(_ firstPath: String, _ secondPath: String) -> Bool {
@@ -1558,8 +1569,11 @@ struct SettingsView: View {
     /// is replaced only after the user confirms the destructive overwrite prompt.
     private func moveSkills(from oldRawPath: String, to newRawPath: String, overwrite: Bool) -> Bool {
         let fm = FileManager.default
-        let oldPath = standardizedSkillsPath(oldRawPath)
-        let newPath = standardizedSkillsPath(newRawPath)
+        guard let oldPath = try? SkillPathPolicy.absolutePath(oldRawPath),
+              let newPath = try? SkillPathPolicy.absolutePath(newRawPath) else {
+            ToastCenter.shared.error(l10n.skillPathInvalid)
+            return false
+        }
         let oldURL = URL(fileURLWithPath: oldPath, isDirectory: true)
         let newURL = URL(fileURLWithPath: newPath, isDirectory: true)
 

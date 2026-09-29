@@ -159,6 +159,46 @@ enum KeychainError: LocalizedError {
     }
 }
 
+enum SkillPathPolicy {
+    // Keep in parity with core/src/path_policy.rs; never infer paths from arbitrary values.
+    static let directoryVariables: Set<String> = [
+        "HOME", "AGENTS_HOME", "CODEX_HOME", "ORCA_CODEX_HOME",
+        "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
+        "XDG_RUNTIME_DIR", "SELF_IMPROVEMENT_HOME", "SELF_IMPROVEMENT_PROJECT_ROOT",
+        "TOKENVIEWER_SKILLS_ROOT",
+    ]
+
+    static func absolutePath(_ raw: String, home: String = FileManager.default.homeDirectoryForCurrentUser.path) throws -> String {
+        func isInvalid(_ value: String) -> Bool {
+            value.contains("$") || value.contains("~") || value.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) }
+        }
+        var value = raw
+        for prefix in ["~", "$HOME", "${HOME}"] where raw == prefix || raw.hasPrefix(prefix + "/") {
+            guard home.hasPrefix("/"), !isInvalid(home) else { throw SkillEnvironmentError.invalidPath }
+            value = (home == "/" ? "" : home) + raw.dropFirst(prefix.count)
+            if value.isEmpty { value = "/" }
+            break
+        }
+        guard value.hasPrefix("/"), !isInvalid(value) else { throw SkillEnvironmentError.invalidPath }
+        // Lexical normalization only: do not resolve filesystem symlinks.
+        var components: [Substring] = []
+        for component in value.split(separator: "/") {
+            if component == "." { continue }
+            if component == ".." {
+                if !components.isEmpty { components.removeLast() }
+            } else {
+                components.append(component)
+            }
+        }
+        return "/" + components.joined(separator: "/")
+    }
+
+    static func environmentValue(_ value: String, for name: String) throws -> String {
+        guard !value.contains("\0") else { throw SkillEnvironmentError.encodingFailed }
+        return !value.isEmpty && directoryVariables.contains(name) ? try absolutePath(value) : value
+    }
+}
+
 final class SkillEnvironmentManager: @unchecked Sendable {
     static let shared = SkillEnvironmentManager()
 
@@ -233,6 +273,10 @@ final class SkillEnvironmentManager: @unchecked Sendable {
     }
 
     private func writeValues(_ values: [String: String]) throws {
+        // Validate the entire batch before any filesystem write.
+        let normalized = try Dictionary(uniqueKeysWithValues: values.map { name, value in
+            (name, try SkillPathPolicy.environmentValue(value, for: name))
+        })
         let fileManager = FileManager.default
         let directory = environmentFileURL.deletingLastPathComponent()
         do {
@@ -242,7 +286,7 @@ final class SkillEnvironmentManager: @unchecked Sendable {
                 attributes: [.posixPermissions: 0o700]
             )
             var lines = [header]
-            for (name, value) in values.sorted(by: { $0.key < $1.key }) {
+            for (name, value) in normalized.sorted(by: { $0.key < $1.key }) {
                 guard let data = value.data(using: .utf8) else {
                     throw SkillEnvironmentError.encodingFailed
                 }
@@ -304,11 +348,14 @@ final class SkillEnvironmentManager: @unchecked Sendable {
 
 enum SkillEnvironmentError: LocalizedError {
     case invalidName
+    case invalidPath
     case encodingFailed
     case fileWriteFailed
 
     var errorDescription: String? {
         switch self {
+        case .invalidPath:
+            return L10n.shared.skillPathInvalid
         case .invalidName:
             return "Invalid environment variable name"
         case .encodingFailed:

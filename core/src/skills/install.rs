@@ -27,6 +27,11 @@ impl SkillInstaller {
     }
 
     pub fn install(&self, req: SkillInstallRequest) -> Result<SkillInstallResponse, String> {
+        if !self.source_root.is_absolute() {
+            return Err("Skills source root must be absolute".into());
+        }
+        let root = self.source_root.to_str().ok_or("Invalid skills source root")?;
+        crate::path_policy::absolute_path(root, Path::new("/"))?;
         fs::create_dir_all(&self.source_root).map_err(|e| {
             format!(
                 "Failed to create skills source root {}: {}",

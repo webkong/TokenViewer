@@ -2,12 +2,16 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SIGNING_DIR="${SIGNING_DIR:-$ROOT_DIR/signing}"
+source "$ROOT_DIR/script/path_utils.sh"
+SIGNING_DIR="$(normalize_path "${SIGNING_DIR:-$ROOT_DIR/signing}")"
 KEY_NAME="${SELF_SIGNED_KEY_NAME:-tokenviewer-internal-codesign}"
 COMMON_NAME="${SELF_SIGNED_COMMON_NAME:-TokenViewer Internal Code Signing}"
 P12_PASSWORD="${SELF_SIGNED_P12_PASSWORD:-}"
 KEYCHAIN_PASSWORD="${SELF_SIGNED_KEYCHAIN_PASSWORD:-}"
-KEYCHAIN_DIR="${SELF_SIGNED_KEYCHAIN_DIR:-$HOME/Library/Keychains}"
+KEYCHAIN_DIR="$(normalize_path "${SELF_SIGNED_KEYCHAIN_DIR:-$HOME/Library/Keychains}")"
+SIGNING_HOME="$(normalize_path "$HOME")"
+case "$KEY_NAME" in ''|.|..|*[!a-zA-Z0-9._-]*) printf 'Invalid signing key name\n' >&2; exit 2 ;; esac
+[[ "$KEYCHAIN_DIR" == "$SIGNING_HOME/"* ]] || { printf 'Keychain directory must be inside HOME\n' >&2; exit 2; }
 
 OPENSSL_CONFIG="$SIGNING_DIR/$KEY_NAME-openssl.cnf"
 PRIVATE_KEY_PATH="$SIGNING_DIR/$KEY_NAME.key"
@@ -39,12 +43,12 @@ load_existing_env() {
     # shellcheck source=/dev/null
     source "$ENV_PATH"
     COMMON_NAME="${SELF_SIGNED_COMMON_NAME:-$COMMON_NAME}"
-    if [[ -n "${SELF_SIGNED_P12_PATH:-}" && -f "${SELF_SIGNED_P12_PATH:-}" ]]; then
-      P12_PATH="$SELF_SIGNED_P12_PATH"
+    if [[ -n "${SELF_SIGNED_P12_PATH:-}" ]]; then
+      P12_PATH="$(normalize_path "$SELF_SIGNED_P12_PATH")"
     fi
     P12_PASSWORD="${SELF_SIGNED_P12_PASSWORD:-$P12_PASSWORD}"
-    if [[ -n "${SELF_SIGNED_KEYCHAIN_PATH:-}" && "${SELF_SIGNED_KEYCHAIN_PATH:-}" == "$HOME"* ]]; then
-      KEYCHAIN_PATH="${SELF_SIGNED_KEYCHAIN_PATH}"
+    if [[ -n "${SELF_SIGNED_KEYCHAIN_PATH:-}" ]]; then
+      KEYCHAIN_PATH="$(normalize_path "$SELF_SIGNED_KEYCHAIN_PATH")"
     fi
     KEYCHAIN_PASSWORD="${SELF_SIGNED_KEYCHAIN_PASSWORD:-$KEYCHAIN_PASSWORD}"
   fi
@@ -53,9 +57,8 @@ load_existing_env() {
     P12_PATH="$SIGNING_DIR/$KEY_NAME.p12"
   fi
 
-  if [[ "$KEYCHAIN_PATH" != "$HOME"* ]]; then
-    KEYCHAIN_PATH="$KEYCHAIN_DIR/$KEY_NAME.keychain-db"
-  fi
+  [[ "$KEYCHAIN_PATH" == "$SIGNING_HOME/"* ]] || { printf 'Keychain path must be inside HOME\n' >&2; exit 2; }
+  KEYCHAIN_DIR="$(dirname "$KEYCHAIN_PATH")"
 }
 
 ensure_passwords() {

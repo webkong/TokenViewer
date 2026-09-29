@@ -2,6 +2,7 @@ pub mod codex_home;
 pub mod device_sync;
 pub mod ffi;
 pub mod models;
+pub mod path_policy;
 pub mod parsers;
 pub mod pricing;
 pub mod sessions;

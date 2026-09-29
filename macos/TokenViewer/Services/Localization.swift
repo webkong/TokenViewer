@@ -449,6 +449,7 @@ final class L10n: ObservableObject {
     var skillEnvironmentValuePlaceholder: String { isZh ? "输入变量值" : "Enter value" }
     var skillEnvironmentActivationNote: String { isZh ? "配置写入 ~/.tokenviewer/skill-env.sh，并由 .zshrc 和 .bashrc 加载；重新打开终端后，AI Agent 才能继承。" : "Configuration is written to ~/.tokenviewer/skill-env.sh and loaded by .zshrc and .bashrc; AI agents inherit it after the terminal is reopened." }
     var skillEnvironmentRequiredMissing: String { isZh ? "请填写所有必填变量" : "Complete all required variables" }
+    var skillPathInvalid: String { isZh ? "请输入绝对目录路径；支持 ~、$HOME 和 ${HOME} 前缀，不支持其他变量或控制字符。" : "Enter an absolute directory path. Leading ~, $HOME and ${HOME} are supported; other variables and control characters are not." }
     var skillEnvironmentSaved: String { isZh ? "环境变量已保存" : "Environment variables saved" }
     var skillEnvironmentSaveFailed: String { isZh ? "部分环境变量保存失败" : "Some environment variables could not be saved" }
     func skillEnvironmentUsedBy(_ skills: String) -> String {

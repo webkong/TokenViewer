@@ -119,6 +119,14 @@ pub fn read_values(path: &Path) -> Result<BTreeMap<String, String>, DeviceSyncEr
 }
 
 pub fn write_values(path: &Path, values: &BTreeMap<String, String>) -> Result<(), DeviceSyncError> {
+    let home = dirs::home_dir().ok_or_else(|| DeviceSyncError::invalid_config("home directory"))?;
+    let path = crate::path_policy::absolute_path(
+        path.to_str()
+            .ok_or_else(|| DeviceSyncError::invalid_config("environment path"))?,
+        &home,
+    )
+    .map_err(|_| DeviceSyncError::invalid_config("environment path"))?;
+    let path = path.as_path();
     if values.len() > MAX_ENVIRONMENT_VARIABLES {
         return Err(DeviceSyncError::new(
             DeviceSyncErrorCode::ObjectTooLarge,
@@ -128,6 +136,14 @@ pub fn write_values(path: &Path, values: &BTreeMap<String, String>) -> Result<()
     for (name, value) in values {
         validate_value(name, value)?;
     }
+    let values: BTreeMap<String, String> = values
+        .iter()
+        .map(|(name, value)| {
+            crate::path_policy::environment_value(name, value, &home)
+                .map(|value| (name.clone(), value))
+                .map_err(|_| DeviceSyncError::invalid_config("environment directory value"))
+        })
+        .collect::<Result<_, _>>()?;
 
     let parent = path
         .parent()
@@ -143,7 +159,7 @@ pub fn write_values(path: &Path, values: &BTreeMap<String, String>) -> Result<()
             .map_err(|error| DeviceSyncError::apply_failed(error.to_string()))?;
         set_mode(&temporary, 0o600)?;
         let mut lines = vec![MANAGED_HEADER.to_string()];
-        for (name, value) in values {
+        for (name, value) in &values {
             let encoded = base64::engine::general_purpose::STANDARD.encode(value.as_bytes());
             lines.push(format!("{}{} {}", VALUE_PREFIX, name, encoded));
             lines.push(format!("export {}={}", name, shell_quote(value)));

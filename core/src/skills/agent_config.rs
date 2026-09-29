@@ -363,16 +363,10 @@ impl AgentRegistry {
     }
 }
 
-/// Expand paths starting with ~
+/// Validate persistent paths and expand only supported home prefixes.
 pub fn expand_path(raw: &str) -> Result<PathBuf, String> {
-    if raw.starts_with("~/") {
-        let home = dirs::home_dir().ok_or_else(|| "Cannot determine home directory".to_string())?;
-        Ok(home.join(&raw[2..]))
-    } else if raw == "~" {
-        dirs::home_dir().ok_or_else(|| "Cannot determine home directory".to_string())
-    } else {
-        Ok(PathBuf::from(raw))
-    }
+    let home = dirs::home_dir().ok_or_else(|| "Cannot determine home directory".to_string())?;
+    crate::path_policy::absolute_path(raw, &home)
 }
 
 /// Detect which agents are installed. Two strategies are OR'ed:
