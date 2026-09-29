@@ -159,4 +159,4 @@ MACOS_ARCH=x86_64 MACOS_RUST_TARGET=x86_64-apple-darwin bash script/release.sh b
 
 ## Git
 - Remotes: `github` = `webkong/TokenViewer` (public, the one that matters for releases/Pages), `origin` = self-hosted Gitea (`main` is branch-protected; force-push is rejected server-side).
-- Only commit when asked. Never push to `main` directly unless asked. Latest release tag = **v0.2.20**.
+- Only commit when asked. Never push to `main` directly unless asked. Latest release tag = **v0.3.9**.
