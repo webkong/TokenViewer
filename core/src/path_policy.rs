@@ -2,7 +2,9 @@ use std::path::{Component, Path, PathBuf};
 
 /// Resolve persistent paths without evaluating shell expressions.
 pub fn absolute_path(raw: &str, home: &Path) -> Result<PathBuf, String> {
-    let invalid = |s: &str| s.chars().any(|c| c.is_control() || c == '$' || c == '~');
+    // A tilde inside an absolute path is literal, including Windows 8.3 names
+    // such as RUNNER~1. Only a leading tilde can be an unresolved home prefix.
+    let invalid = |s: &str| s.starts_with('~') || s.chars().any(|c| c.is_control() || c == '$');
     let mut value = raw.to_owned();
     for prefix in ["~", "$HOME", "${HOME}"] {
         if raw == prefix || raw.starts_with(&format!("{prefix}/")) {
