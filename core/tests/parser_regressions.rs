@@ -434,7 +434,12 @@ fn claude_pending_conversation_uses_following_model_across_syncs() {
     let prefix = &user_prompt[..user_prompt.len() / 2];
     write_text(&file, &format!("{sonnet_usage}\n{prefix}"));
     let (_, first_cursor) = claude::parse(&home, None).expect("initial Claude parse");
-    assert_eq!(FileCursor::from_json(Some(&first_cursor)).get_offset(file.to_str().unwrap()), (sonnet_usage.len() + 1) as u64);
+    let initial_cursor = FileCursor::from_json(Some(&first_cursor));
+    assert_eq!(initial_cursor.offsets.len(), 1);
+    let cursor_path = initial_cursor.offsets.keys().next().unwrap();
+    // Glob paths and fixture paths may use different separators on Windows.
+    assert_eq!(fs::canonicalize(cursor_path).unwrap(), fs::canonicalize(&file).unwrap());
+    assert_eq!(initial_cursor.get_offset(cursor_path), (sonnet_usage.len() + 1) as u64);
     let (_, offset) = tokenviewer_core::parsers::utils::read_lines_from_offset(&file, 0).unwrap();
     assert_eq!(offset, (sonnet_usage.len() + 1) as u64);
 
