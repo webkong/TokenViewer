@@ -1209,6 +1209,8 @@ mod tests {
     #[test]
     fn legacy_filtered_push_applies_remote_edits_to_existing_selected_files() {
         let (_root, mut engine, peer) = fixture();
+        // Exercise checkout conversion even on hosts whose global Git config uses LF.
+        engine.repo.config().unwrap().set_bool("core.autocrlf", true).unwrap();
         let local = engine.repo.workdir().unwrap().to_path_buf();
         put(&local, "one/local.md", "local addition\n");
         put(&peer, "one/SKILL.md", "remote edit\n");
@@ -1221,7 +1223,9 @@ mod tests {
             .stage_and_push_filtered("sync", &filter, None, None, None)
             .unwrap();
         assert_eq!(
-            fs::read_to_string(local.join("one/SKILL.md")).unwrap(),
+            fs::read_to_string(local.join("one/SKILL.md"))
+                .unwrap()
+                .replace("\r\n", "\n"),
             "remote edit\n"
         );
         assert!(engine.get_pending_changes().unwrap().is_empty());
