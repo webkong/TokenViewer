@@ -1,3 +1,3 @@
 mod scheduler;
 
-pub use scheduler::{sync_all, SyncResult};
+pub use scheduler::{rebuild_all, sync_all, SyncResult};

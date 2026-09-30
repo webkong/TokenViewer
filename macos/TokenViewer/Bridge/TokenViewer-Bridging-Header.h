@@ -33,6 +33,7 @@ char* _Nullable tt_skills_restore(CoreHandle* _Nullable handle, const char* _Non
 char* _Nullable tt_skills_link(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_unlink(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_git_status(CoreHandle* _Nullable handle);
+char* _Nullable tt_skills_git_sync(CoreHandle* _Nullable handle, const char* _Nonnull json);
 char* _Nullable tt_skills_git_pull(CoreHandle* _Nullable handle);
 char* _Nullable tt_skills_git_force_pull(CoreHandle* _Nullable handle);
 char* _Nullable tt_skills_git_push(CoreHandle* _Nullable handle);

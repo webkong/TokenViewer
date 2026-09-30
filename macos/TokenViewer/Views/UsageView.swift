@@ -208,7 +208,6 @@ struct UsageView: View {
             Spacer()
             Button(action: {
                 AppSyncCoordinator.shared.syncAll()
-                ToastCenter.shared.success(l10n.toastSynced)
             }) {
                 TVSymbol(name: "arrow.triangle.2.circlepath")
                     .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))

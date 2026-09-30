@@ -253,7 +253,7 @@ pub extern "C" fn tt_set_pricing(json: *const c_char) -> *mut c_char {
     }
 }
 
-/// Clear processed data and immediately resync from raw sources.
+/// Reparse raw sources, then atomically replace processed data on success.
 /// Returns the same JSON shape as `tt_sync_all`.
 ///
 /// # Safety
@@ -265,16 +265,7 @@ pub extern "C" fn tt_rebuild_all(handle: *mut CoreHandle) -> *mut c_char {
         None => return std::ptr::null_mut(),
     };
 
-    if let Err(e) = handle.db.clear_processed_data() {
-        return to_json_cstring(&serde_json::json!({
-            "agents_synced": 0,
-            "providers_synced": 0,
-            "records_added": 0,
-            "errors": [format!("reset failed: {}", e)],
-        }));
-    }
-
-    let result = sync::sync_all(&handle.db, &handle.home_dir);
+    let result = sync::rebuild_all(&handle.db, &handle.home_dir);
     let json = serde_json::json!({
         "agents_synced": result.agents_synced,
         "providers_synced": result.agents_synced,
@@ -916,6 +907,37 @@ pub extern "C" fn tt_skills_git_status(handle: *mut CoreHandle) -> *mut c_char {
         None => to_json_cstring(&crate::skills::models::GitStatusInfo::error(
             "No git repository",
         )),
+    }
+}
+
+/// Prepare, resume, resolve or apply a persistent Skills synchronization task.
+/// # Safety
+/// `handle` must be valid; `json` must be a valid NUL-terminated C string.
+#[no_mangle]
+pub extern "C" fn tt_skills_git_sync(
+    handle: *mut CoreHandle,
+    json: *const c_char,
+) -> *mut c_char {
+    let response = (|| -> Result<serde_json::Value, String> {
+        let handle = unsafe { handle.as_mut() }.ok_or("Null handle")?;
+        if json.is_null() {
+            return Err("Null json".into());
+        }
+        let request: crate::skills::git_engine::SyncRequest = unsafe { from_cstring_json(json) }?;
+        let skills = &mut handle.skills;
+        let token = skills.git_token.clone();
+        let name = skills.git_user_name.clone();
+        let email = skills.git_user_email.clone();
+        skills.git.as_mut().ok_or("No git repository")?.sync_task(
+            request,
+            token.as_deref(),
+            name.as_deref(),
+            email.as_deref(),
+        )
+    })();
+    match response {
+        Ok(value) => to_json_cstring(&value),
+        Err(error) => to_json_cstring(&serde_json::json!({"ok":false,"error":error})),
     }
 }
 

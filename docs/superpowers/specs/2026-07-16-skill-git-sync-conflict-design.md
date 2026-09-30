@@ -20,8 +20,9 @@ silently overwrite an unselected remote Skill.
 
 ## Full Pull and Push
 
-Pending changes are auto-committed before synchronization. The engine fetches the
-configured upstream and rebases local commits onto it. If the rebase encounters a
+Legacy Pull stashes tracked and untracked changes and restores them after remote
+integration. Legacy Push auto-commits pending changes after checking for unresolved
+conflicts. The engine fetches the configured upstream and rebases local commits onto it. If the rebase encounters a
 conflict, it records the conflicted paths, aborts the rebase, and returns a
 `conflicted` status. Full push runs only after the same rebase helper succeeds.
 
@@ -42,11 +43,25 @@ baseline must not discard their working-tree contents.
 
 ## UI Behavior
 
-`conflicted` is a failure outcome, not a successful pull or push. The sheet shows
-the conflict state and paths, does not show a success toast, and disables Pull and
-Push until a fresh status confirms that the repository is usable. The current
-release does not expose rebase Continue or Abort because the backend always aborts
-failed rebases.
+Default Sync prepares a persistent plan without checking out conflicts into live
+Skills. Git objects retain the base, local and remote snapshots; the task records
+per-file choices (local, remote or edited text), and survives sheet/app closure.
+The UI shows outgoing/incoming paths and a conflict editor. Configuration and
+legacy Pull/Push/Force actions are secondary to preparing and applying this plan.
+
+Preparing uses a three-way tree merge. Applying revalidates the HEAD, index,
+worktree, configured remote and fetched remote head. A changed input requires a
+new plan. Publication is non-force, and its state is persisted separately from
+local application. A retry after publication checks the published commit and
+local inputs before applying. Recovery snapshots stay outside the active Skills
+tree. A failed local application retains the task and backup references.
+
+Filters are explicitly called upload scope. Unselected remote files are retained;
+unselected local edits are preserved on disk. Selected existing files receive the
+actual merge result, including remote edits. Deleting a selection from the filter
+does not delete the remote Skill. Legacy unresolved Git/stash conflicts block Sync
+and must be resolved before preparing a task. Force actions remain confirmed and
+are unavailable while a prepared task exists.
 
 ## Tests
 

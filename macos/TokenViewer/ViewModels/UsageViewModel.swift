@@ -119,6 +119,7 @@ class UsageViewModel: ObservableObject {
     @Published var heatmap: [HeatmapPoint] = []
     @Published var panelCards: [PanelCard] = []
     @Published var isLoading = false
+    @Published private(set) var syncErrors: [String] = []
     @Published var selectedRange: TimeRange = .week
     /// True until the initial range auto-selection (today vs yesterday, based on
     /// whether today has any data yet) has run once. Prevents that one-time
@@ -298,7 +299,7 @@ class UsageViewModel: ObservableObject {
         if stale { sync() }
     }
 
-    func sync() {
+    func sync(showToast: Bool = false) {
         guard !isLoading else { return }
         #if DEBUG
         if ProcessInfo.processInfo.environment["TV_SKIP_SYNC"] != nil {
@@ -306,10 +307,9 @@ class UsageViewModel: ObservableObject {
         }
         #endif
         isLoading = true
-        lastSyncedAt = Date()
         let startTime = Date()
         Task.detached { [weak self] in
-            _ = CoreBridge.shared.syncAll()
+            let data = CoreBridge.shared.syncAll()
             // Ensure at least 1s spinner so user perceives the sync
             let elapsed = Date().timeIntervalSince(startTime)
             if elapsed < 1.0 {
@@ -317,6 +317,7 @@ class UsageViewModel: ObservableObject {
             }
             await MainActor.run { [weak self] in
                 guard let self else { return }
+                self.finishSync(data, showToast: showToast)
                 self.refresh()
             }
         }
@@ -327,15 +328,27 @@ class UsageViewModel: ObservableObject {
         isLoading = true
         let startTime = Date()
         Task.detached { [weak self] in
-            _ = CoreBridge.shared.rebuildAll()
+            let data = CoreBridge.shared.rebuildAll()
             let elapsed = Date().timeIntervalSince(startTime)
             if elapsed < 1.0 {
                 try? await Task.sleep(nanoseconds: UInt64((1.0 - elapsed) * 1_000_000_000))
             }
             await MainActor.run { [weak self] in
                 guard let self else { return }
+                self.finishSync(data, showToast: true)
                 self.refresh()
             }
+        }
+    }
+
+    private func finishSync(_ data: Data?, showToast: Bool) {
+        let result = data.flatMap { try? decoder.decode(SyncResult.self, from: $0) }
+        syncErrors = result?.errors ?? [L10n.shared.toastUsageSyncFailed]
+        if syncErrors.isEmpty {
+            lastSyncedAt = Date()
+            if showToast { ToastCenter.shared.success(L10n.shared.toastSynced) }
+        } else {
+            ToastCenter.shared.error(L10n.shared.toastUsageSyncFailed)
         }
     }
 

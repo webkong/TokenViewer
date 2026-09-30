@@ -615,7 +615,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "export PATH=\"$HOME/.cargo/bin:$PATH\"\ncd \"$PROJECT_DIR/../core\"\ncargo build --release --target \"$TOKENVIEWER_RUST_TARGET\"\n";
+			shellScript = "export PATH=\"$HOME/.cargo/bin:$PATH\"\nif [ -n \"${TOKENVIEWER_TOOLCHAIN_BIN:-}\" ]; then export PATH=\"$TOKENVIEWER_TOOLCHAIN_BIN:$PATH\"; fi\ncd \"$PROJECT_DIR/../core\"\ncargo build --release --target \"$TOKENVIEWER_RUST_TARGET\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

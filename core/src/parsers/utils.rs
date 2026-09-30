@@ -371,7 +371,7 @@ pub fn read_lines_from_offset(path: &Path, offset: u64) -> std::io::Result<(Vec<
     loop {
         line.clear();
         let bytes_read = reader.read_line(&mut line)?;
-        if bytes_read == 0 {
+        if bytes_read == 0 || (!line.ends_with('\n') && serde_json::from_str::<Value>(&line).is_err()) {
             break;
         }
         current_offset += bytes_read as u64;
@@ -416,6 +416,11 @@ impl Iterator for OffsetLineReader {
                 Ok(n) => n,
                 Err(_) => return None,
             };
+            // A writer may still be appending this JSON record. Leave its
+            // starting offset intact so the next scan can read it in full.
+            if !self.line.ends_with('\n') && serde_json::from_str::<Value>(&self.line).is_err() {
+                return None;
+            }
             self.offset += bytes_read as u64;
             let trimmed = self.line.trim();
             if !trimmed.is_empty() {

@@ -10,6 +10,9 @@ use git2::{
 
 use crate::skills::models::{GitConnectivity, GitStatusInfo, PendingChange};
 
+mod sync_plan;
+pub use sync_plan::SyncRequest;
+
 /// Write debug log to /tmp/asm-git.log and stderr
 pub fn debug_log(msg: &str) {
     eprintln!("[asm] {}", msg);
@@ -41,7 +44,7 @@ enum RebaseFailure {
     Error(String),
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct SkillSyncFilter {
     pub include_prefixes: Vec<String>,
     pub include_skill_ids: Vec<String>,
@@ -256,6 +259,17 @@ impl GitEngine {
             return "Repository not found (404). Check the repository URL and token access.".into();
         }
         error.to_string()
+    }
+
+    fn make_push_callbacks(token: Option<&str>) -> RemoteCallbacks<'static> {
+        let mut callbacks = token
+            .map(Self::make_remote_callbacks)
+            .unwrap_or_else(RemoteCallbacks::new);
+        callbacks.push_update_reference(|_, rejected| match rejected {
+            Some(reason) => Err(git2::Error::from_str(reason)),
+            None => Ok(()),
+        });
+        callbacks
     }
 
     /// Return the repository's configured default git identity.
@@ -955,7 +969,7 @@ impl GitEngine {
         Ok(())
     }
 
-    fn adopt_filtered_sync_commit(&self, oid: Oid) -> Result<(), String> {
+    fn adopt_filtered_sync_commit(&self, oid: Oid, filter: &SkillSyncFilter) -> Result<(), String> {
         let commit = self
             .repo
             .find_commit(oid)
@@ -981,15 +995,22 @@ impl GitEngine {
             .map_err(|e| format!("Failed to compare filtered sync trees: {}", e))?;
         let missing_remote_paths: Vec<String> = diff
             .deltas()
-            .filter(|delta| delta.status() == git2::Delta::Added)
-            .filter_map(|delta| delta.new_file().path())
-            .filter(|path| std::fs::symlink_metadata(workdir.join(path)).is_err())
+            .filter_map(|delta| {
+                let path = delta
+                    .new_file()
+                    .path()
+                    .or_else(|| delta.old_file().path())?;
+                let selected = filter.allows_path(&path.to_string_lossy());
+                (selected
+                    || (delta.status() == git2::Delta::Added
+                        && std::fs::symlink_metadata(workdir.join(path)).is_err()))
+                .then_some(path)
+            })
             .map(|path| path.to_string_lossy().to_string())
             .collect();
 
-        // Materialize only files newly introduced by the adopted remote tree and
-        // missing from disk. Existing local files — including modifications,
-        // deletions, and untracked conflicts outside the filter — remain intact.
+        // Selected paths must receive the merged result. Outside the upload
+        // scope, preserve existing edits/deletions and only materialize new files.
         self.update_current_branch(oid)?;
         if !missing_remote_paths.is_empty() {
             let mut checkout = CheckoutBuilder::new();
@@ -1039,9 +1060,7 @@ impl GitEngine {
                 .find_remote("origin")
                 .map_err(|e| format!("Failed to find remote 'origin': {}", e))?;
             let mut push_options = git2::PushOptions::new();
-            if let Some(token) = token {
-                push_options.remote_callbacks(Self::make_remote_callbacks(token));
-            }
+            push_options.remote_callbacks(Self::make_push_callbacks(token));
             let force_prefix = if force { "+" } else { "" };
             let refspec = format!("{force_prefix}{temporary_ref}:refs/heads/{branch}");
             remote
@@ -1071,6 +1090,11 @@ impl GitEngine {
     }
 
     fn sync_blocked_status(&self) -> Result<Option<GitStatusInfo>, String> {
+        if self.has_pending_sync_plan()? {
+            return Ok(Some(GitStatusInfo::conflicted(
+                "A saved sync plan must be completed or discarded first",
+            )));
+        }
         let index_has_conflicts = self
             .repo
             .index()
@@ -1347,6 +1371,9 @@ impl GitEngine {
         _user_email: Option<&str>,
     ) -> Result<GitStatusInfo, String> {
         debug_log!(" force_pull: start");
+        if self.has_pending_sync_plan()? {
+            return Err("A saved sync plan must be completed or discarded first".into());
+        }
         let remote_oid = self
             .fetch_remote_head(token)?
             .ok_or_else(|| format!("Remote branch '{}' has no commits", self.sync_branch()))?;
@@ -1382,6 +1409,9 @@ impl GitEngine {
         user_email: Option<&str>,
     ) -> Result<GitStatusInfo, String> {
         debug_log!(" stage_and_push: start");
+        if let Some(status) = self.sync_blocked_status()? {
+            return Ok(status);
+        }
         self.auto_commit(user_name, user_email)?;
 
         if self.has_remote() {
@@ -1406,6 +1436,9 @@ impl GitEngine {
         user_name: Option<&str>,
         user_email: Option<&str>,
     ) -> Result<GitStatusInfo, String> {
+        if let Some(status) = self.sync_blocked_status()? {
+            return Ok(status);
+        }
         self.auto_commit(user_name, user_email)?;
         if self.has_remote() {
             self.push(token, true)?;
@@ -1448,11 +1481,11 @@ impl GitEngine {
             ) {
                 Ok(Some(commit_oid)) => {
                     self.push_filtered_commit(commit_oid, token, false)?;
-                    self.adopt_filtered_sync_commit(commit_oid)?;
+                    self.adopt_filtered_sync_commit(commit_oid, filter)?;
                 }
                 Ok(None) => {
                     if let Some(remote_oid) = remote_parent {
-                        self.adopt_filtered_sync_commit(remote_oid)?;
+                        self.adopt_filtered_sync_commit(remote_oid, filter)?;
                     }
                 }
                 Err(failure) => return Ok(self.status_for_rebase_failure(failure)),
@@ -1491,7 +1524,7 @@ impl GitEngine {
                 })?
             {
                 self.push_filtered_commit(commit_oid, token, true)?;
-                self.adopt_filtered_sync_commit(commit_oid)?;
+                self.adopt_filtered_sync_commit(commit_oid, filter)?;
             }
         } else {
             self.auto_commit_filtered(filter, user_name, user_email)?;
@@ -1599,9 +1632,7 @@ impl GitEngine {
         );
 
         let mut push_options = git2::PushOptions::new();
-        if let Some(tok) = token {
-            push_options.remote_callbacks(Self::make_remote_callbacks(tok));
-        }
+        push_options.remote_callbacks(Self::make_push_callbacks(token));
 
         remote
             .push(&[&refspec], Some(&mut push_options))

@@ -319,12 +319,19 @@ fn zcode_running_rows_are_reprocessed_after_completion() {
         0,
     );
 
+    // Keep a read transaction open so completion remains in WAL without touching the
+    // main database file checked by the former mtime optimization.
+    let writer = Connection::open(&db_path).unwrap();
+    writer.execute_batch("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;").unwrap();
+    writer.execute_batch("BEGIN; SELECT COUNT(*) FROM model_usage;").unwrap();
     let (first_records, cursor_json) =
         tokenviewer_core::parsers::zcode::parse(&home, None).expect("first zcode parse");
     assert_eq!(first_records.len(), 1);
     assert_eq!(first_records[0].total_tokens, 21);
 
+    let before = fs::metadata(&db_path).unwrap().modified().unwrap();
     update_zcode_row_status(&db_path, "zcode-running", "completed");
+    assert_eq!(before, fs::metadata(&db_path).unwrap().modified().unwrap());
 
     let (second_records, _) = tokenviewer_core::parsers::zcode::parse(&home, Some(&cursor_json))
         .expect("second zcode parse");
@@ -424,8 +431,12 @@ fn claude_pending_conversation_uses_following_model_across_syncs() {
     let user_prompt = r#"{"type":"user","uuid":"user-opus","timestamp":"2026-01-01T00:02:00Z","message":{"content":[{"type":"text","text":"switch model"}]}}"#;
     let opus_usage = r#"{"type":"assistant","timestamp":"2026-01-01T00:03:00Z","message":{"id":"msg-opus","model":"claude-opus-4.6","usage":{"input_tokens":12,"output_tokens":6}}}"#;
 
-    write_text(&file, sonnet_usage);
+    let prefix = &user_prompt[..user_prompt.len() / 2];
+    write_text(&file, &format!("{sonnet_usage}\n{prefix}"));
     let (_, first_cursor) = claude::parse(&home, None).expect("initial Claude parse");
+    assert_eq!(FileCursor::from_json(Some(&first_cursor)).get_offset(file.to_str().unwrap()), (sonnet_usage.len() + 1) as u64);
+    let (_, offset) = tokenviewer_core::parsers::utils::read_lines_from_offset(&file, 0).unwrap();
+    assert_eq!(offset, (sonnet_usage.len() + 1) as u64);
 
     write_text(&file, &format!("{sonnet_usage}\n{user_prompt}"));
     let mut cursor = FileCursor::from_json(Some(&first_cursor));
@@ -895,6 +906,16 @@ fn mimocode_sync_reuses_saved_cursor() {
     assert_eq!(mimocode.input_tokens, 10);
     assert_eq!(mimocode.output_tokens, 6);
     assert_eq!(mimocode.reasoning_output_tokens, 2);
+
+    // A failed parser must be reported, and rebuilding must retain both
+    // existing usage and its checkpoint instead of clearing them first.
+    let previous_rows = db.all_usage().unwrap();
+    let previous_cursor = db.get_cursor("mimocode").unwrap().unwrap().cursor_data;
+    write_text(&home.join(".zcode/cli/db/db.sqlite"), "not a SQLite database");
+    let failed = tokenviewer_core::sync::rebuild_all(&db, &home);
+    assert!(failed.errors.iter().any(|error| error.starts_with("zcode:")));
+    assert_eq!(db.all_usage().unwrap(), previous_rows);
+    assert_eq!(db.get_cursor("mimocode").unwrap().unwrap().cursor_data, previous_cursor);
 }
 
 #[test]
@@ -903,6 +924,13 @@ fn workbuddy_sync_reuses_saved_cursor() {
     seed_workbuddy_fixture(&home);
 
     let db = Database::open(&home.join("tokenviewer.db")).expect("open test db");
+
+    db.conn().execute_batch("CREATE TRIGGER reject_cursor BEFORE INSERT ON sync_cursors WHEN NEW.source = 'workbuddy' BEGIN SELECT RAISE(FAIL, 'cursor write failure'); END;").unwrap();
+    let failed = sync_all(&db, &home);
+    assert!(failed.errors.iter().any(|error| error.starts_with("workbuddy:")));
+    assert!(db.all_usage().unwrap().is_empty());
+    assert!(db.get_cursor("workbuddy").unwrap().is_none());
+    db.conn().execute_batch("DROP TRIGGER reject_cursor;").unwrap();
 
     let first = sync_all(&db, &home);
     assert!(

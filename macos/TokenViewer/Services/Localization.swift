@@ -489,6 +489,7 @@ final class L10n: ObservableObject {
     var toastSaveFailed: String { isZh ? "保存失败" : "Save failed" }
     var toastRefreshed: String { isZh ? "刷新成功" : "Refreshed" }
     var toastSynced: String { isZh ? "同步成功" : "Synced" }
+    var toastUsageSyncFailed: String { isZh ? "用量同步失败，部分数据可能未更新" : "Usage sync failed; some data may not be up to date" }
     var toastPulled: String { isZh ? "拉取成功" : "Pulled" }
     var toastPushed: String { isZh ? "推送成功" : "Pushed" }
     var toastDeleted: String { isZh ? "删除成功" : "Deleted" }
@@ -584,7 +585,51 @@ final class L10n: ObservableObject {
     var gitDefaultIdentityMissing: String { isZh ? "未检测到默认 Git 用户名和邮箱" : "No default git user name and email detected" }
     var gitCommitIdentityDesc: String { isZh ? "留空时使用当前 git 默认配置；填写后 sync 提交会使用这里的用户名和邮箱。" : "Leave blank to use the current git default. Sync commits use these values when provided." }
     var skillSyncFilter: String { isZh ? "同步过滤" : "Sync Filter" }
-    var skillSyncFilterDesc: String { isZh ? "仅在 Push 时提交匹配的 Skill；Pull 仍会拉取整个仓库以保持 Git 历史一致。" : "Only matching skills are committed on Push. Pull still fetches the full repository to keep Git history consistent." }
+    var skillSyncFilterDesc: String { isZh ? "只上传匹配的 Skill。本范围不限制下载；未选 Skill 的本地修改会保留。" : "Upload matching Skills only. Downloads are not filtered; local edits to unselected Skills are preserved." }
+    var skillSyncUploadScope: String { isZh ? "限制上传范围" : "Limit upload scope" }
+    var skillSyncPrepare: String { isZh ? "检查并同步" : "Review & Sync" }
+    var skillSyncApply: String { isZh ? "确认同步" : "Apply Sync" }
+    var skillSyncResume: String { isZh ? "继续完成同步" : "Resume Sync" }
+    var skillSyncDiscard: String { isZh ? "取消本次计划" : "Discard Plan" }
+    var skillSyncReplan: String { isZh ? "保留现状，重新检查" : "Keep Current State & Review Again" }
+    var skillSyncCloseResult: String { isZh ? "完成" : "Done" }
+    var skillSyncSettings: String { isZh ? "仓库与上传设置" : "Repository & Upload Settings" }
+    var skillSyncAdvanced: String { isZh ? "高级 Git 操作" : "Advanced Git Actions" }
+    var skillSyncPreview: String { isZh ? "同步预览" : "Sync Preview" }
+    var skillSyncUpload: String { isZh ? "本机变更" : "Local Changes" }
+    var skillSyncDownload: String { isZh ? "远端变更" : "Remote Changes" }
+    var skillSyncLocal: String { isZh ? "本机版本" : "Local" }
+    var skillSyncRemote: String { isZh ? "远端版本" : "Remote" }
+    var skillSyncBase: String { isZh ? "共同版本" : "Base" }
+    var skillSyncResult: String { isZh ? "最终内容" : "Result" }
+    var skillSyncUseLocal: String { isZh ? "使用本机版本" : "Use Local" }
+    var skillSyncUseRemote: String { isZh ? "使用远端版本" : "Use Remote" }
+    var skillSyncSaveEdit: String { isZh ? "保存合并内容" : "Save Merge" }
+    var skillSyncMissing: String { isZh ? "此版本中不存在（选择后删除）" : "Absent in this version (choosing it deletes the file)" }
+    var skillSyncBinary: String { isZh ? "二进制或大文件，无法编辑预览。可选择保留某一版本。" : "Binary or large file. Choose a version; text editing is unavailable." }
+    var skillSyncResolve: String { isZh ? "处理冲突" : "Resolve Conflict" }
+    var skillSyncResolved: String { isZh ? "已选择" : "Resolved" }
+    var skillSyncPausedHint: String { isZh ? "计划与已保存的选择会保留，关闭窗口后可继续。预览不会修改正在使用的 Skills。" : "The plan and saved choices persist after closing. Preview does not change active Skills." }
+    var skillSyncComplete: String { isZh ? "同步完成，恢复快照已保留。" : "Sync complete. Recovery snapshots retained." }
+    var skillSyncRecoveryHint: String { isZh ? "同步尚未完成，请继续恢复。远端发布与本地应用分别记录，避免重复覆盖。" : "Sync is incomplete. Resume to recover; publication and local application are tracked separately." }
+    var skillSyncRecoveryDetails: String { isZh ? "恢复快照信息" : "Recovery Snapshot Details" }
+    var skillSyncReplanHint: String { isZh ? "重新检查会保留当前文件和可能已发布的远端提交，不会撤销推送。" : "Reviewing again preserves current files and any published commit; it does not undo a push." }
+    var skillSyncLegacyConflict: String { isZh ? "当前仓库已有未解决的 Git 冲突。请先在 Git 客户端解决；此处不会自动提交冲突标记。" : "Resolve existing Git conflicts in a Git client first. Conflict markers will not be auto-committed." }
+    func skillSyncConflictCount(_ count: Int) -> String { isZh ? "还需处理 \(count) 个冲突" : "\(count) conflicts remaining" }
+    func skillSyncError(_ code: String) -> String {
+        switch code {
+        case "sync_changed": return isZh ? "本地或远端在预览后发生了变化。尚未发布时可取消计划并重新检查；已发布时请保留计划后恢复。" : "Local or remote inputs changed. Discard and review an unpublished plan, or retain a published plan for recovery."
+        case "sync_existing_conflict": return skillSyncLegacyConflict
+        case "sync_unresolved": return isZh ? "请先处理所有冲突。" : "Resolve all conflicts first."
+        case "sync_empty_scope": return isZh ? "请选择要上传的 Skill，或关闭上传范围限制。" : "Select Skills or disable the upload filter."
+        case "sync_invalid_choice": return isZh ? "合并内容无效：请移除冲突标记，或选择本机／远端版本。" : "Invalid merge: remove conflict markers or choose a version."
+        case "sync_recovery": return isZh ? "检测到同步期间的本地变化，已停止覆盖。计划和恢复快照均保留，请先检查本地文件。" : "Local changes detected during recovery. No further overwrite; the plan and snapshots are retained. Inspect local files first."
+        case "sync_complex_conflict", "sync_unsupported_path": return isZh ? "存在重命名、目录结构或不支持的路径冲突，请先在 Git 客户端处理。" : "Resolve rename, directory or unsupported-path conflicts in a Git client first."
+        case "sync_unrelated_history": return isZh ? "本地与远端没有共同历史，请先在 Git 客户端确认仓库来源。" : "Local and remote have unrelated histories. Check the repository in a Git client first."
+        case "sync_busy": return isZh ? "另一个同步操作正在运行，请稍后重试。" : "Another sync is running. Try again shortly."
+        default: return isZh ? "同步未完成：\(code)" : "Sync did not finish: \(code)"
+        }
+    }
     var skillSyncFilterPrefixes: String { isZh ? "包含前缀" : "Included prefixes" }
     var skillSyncFilterPrefixesPlaceholder: String { isZh ? "例如 webkong，每行或逗号分隔" : "For example: webkong. Separate with commas or new lines." }
     var skillSyncFilterPrefixesHelp: String { isZh ? "前缀匹配 Skill 目录名；webkong 会匹配 webkong-article、webkong-search 等。" : "Prefixes match skill directory names. webkong matches webkong-article, webkong-search, and similar IDs." }

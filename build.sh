@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 export PATH="$HOME/.cargo/bin:/opt/homebrew/opt/rustup/bin:$PATH"
+if [ -n "${TOKENVIEWER_TOOLCHAIN_BIN:-}" ]; then export PATH="$TOKENVIEWER_TOOLCHAIN_BIN:$PATH"; fi
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 export OPENSSL_DIR="${OPENSSL_DIR:-/opt/homebrew/opt/openssl@3}"
 

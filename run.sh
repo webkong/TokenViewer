@@ -3,6 +3,7 @@ set -e
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 export PATH="$HOME/.cargo/bin:/opt/homebrew/opt/rustup/bin:$PATH"
+if [ -n "${TOKENVIEWER_TOOLCHAIN_BIN:-}" ]; then export PATH="$TOKENVIEWER_TOOLCHAIN_BIN:$PATH"; fi
 
 LIB="$ROOT/core/target/aarch64-apple-darwin/release/libtokenviewer_core.a"
 NEWEST_SRC=$(find "$ROOT/core/src" -name "*.rs" -newer "$LIB" 2>/dev/null | head -1)

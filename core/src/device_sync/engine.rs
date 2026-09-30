@@ -1087,7 +1087,7 @@ impl DeviceSyncEngine {
         // writing preferences must still be able to invoke rollback_apply.
         let transaction = pending;
         if let Err(error) = self.apply_transaction(&transaction, skills) {
-            if let Err(rollback_error) = rollback_transaction(&transaction) {
+            if let Err(rollback_error) = rollback_transaction(&transaction, self.db_path.as_deref()) {
                 self.recovery_block = Some(RecoveryBlock {
                     operation_id: Some(transaction.id.clone()),
                     recovery_path: transaction.recovery_root.clone(),
@@ -1180,7 +1180,7 @@ impl DeviceSyncEngine {
                 )
                 .with_operation_id(transaction_id.to_string()));
         }
-        if let Err(error) = cleanup_transaction(&transaction) {
+        if let Err(error) = cleanup_transaction(&transaction, self.db_path.as_deref()) {
             self.recovery_block = Some(RecoveryBlock {
                 operation_id: Some(transaction.id.clone()),
                 recovery_path: transaction.recovery_root.clone(),
@@ -1213,7 +1213,7 @@ impl DeviceSyncEngine {
                     .with_operation_id(transaction.id),
             );
         }
-        rollback_transaction(&transaction).map_err(|error| {
+        rollback_transaction(&transaction, self.db_path.as_deref()).map_err(|error| {
             self.recovery_block = Some(RecoveryBlock {
                 operation_id: Some(transaction.id.clone()),
                 recovery_path: transaction.recovery_root.clone(),
@@ -1232,7 +1232,7 @@ impl DeviceSyncEngine {
                     .with_argument("detail", error.code.as_str())
                     .with_operation_id(transaction.id.clone())
             })?;
-        cleanup_transaction(&transaction).map_err(|error| {
+        cleanup_transaction(&transaction, self.db_path.as_deref()).map_err(|error| {
             self.recovery_block = Some(RecoveryBlock {
                 operation_id: Some(transaction.id.clone()),
                 recovery_path: transaction.recovery_root.clone(),
@@ -1395,7 +1395,7 @@ impl DeviceSyncEngine {
                         error.with_operation_id(journal.transaction_id.clone())
                     })?;
                     if journal_restore_required(&requested)? {
-                        restore_from_journal(&requested).map_err(|error| {
+                        restore_from_journal(&requested, self.db_path.as_deref()).map_err(|error| {
                             error.with_operation_id(journal.transaction_id.clone())
                         })?;
                     }
@@ -1442,7 +1442,8 @@ impl DeviceSyncEngine {
                 }
                 _ => return Err(recovery_error(Some(&journal.transaction_id))),
             }
-            cleanup_journal(&journal)
+            finish_usage_backup(self.db_path.as_deref(), &journal.transaction_id)
+                .and_then(|()| cleanup_journal(&journal))
                 .map_err(|error| error.with_operation_id(journal.transaction_id.clone()))?;
             let _ = fs::remove_dir_all(entry_path);
             summary.recovered += 1;
@@ -1739,7 +1740,7 @@ impl DeviceSyncEngine {
                 let database = Database::open(path)
                     .map_err(|error| DeviceSyncError::apply_failed(error.to_string()))?;
                 database
-                    .replace_usage(&transaction.payload.manifest.records.usage)
+                    .replace_usage_recoverably(&transaction.id, &transaction.payload.manifest.records.usage)
                     .map_err(|error| DeviceSyncError::apply_failed(error.to_string()))?;
             }
         }
@@ -3593,7 +3594,7 @@ fn journal_restore_required(journal: &TransactionJournal) -> Result<bool, Device
 
 /// Persist the rollback intent before touching any user-owned path. The
 /// operation is idempotent so a caller can retry it after a partial failure.
-fn rollback_transaction(transaction: &PendingTransaction) -> Result<(), DeviceSyncError> {
+fn rollback_transaction(transaction: &PendingTransaction, db_path: Option<&Path>) -> Result<(), DeviceSyncError> {
     let journal = read_transaction_journal(transaction)?;
     match journal.phase.as_str() {
         JOURNAL_COMMITTED => {
@@ -3609,13 +3610,13 @@ fn rollback_transaction(transaction: &PendingTransaction) -> Result<(), DeviceSy
 
     let requested = write_journal_phase(&journal, JOURNAL_ROLLBACK_REQUESTED)?;
     if journal_restore_required(&requested)? {
-        restore_from_journal(&requested)?;
+        restore_from_journal(&requested, db_path)?;
     }
     write_journal_phase(&requested, JOURNAL_ROLLED_BACK)?;
     Ok(())
 }
 
-fn restore_from_journal(journal: &TransactionJournal) -> Result<(), DeviceSyncError> {
+fn restore_from_journal(journal: &TransactionJournal, db_path: Option<&Path>) -> Result<(), DeviceSyncError> {
     validate_restore_backups(journal)?;
     restore_link_targets(journal).map_err(|error| restore_failure(journal, error))?;
     let backup_skills = journal.rollback_root.join("skills");
@@ -3638,6 +3639,14 @@ fn restore_from_journal(journal: &TransactionJournal) -> Result<(), DeviceSyncEr
         &journal.links_path,
     )
     .map_err(|error| restore_failure(journal, error))?;
+    // The DB path comes from the local engine, never from a remote snapshot
+    // or an editable journal. SQLite restores the backup and removes its
+    // marker atomically, making restart recovery safe to repeat.
+    if let Some(path) = db_path {
+        Database::open(path)
+            .and_then(|database| database.rollback_usage_replace(&journal.transaction_id))
+            .map_err(|error| restore_failure(journal, DeviceSyncError::apply_failed(error.to_string())))?;
+    }
     Ok(())
 }
 
@@ -3863,7 +3872,17 @@ fn restore_file_with_marker(backup: &Path, target: &Path) -> Result<(), DeviceSy
     Ok(())
 }
 
-fn cleanup_transaction(transaction: &PendingTransaction) -> Result<(), DeviceSyncError> {
+fn finish_usage_backup(db_path: Option<&Path>, transaction_id: &str) -> Result<(), DeviceSyncError> {
+    if let Some(path) = db_path {
+        Database::open(path)
+            .and_then(|database| database.finish_usage_replace(transaction_id))
+            .map_err(|error| DeviceSyncError::apply_failed(error.to_string()))?;
+    }
+    Ok(())
+}
+
+fn cleanup_transaction(transaction: &PendingTransaction, db_path: Option<&Path>) -> Result<(), DeviceSyncError> {
+    finish_usage_backup(db_path, &transaction.id)?;
     cleanup_journal(&journal_for(transaction, "committed"))
 }
 
@@ -4782,6 +4801,14 @@ mod tests {
             .unwrap();
         skills_a.registry.link_skill("cursor", "alpha").unwrap();
 
+        engine_a.config.components.push(SyncComponent::Usage);
+        engine_b.config.components.push(SyncComponent::Usage);
+        engine_b.db_path = Some(home_b.path().join(".tokenviewer/data.db"));
+        db_b.conn().execute(
+            "INSERT INTO usage (hour_start, source, model, project_key, project_ref, total_tokens) VALUES ('2026-01-01T00:00:00Z', 'claude', 'claude-sonnet-4.6', 'local-project', '/local/private-project', 123)",
+            [],
+        ).unwrap();
+        let original_usage = db_b.all_usage().unwrap();
         engine_a.create_vault("link-rollback-password").unwrap();
         engine_b.join_vault("link-rollback-password").unwrap();
         let push = engine_a.preview_push(&skills_a, &[], false).unwrap();
@@ -4806,6 +4833,29 @@ mod tests {
         assert!(!home_b.path().join("agent/cursor-skills/alpha").exists());
         assert!(skills_b.registry.is_skill_linked("codex", "alpha"));
         assert!(!skills_b.registry.is_skill_linked("cursor", "alpha"));
+        assert_eq!(db_b.all_usage().unwrap(), original_usage);
+        assert!(!db_b.has_pending_usage_replace().unwrap());
+
+        // Exercise the same recovery after losing the in-memory transaction:
+        // SQLite has committed, but the committed journal write has failed.
+        engine_b.rollback_apply(&transaction.transaction_id).unwrap();
+        engine_b.fail_after_links = false;
+        let preview = engine_b.preview_pull(&skills_b, &[]).unwrap();
+        let prepared = engine_b.prepare_apply(&skills_b, &preview.preview_token).unwrap();
+        let pending = engine_b.transactions[&prepared.transaction_id].clone();
+        inject_next_journal_write_failure(JOURNAL_COMMITTED);
+        assert!(engine_b.apply_transaction(&pending, &mut skills_b).is_err());
+        assert!(db_b.all_usage().unwrap().is_empty());
+        assert!(db_b.has_pending_usage_replace().unwrap());
+        assert!(!crate::sync::sync_all(&db_b, home_b.path()).errors.is_empty());
+        drop(engine_b);
+        let mut recovered = DeviceSyncEngine::new_with_db(
+            home_b.path().to_path_buf(), source_b,
+            home_b.path().join(".tokenviewer/data.db"),
+        ).unwrap();
+        recovered.recover_pending_apply().unwrap();
+        assert_eq!(db_b.all_usage().unwrap(), original_usage);
+        assert!(!db_b.has_pending_usage_replace().unwrap());
     }
 
     #[test]

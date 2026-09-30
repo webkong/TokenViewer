@@ -11,7 +11,7 @@ use crate::models::UsageRecord;
 /// creation / cache read) and an epoch-ms `started_at`.
 ///
 /// Incremental strategy:
-///   - `cursor.file_changed()` skips the DB when its mtime is unchanged.
+///   - Query on each sync: SQLite WAL writes need not change the DB mtime.
 ///   - `cursor.zcode_last_started_at` + `cursor.zcode_last_id` store a stable
 ///     `(started_at, id)` watermark so same-ms rows can be replayed safely.
 ///   - `cursor.mark_seen()` dedups by `model_usage.id` (text PK) to guard
@@ -35,11 +35,6 @@ pub fn parse(
 
     let db_path = home_dir.join(".zcode/cli/db/db.sqlite");
     if !db_path.exists() {
-        return Ok((vec![], cursor.to_json()));
-    }
-
-    let db_key = db_path.to_string_lossy().to_string();
-    if !cursor.file_changed(&db_key) {
         return Ok((vec![], cursor.to_json()));
     }
 

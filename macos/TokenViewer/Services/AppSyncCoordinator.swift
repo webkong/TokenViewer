@@ -8,7 +8,7 @@ final class AppSyncCoordinator {
     private let limitsRefresh: @MainActor () -> Void
 
     init(
-        usageSync: @escaping @MainActor () -> Void = { UsageViewModel.shared.sync() },
+        usageSync: @escaping @MainActor () -> Void = { UsageViewModel.shared.sync(showToast: true) },
         limitsRefresh: @escaping @MainActor () -> Void = { LimitsViewModel.shared.refresh(force: true, showToast: true) }
     ) {
         self.usageSync = usageSync

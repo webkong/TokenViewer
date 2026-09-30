@@ -38,6 +38,7 @@ pub struct ParseResult {
     pub source: String,
     pub records: Vec<UsageRecord>,
     pub new_cursor: String,
+    pub error: Option<String>,
 }
 
 type ParserFn =
@@ -107,6 +108,7 @@ pub fn parse_all_with_codex_homes(
                     source: source.to_string(),
                     records,
                     new_cursor,
+                    error: None,
                 },
                 Err(e) => {
                     eprintln!("tokenviewer: parser '{}' failed: {}", source, e);
@@ -114,6 +116,7 @@ pub fn parse_all_with_codex_homes(
                         source: source.to_string(),
                         records: vec![],
                         new_cursor: cursor_data.unwrap_or("{}").to_string(),
+                        error: Some(e.to_string()),
                     }
                 }
             }

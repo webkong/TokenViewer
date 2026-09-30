@@ -56,6 +56,8 @@ struct SkillGitSyncSheet: View {
     @State private var isCheckingConnectivity = false
     @State private var showForcePullConfirmation = false
     @State private var showForcePushConfirmation = false
+    @State private var editingConflict: SkillSyncConflict?
+    @State private var showSettings = false
 
     private var provider: SkillGitProvider {
         SkillGitProvider(rawValue: providerRaw) ?? .github
@@ -73,11 +75,11 @@ struct SkillGitSyncSheet: View {
     }
 
     private var isBusy: Bool {
-        viewModel.gitStatusName == "pushing" || viewModel.gitStatusName == "pulling"
+        viewModel.syncTaskBusy || viewModel.gitStatusName == "pushing" || viewModel.gitStatusName == "pulling"
     }
 
     private var isSyncBlocked: Bool {
-        isBusy
+        isBusy || viewModel.gitStatusName == "conflicted" || viewModel.syncPlan != nil
     }
 
     private var currentToken: String {
@@ -91,11 +93,38 @@ struct SkillGitSyncSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    repositorySection
-                    filterSection
-                    statusSection
-                    changesSection
-                    actionSection
+                    if let plan = viewModel.syncPlan {
+                        syncPlanSection(plan)
+                    } else {
+                        statusSection
+                        if viewModel.gitStatusName == "conflicted" {
+                            Text(l10n.skillSyncLegacyConflict).foregroundStyle(.red)
+                        }
+                        Button {
+                            guard viewModel.applyGitConfig(remoteURL: repoURL, platform: provider.key,
+                                token: currentToken, gitBranch: syncGitBranch,
+                                userName: storedGitUserName, userEmail: storedGitUserEmail) else { return }
+                            viewModel.runSyncTask("prepare", filterPayload: syncFilterPayload())
+                        } label: {
+                            Label(l10n.skillSyncPrepare, systemImage: "arrow.triangle.2.circlepath")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .tvActionButton(.primary)
+                        .disabled(repoURL.isEmpty || !tokenSaved || isSyncBlocked)
+                    }
+                    if isBusy { ProgressView().frame(maxWidth: .infinity) }
+                    if let error = viewModel.syncTaskError {
+                        Text(error).font(.callout).foregroundStyle(.red).textSelection(.enabled)
+                    }
+                    DisclosureGroup(l10n.skillSyncSettings, isExpanded: $showSettings) {
+                        repositorySection
+                        filterSection
+                    }
+                    .disabled(isBusy || viewModel.syncPlan != nil)
+                    DisclosureGroup(l10n.skillSyncAdvanced) {
+                        changesSection
+                        actionSection
+                    }
                 }
                 .padding()
             }
@@ -129,11 +158,89 @@ struct SkillGitSyncSheet: View {
                 applyConfig(showToast: true, userName: userName, userEmail: userEmail)
             }
         }
+        .sheet(item: $editingConflict) { conflict in
+            SkillSyncConflictEditor(conflict: conflict, viewModel: viewModel)
+        }
         .onAppear {
             loadConfig()
             viewModel.refreshGitStatus()
             checkConnectivity()
+            viewModel.runSyncTask("load")
+            showSettings = repoURL.isEmpty
         }
+    }
+
+    private func syncPlanSection(_ plan: SkillSyncPlan) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label(plan.phase == "complete" ? l10n.skillSyncComplete : l10n.skillSyncPreview,
+                  systemImage: plan.phase == "complete" ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath")
+                .font(.headline)
+            Text(plan.phase == "prepared" ? l10n.skillSyncPausedHint :
+                    (plan.phase == "complete" ? plan.branch : l10n.skillSyncRecoveryHint))
+                .font(.callout).foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 12) {
+                syncPathList(l10n.skillSyncUpload, paths: plan.uploads)
+                syncPathList(l10n.skillSyncDownload, paths: plan.downloads)
+            }
+            if !plan.conflicts.isEmpty {
+                Text(l10n.skillSyncConflictCount(plan.unresolvedCount)).font(.headline)
+                ForEach(plan.conflicts) { conflict in
+                    Button { editingConflict = conflict } label: {
+                        HStack {
+                            Image(systemName: conflict.choice == nil ? "exclamationmark.circle" : "checkmark.circle")
+                            VStack(alignment: .leading) {
+                                Text(conflict.path.split(separator: "/").first.map(String.init) ?? conflict.path)
+                                    .font(.callout.weight(.semibold))
+                                Text(conflict.path).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(conflict.choice == nil ? l10n.skillSyncResolve : l10n.skillSyncResolved).font(.caption)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isBusy || plan.phase != "prepared")
+                }
+            }
+            HStack {
+                if plan.phase != "applying" {
+                    Button(plan.phase == "complete" ? l10n.skillSyncCloseResult :
+                        (plan.phase == "prepared" ? l10n.skillSyncDiscard : l10n.skillSyncReplan)) {
+                        viewModel.runSyncTask("discard")
+                    }
+                    .disabled(isBusy)
+                }
+                Spacer()
+                if plan.phase != "complete" {
+                    Button(plan.phase == "prepared" ? l10n.skillSyncApply : l10n.skillSyncResume) {
+                        viewModel.runSyncTask("apply")
+                    }
+                    .tvActionButton(.primary)
+                    .disabled(isBusy || plan.unresolvedCount > 0)
+                }
+            }
+            if plan.phase == "publishing" || plan.phase == "published" {
+                Text(l10n.skillSyncReplanHint).font(.caption).foregroundStyle(.secondary)
+            }
+            DisclosureGroup(l10n.skillSyncRecoveryDetails) {
+                Text(plan.recoveryRef).font(.caption.monospaced()).foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    private func syncPathList(_ title: String, paths: [String]) -> some View {
+        GroupBox("\(title) · \(paths.count)") {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(paths, id: \.self) { path in
+                        Text(path).font(.caption.monospaced()).textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }.frame(height: min(140, CGFloat(max(1, paths.count)) * 22))
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var header: some View {
@@ -156,6 +263,7 @@ struct SkillGitSyncSheet: View {
                 .foregroundStyle(tokenSaved ? .green : .accentColor)
             }
             .buttonStyle(.plain)
+            .disabled(isBusy || viewModel.syncPlan != nil)
             .quickHelp(l10n.gitAuthorizeTip)
 
             Button {
@@ -168,7 +276,7 @@ struct SkillGitSyncSheet: View {
                     .animation(isCheckingConnectivity ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: isCheckingConnectivity)
             }
             .buttonStyle(.borderless)
-            .disabled(isCheckingConnectivity)
+            .disabled(isCheckingConnectivity || isBusy)
             .quickHelp(l10n.gitRefreshStatusTip)
 
             Button(l10n.gitDone) { dismiss() }
@@ -507,7 +615,7 @@ struct SkillGitSyncSheet: View {
             VStack(alignment: .leading, spacing: 12) {
                 Toggle(isOn: $filterEnabled) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(l10n.skillSyncFilter)
+                        Text(l10n.skillSyncUploadScope)
                             .font(.subheadline.weight(.semibold))
                         Text(l10n.skillSyncFilterDesc)
                             .font(.caption)
@@ -646,6 +754,84 @@ struct SkillGitSyncSheet: View {
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
         return try? encoder.encode(payload)
+    }
+}
+
+private struct SkillSyncConflictEditor: View {
+    let conflict: SkillSyncConflict
+    @ObservedObject var viewModel: SkillManagerViewModel
+    @ObservedObject private var l10n = L10n.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var mergedText = ""
+    @State private var showBase = false
+    @State private var saving = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(conflict.path).font(.headline).textSelection(.enabled)
+                Spacer()
+                Button(l10n.gitDone) { dismiss() }.disabled(saving)
+            }
+            HStack(alignment: .top, spacing: 12) {
+                versionPane(l10n.skillSyncLocal, version: conflict.local)
+                versionPane(l10n.skillSyncRemote, version: conflict.remote)
+            }
+            DisclosureGroup(l10n.skillSyncBase, isExpanded: $showBase) {
+                ScrollView { Text(conflict.base.text ?? l10n.skillSyncMissing)
+                    .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading) }.frame(maxHeight: 120)
+            }
+            if conflict.canEdit {
+                Text(l10n.skillSyncResult).font(.headline)
+                TextEditor(text: $mergedText)
+                    .font(.system(.body, design: .monospaced))
+                    .border(Color.secondary.opacity(0.3))
+                    .accessibilityLabel(l10n.skillSyncResult)
+                    .frame(minHeight: 140)
+            }
+            if let error = viewModel.syncTaskError {
+                Text(error).foregroundStyle(.red).font(.callout).textSelection(.enabled)
+            }
+            HStack {
+                Button(l10n.skillSyncUseLocal) { save("local") }
+                Button(l10n.skillSyncUseRemote) { save("remote") }
+                Spacer()
+                if conflict.canEdit {
+                    Button(l10n.skillSyncSaveEdit) { save("manual") }.tvActionButton(.primary)
+                }
+            }.disabled(viewModel.syncTaskBusy)
+            Text(l10n.skillSyncPausedHint).font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(20)
+        .frame(width: 860, height: 680)
+        .onAppear {
+            mergedText = conflict.text ?? (conflict.choice == "remote" ? conflict.remote.text : conflict.local.text) ?? ""
+        }
+        .onChange(of: viewModel.syncTaskBusy) { _, busy in
+            if saving && !busy {
+                saving = false
+                if viewModel.syncTaskError == nil { dismiss() }
+            }
+        }
+        .interactiveDismissDisabled(saving)
+    }
+
+    private func save(_ choice: String) {
+        saving = true
+        viewModel.runSyncTask("resolve", path: conflict.path, choice: choice,
+                              text: choice == "manual" ? mergedText : nil)
+    }
+
+    private func versionPane(_ title: String, version: SkillSyncVersion) -> some View {
+        GroupBox(title) {
+            ScrollView([.vertical, .horizontal]) {
+                Text(version.exists ? (version.text ?? l10n.skillSyncBinary) : l10n.skillSyncMissing)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }.frame(height: 190)
+        }.frame(maxWidth: .infinity)
     }
 }
 

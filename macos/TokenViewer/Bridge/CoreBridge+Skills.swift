@@ -17,6 +17,10 @@ extension CoreBridge {
         callSkills { tt_skills_git_status($0) }
     }
 
+    func skillsGitSync(_ payload: Data) -> Data? {
+        callSkillsWithJSON(payload) { tt_skills_git_sync($0, $1) }
+    }
+
     func skillsGitPull() -> Data? {
         callSkills { tt_skills_git_pull($0) }
     }

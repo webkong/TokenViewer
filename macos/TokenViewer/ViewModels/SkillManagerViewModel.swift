@@ -65,6 +65,9 @@ final class SkillManagerViewModel: ObservableObject {
     @Published var gitStatusName: String? = nil
     @Published var gitStatusMessage: String? = nil
     @Published var gitConnectivity: SkillGitConnectivity? = nil
+    @Published var syncPlan: SkillSyncPlan?
+    @Published var syncTaskBusy = false
+    @Published var syncTaskError: String?
     @Published var installSourceType: SkillInstallSourceType = .folder
     @Published var installSelectedPath: String = ""
     @Published var installGitURL: String = ""
@@ -380,6 +383,54 @@ final class SkillManagerViewModel: ObservableObject {
                 } else {
                     self.errorMessage = "Failed to save agent config"
                     ToastCenter.shared.error(L10n.shared.toastSaveFailed)
+                }
+            }
+        }
+    }
+
+    func runSyncTask(_ action: String, filterPayload: Data? = nil, path: String? = nil,
+                     choice: String? = nil, text: String? = nil) {
+        guard !syncTaskBusy else { return }
+        var request: [String: Any] = ["action": action]
+        if let plan = syncPlan { request["id"] = plan.id }
+        if let filterPayload, let filter = try? JSONSerialization.jsonObject(with: filterPayload) {
+            request["filter"] = filter
+        }
+        if let path { request["path"] = path }
+        if let choice { request["choice"] = choice }
+        if let text { request["text"] = text }
+        guard let payload = try? JSONSerialization.data(withJSONObject: request) else { return }
+        syncTaskBusy = true
+        syncTaskError = nil
+        Task.detached {
+            let data = CoreBridge.shared.skillsGitSync(payload)
+            await MainActor.run {
+                self.syncTaskBusy = false
+                guard let data, let result = try? self.decoder.decode(SkillSyncResponse.self, from: data) else {
+                    self.syncTaskError = L10n.shared.skillOperationFailed
+                    return
+                }
+                if result.ok {
+                    self.syncPlan = result.plan
+                    if result.plan?.phase == "complete" {
+                        self.refresh()
+                        self.refreshGitStatus()
+                    }
+                } else {
+                    self.syncTaskError = L10n.shared.skillSyncError(result.error ?? "")
+                    // Publication/application may have advanced before an error.
+                    // Reload the durable task without clearing the error message.
+                    self.syncTaskBusy = true
+                    Task.detached {
+                        let payload = try? JSONSerialization.data(withJSONObject: ["action":"load"])
+                        let data = payload.flatMap { CoreBridge.shared.skillsGitSync($0) }
+                        await MainActor.run {
+                            self.syncTaskBusy = false
+                            if let data, let result = try? self.decoder.decode(SkillSyncResponse.self, from: data), result.ok {
+                                self.syncPlan = result.plan
+                            }
+                        }
+                    }
                 }
             }
         }

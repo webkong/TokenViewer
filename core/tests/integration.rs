@@ -1,18 +1,19 @@
-use std::path::Path;
 use tokenviewer_core::storage::Database;
 use tokenviewer_core::sync;
 
 #[test]
 fn test_full_sync() {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let db_path = format!("{}/.tokenviewer/data.db", home);
+    // Integration checks must never migrate or sync the user's live database.
+    let fixture = tempfile::TempDir::new().unwrap();
+    let home = fixture.path();
+    let db_path = home.join(".tokenviewer/data.db");
 
-    std::fs::create_dir_all(format!("{}/.tokenviewer", home)).unwrap();
+    std::fs::create_dir_all(home.join(".tokenviewer")).unwrap();
 
-    let db = Database::open(Path::new(&db_path)).unwrap();
-    println!("Database opened at: {}", db_path);
+    let db = Database::open(&db_path).unwrap();
+    println!("Database opened at: {}", db_path.display());
 
-    let result = sync::sync_all(&db, Path::new(&home));
+    let result = sync::sync_all(&db, home);
     println!("Agents synced: {}", result.agents_synced);
     println!("Records added: {}", result.records_added);
     for e in &result.errors {

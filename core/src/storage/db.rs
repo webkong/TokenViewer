@@ -6,7 +6,7 @@ use crate::models::{
     SyncCursor, UsageRecord, UsageSummary,
 };
 
-const SCHEMA_VERSION: i32 = 5;
+const SCHEMA_VERSION: i32 = 6;
 
 #[derive(Clone, Copy)]
 enum LocalUsageBucket {
@@ -79,6 +79,11 @@ impl Database {
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS device_sync_usage_backups (
+                    transaction_id TEXT PRIMARY KEY,
+                    usage_json TEXT NOT NULL
                 );",
         )?;
 
@@ -297,6 +302,34 @@ impl Database {
         Ok(())
     }
 
+    /// Usage deltas and their checkpoint must either both commit or both retry.
+    pub fn commit_usage_sync(
+        &self,
+        source: &str,
+        records: &[UsageRecord],
+        cursor: &str,
+    ) -> SqlResult<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        for record in records {
+            self.upsert_usage(record)?;
+        }
+        self.set_cursor(source, cursor)?;
+        tx.commit()
+    }
+
+    /// Called only after every parser has completed successfully.
+    pub fn replace_processed_data(&self, batches: &[(&str, &[UsageRecord], &str)]) -> SqlResult<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute_batch("DELETE FROM usage; DELETE FROM sync_cursors;")?;
+        for (source, records, cursor) in batches {
+            for record in *records {
+                self.upsert_usage(record)?;
+            }
+            self.set_cursor(source, cursor)?;
+        }
+        tx.commit()
+    }
+
     pub fn all_usage(&self) -> SqlResult<Vec<UsageRecord>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, hour_start, source, model, project_key, project_ref,
@@ -323,22 +356,70 @@ impl Database {
 
     pub fn replace_usage(&self, records: &[UsageRecord]) -> SqlResult<()> {
         let tx = self.conn.unchecked_transaction()?;
-        tx.execute("DELETE FROM usage", [])?;
+        self.replace_usage_rows(records, false)?;
+        tx.commit()
+    }
+
+    fn replace_usage_rows(&self, records: &[UsageRecord], restore_local: bool) -> SqlResult<()> {
+        self.conn.execute("DELETE FROM usage", [])?;
         for record in records {
             let model = normalize_model(&record.model);
-            tx.execute(
-                "INSERT INTO usage (hour_start, source, model, project_key, project_ref,
+            self.conn.execute(
+                "INSERT INTO usage (id, hour_start, source, model, project_key, project_ref,
                     input_tokens, output_tokens, cached_input_tokens,
                     cache_creation_input_tokens, reasoning_output_tokens,
                     total_tokens, conversation_count)
-                 VALUES (?1, ?2, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                 VALUES (?12, ?1, ?2, ?3, ?4, ?13, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 params![record.hour_start, record.source, model, record.project_key,
                     record.input_tokens, record.output_tokens, record.cached_input_tokens,
                     record.cache_creation_input_tokens, record.reasoning_output_tokens,
-                    record.total_tokens, record.conversation_count],
+                    record.total_tokens, record.conversation_count,
+                    if restore_local { record.id } else { None },
+                    if restore_local { record.project_ref.as_str() } else { "" }],
             )?;
         }
+        Ok(())
+    }
+
+    /// The backup becomes durable in the SAME transaction as the replacement.
+    /// Keep it until the Device Sync journal durably commits or rolls back.
+    pub fn replace_usage_recoverably(&self, transaction_id: &str, records: &[UsageRecord]) -> SqlResult<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        let backup = serde_json::to_string(&self.all_usage()?)
+            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+        self.conn.execute(
+            "INSERT INTO device_sync_usage_backups (transaction_id, usage_json) VALUES (?1, ?2)",
+            params![transaction_id, backup],
+        )?;
+        self.replace_usage_rows(records, false)?;
         tx.commit()
+    }
+
+    pub fn rollback_usage_replace(&self, transaction_id: &str) -> SqlResult<()> {
+        use rusqlite::OptionalExtension;
+        let tx = self.conn.unchecked_transaction()?;
+        let backup: Option<String> = self.conn.query_row(
+            "SELECT usage_json FROM device_sync_usage_backups WHERE transaction_id = ?1",
+            [transaction_id], |row| row.get(0),
+        ).optional()?;
+        if let Some(backup) = backup {
+            let records: Vec<UsageRecord> = serde_json::from_str(&backup)
+                .map_err(|error| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error)))?;
+            self.replace_usage_rows(&records, true)?;
+            self.finish_usage_replace(transaction_id)?;
+        }
+        // No backup means apply had not reached the DB, or rollback already
+        // committed before a crash. Both cases are safely idempotent.
+        tx.commit()
+    }
+
+    pub fn finish_usage_replace(&self, transaction_id: &str) -> SqlResult<()> {
+        self.conn.execute("DELETE FROM device_sync_usage_backups WHERE transaction_id = ?1", [transaction_id])?;
+        Ok(())
+    }
+
+    pub fn has_pending_usage_replace(&self) -> SqlResult<bool> {
+        self.conn.query_row("SELECT EXISTS(SELECT 1 FROM device_sync_usage_backups)", [], |row| row.get(0))
     }
 
     /// Clear processed usage data and sync cursors so the next sync replays

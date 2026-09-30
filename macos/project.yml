@@ -41,6 +41,7 @@ targets:
       - name: Build Rust Core
         script: |
           export PATH="$HOME/.cargo/bin:$PATH"
+          if [ -n "${TOKENVIEWER_TOOLCHAIN_BIN:-}" ]; then export PATH="$TOKENVIEWER_TOOLCHAIN_BIN:$PATH"; fi
           cd "$PROJECT_DIR/../core"
           cargo build --release --target "$TOKENVIEWER_RUST_TARGET"
         outputFiles:

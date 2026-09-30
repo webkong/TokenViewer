@@ -278,6 +278,42 @@ struct SkillGitChange: Codable {
     let changeType: String
 }
 
+struct SkillSyncVersion: Codable {
+    let exists: Bool
+    let text: String?
+    let mode: Int?
+}
+
+struct SkillSyncConflict: Codable, Identifiable {
+    let path: String
+    let base: SkillSyncVersion
+    let local: SkillSyncVersion
+    let remote: SkillSyncVersion
+    let choice: String?
+    let text: String?
+    var id: String { path }
+    var canEdit: Bool {
+        [base, local, remote].allSatisfy { !$0.exists || ($0.text != nil && $0.mode != 40960) }
+    }
+}
+
+struct SkillSyncPlan: Codable {
+    let id: String
+    let phase: String
+    let branch: String
+    let uploads: [String]
+    let downloads: [String]
+    let conflicts: [SkillSyncConflict]
+    let recoveryRef: String
+    var unresolvedCount: Int { conflicts.filter { $0.choice == nil }.count }
+}
+
+struct SkillSyncResponse: Codable {
+    let ok: Bool
+    let plan: SkillSyncPlan?
+    let error: String?
+}
+
 struct SkillGitConnectivity: Codable {
     let status: String
     let message: String?
