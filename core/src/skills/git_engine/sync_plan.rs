@@ -1179,7 +1179,9 @@ mod tests {
         plan.conflicts[0].choice = Some("remote".into());
         engine.apply_plan(&mut plan, None, None, None).unwrap();
         assert_eq!(
-            fs::read_to_string(local.join("one/SKILL.md")).unwrap(),
+            fs::read_to_string(local.join("one/SKILL.md"))
+                .unwrap()
+                .replace("\r\n", "\n"),
             "remote edit\n"
         );
     }
