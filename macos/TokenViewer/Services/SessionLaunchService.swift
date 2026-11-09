@@ -130,6 +130,7 @@ enum SessionLaunchError: LocalizedError {
     case invalidSessionID(String)
     case invalidCWD(String)
     case terminalLaunchFailed(String)
+    case parentSessionUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -141,6 +142,8 @@ enum SessionLaunchError: LocalizedError {
             return L10n.shared.sessionInvalidCWD(cwd)
         case .terminalLaunchFailed(let detail):
             return L10n.shared.sessionTerminalLaunchFailed(detail)
+        case .parentSessionUnavailable:
+            return L10n.shared.sessionParentUnavailable
         }
     }
 
@@ -158,10 +161,29 @@ enum SessionLaunchError: LocalizedError {
     }
 }
 
-/// Builds a validated resume command and opens it in an external Terminal at
-/// the session's working directory.
+/// Origin metadata is read from the rollout header, independently of the usage
+/// cache. Old cached sessions therefore gain routing without a database rebuild.
+struct SessionLaunchContext {
+    var isDesktop = false
+    var isSubagent = false
+    var parentID: String?
+    var cwd: String?
+
+    func usesDesktop(for session: SessionEntry, preferOriginal: Bool) -> Bool {
+        // A deep link cannot select an isolated CODEX_HOME/account.
+        let defaultHome = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex").standardizedFileURL.path
+        let home = (session.codex_home as NSString).standardizingPath
+        return preferOriginal && isDesktop && (home.isEmpty || home == defaultHome)
+    }
+}
+
+/// Routes known desktop sessions to their original app; other sessions use the
+/// configured terminal. Subagents always resolve to a resumable parent first.
 final class SessionLaunchService {
     static let shared = SessionLaunchService()
+    static let preferOriginalApplicationKey = "sessionPreferOriginalApplication"
+    static let desktopBundleIdentifier = "com.openai.codex"
 
     static let cmuxExecutablePaths = [
         "/usr/local/bin/cmux",
@@ -202,7 +224,106 @@ final class SessionLaunchService {
         return trimmed.isEmpty || resolvedCWD(trimmed) != nil
     }
 
-    func launch(_ session: SessionEntry) throws {
+    static func launchContext(for session: SessionEntry) -> SessionLaunchContext {
+        guard session.source == "codex" else { return SessionLaunchContext() }
+        return codexContext(filePath: session.file_path, expectedID: session.rawSessionID) ?? SessionLaunchContext()
+    }
+
+    private static func codexContext(filePath: String, expectedID: String) -> SessionLaunchContext? {
+        guard let handle = FileHandle(forReadingAtPath: filePath) else { return nil }
+        defer { try? handle.close() }
+        // Read only the first JSONL record, with a fixed bound even for corrupt files.
+        var header = Data()
+        while header.count < 1_048_576 {
+            guard let chunk = try? handle.read(upToCount: 16_384), !chunk.isEmpty else { break }
+            if let newline = chunk.firstIndex(of: 10) {
+                header.append(chunk.prefix(upTo: newline))
+                break
+            }
+            header.append(chunk)
+        }
+        guard let event = (try? JSONSerialization.jsonObject(with: header)) as? [String: Any],
+              event["type"] as? String == "session_meta",
+              let payload = event["payload"] as? [String: Any],
+              payload["id"] as? String == expectedID else { return nil }
+        let originator = (payload["originator"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let source = payload["source"] as? [String: Any]
+        let subagent = source?["subagent"] as? [String: Any]
+        let spawn = subagent?["thread_spawn"] as? [String: Any]
+        let isSubagent = payload["thread_source"] as? String == "subagent" || source?["subagent"] != nil
+        // forked_from_id alone is a normal fork, not a subagent relationship.
+        let parentID = isSubagent
+            ? (spawn?["parent_thread_id"] as? String ?? payload["parent_thread_id"] as? String)
+            : nil
+        return SessionLaunchContext(
+            isDesktop: ["codex desktop", "chatgpt desktop"].contains(originator),
+            isSubagent: isSubagent,
+            parentID: parentID,
+            cwd: payload["cwd"] as? String
+        )
+    }
+
+    /// Follows nested subagents within the same Codex home. Never resume a known
+    /// child directly or substitute an ordinary fork's original conversation.
+    static func resumableSession(for session: SessionEntry) throws -> SessionEntry {
+        guard session.source == "codex" else { return session }
+        var result = session
+        var visited: Set<String> = []
+        var filesByID: [String: String]?
+        while true {
+            guard visited.insert(result.rawSessionID).inserted, visited.count <= 32 else {
+                throw SessionLaunchError.parentSessionUnavailable
+            }
+            let context = launchContext(for: result)
+            guard context.isSubagent else { return result }
+            guard let parentID = context.parentID, UUID(uuidString: parentID) != nil else {
+                throw SessionLaunchError.parentSessionUnavailable
+            }
+            if filesByID == nil {
+                var directory = URL(fileURLWithPath: session.file_path).deletingLastPathComponent()
+                while directory.path != "/",
+                      !["sessions", "archived_sessions"].contains(directory.lastPathComponent) {
+                    directory.deleteLastPathComponent()
+                }
+                guard directory.path != "/" else { throw SessionLaunchError.parentSessionUnavailable }
+                let home = directory.deletingLastPathComponent()
+                var index: [String: String] = [:]
+                for name in ["archived_sessions", "sessions"] {
+                    let base = home.appendingPathComponent(name)
+                    guard let enumerator = FileManager.default.enumerator(
+                        at: base, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+                    ) else { continue }
+                    for case let file as URL in enumerator where file.pathExtension == "jsonl" {
+                        let stem = file.deletingPathExtension().lastPathComponent
+                        let id = String(stem.suffix(36))
+                        if UUID(uuidString: id) != nil { index[id] = file.path }
+                    }
+                }
+                filesByID = index
+            }
+            guard let file = filesByID?[parentID] else { throw SessionLaunchError.parentSessionUnavailable }
+            // A missing/malformed parent header must not silently authorize a resume.
+            guard let parent = codexContext(filePath: file, expectedID: parentID) else {
+                throw SessionLaunchError.parentSessionUnavailable
+            }
+            result.id = "codex:\(parentID)"
+            result.file_path = file
+            result.cwd = parent.cwd ?? ""
+        }
+    }
+
+    func launch(_ originalSession: SessionEntry) async throws {
+        let session = try Self.resumableSession(for: originalSession)
+        let preferOriginal = UserDefaults.standard.object(forKey: Self.preferOriginalApplicationKey) as? Bool ?? true
+        if Self.launchContext(for: session).usesDesktop(for: session, preferOriginal: preferOriginal) {
+            guard UUID(uuidString: session.rawSessionID) != nil,
+                  let url = URL(string: "codex://threads/\(session.rawSessionID)") else {
+                throw SessionLaunchError.invalidSessionID(session.rawSessionID)
+            }
+            try await openDesktopSession(url)
+            return
+        }
         guard let adapter = registry.adapter(for: session.source) else {
             throw SessionLaunchError.unsupportedAgent(session.source)
         }
@@ -235,11 +356,13 @@ final class SessionLaunchService {
             let home = (session.codex_home as NSString).standardizingPath
             if home != (defaultHome as NSString).standardizingPath {
                 prefix = "CODEX_HOME=\(shellQuote(session.codex_home)) "
+            } else {
+                prefix = "unset CODEX_HOME ORCA_CODEX_HOME && "
             }
         } else if adapter.source == "codex" {
             // A normal-home resume must not inherit an Orca/account-routed
             // Codex home from the parent process.
-            prefix = "unset CODEX_HOME ORCA_CODEX_HOME; "
+            prefix = "unset CODEX_HOME ORCA_CODEX_HOME && "
         }
 
         let command = prefix + argv.map(shellQuote).joined(separator: " ")
@@ -255,6 +378,24 @@ final class SessionLaunchService {
             title: String(title.prefix(80)),
             in: application
         )
+    }
+
+    @MainActor
+    private func openDesktopSession(_ url: URL) async throws {
+        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.desktopBundleIdentifier) else {
+            throw SessionLaunchError.terminalLaunchFailed(L10n.shared.sessionAgentNotInstalled("ChatGPT"))
+        }
+        // Target the known application explicitly instead of trusting a scheme's
+        // default handler. Completion errors are propagated to the existing toast.
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: .init()) { _, error in
+                if let error {
+                    continuation.resume(throwing: SessionLaunchError.terminalLaunchFailed(error.localizedDescription))
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
     }
 
     /// POSIX single-quote a string so it survives shell parsing unchanged.

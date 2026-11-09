@@ -15,6 +15,8 @@ struct SettingsView: View {
     @AppStorage("sessionYoloConfirmed") private var sessionYoloConfirmed = false
     @AppStorage(SessionLaunchApplication.storageKey)
     private var sessionLaunchApplication = SessionLaunchApplication.terminal.rawValue
+    @AppStorage(SessionLaunchService.preferOriginalApplicationKey)
+    private var sessionPreferOriginalApplication = true
     @AppStorage("deviceSyncProtectionMode") private var deviceSyncProtectionMode = "encrypted"
     @State private var pendingYoloSource: String? = nil
     @State private var launchAtLogin = false
@@ -407,6 +409,16 @@ struct SettingsView: View {
 
     private var sessionsSection: some View {
         SettingsCard(title: l10n.sessions) {
+            Toggle(isOn: $sessionPreferOriginalApplication) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(l10n.sessionPreferOriginalApplication)
+                        .font(.system(size: 13, weight: .medium))
+                    Text(l10n.sessionPreferOriginalApplicationDesc)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Divider()
             HStack(spacing: 12) {
                 TVSymbol(name: "terminal", size: 16)
                 VStack(alignment: .leading, spacing: 2) {
@@ -1263,6 +1275,7 @@ struct SettingsView: View {
         sessionYoloConfirmed = false
         sessionYoloStore.reset()
         sessionLaunchApplication = SessionLaunchApplication.terminal.rawValue
+        sessionPreferOriginalApplication = true
         enabledAgentsJSON = AgentRegistry.defaultAgentSourcesJSON
 
         theme.theme = AppTheme.system.rawValue

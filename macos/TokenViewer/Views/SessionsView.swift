@@ -3,6 +3,8 @@ import SwiftUI
 struct SessionsView: View {
     @ObservedObject private var viewModel = SessionsViewModel.shared
     @ObservedObject private var l10n = L10n.shared
+    @AppStorage(SessionLaunchService.preferOriginalApplicationKey)
+    private var preferOriginalApplication = true
 
     @State private var renameTarget: SessionEntry?
 
@@ -242,7 +244,9 @@ struct SessionsView: View {
     // MARK: - Row
 
     private func sessionRow(_ session: SessionEntry) -> some View {
-        let cwdUsable = viewModel.cwdValidity[session.id] ?? true
+        let desktop = viewModel.launchContexts[session.id]?
+            .usesDesktop(for: session, preferOriginal: preferOriginalApplication) ?? false
+        let cwdUsable = desktop || (viewModel.cwdValidity[session.id] ?? true)
 
         return HStack(spacing: 14) {
             AgentIcon(source: session.source, size: 28)
@@ -326,32 +330,44 @@ struct SessionsView: View {
     private func launchButton(_ session: SessionEntry, cwdUsable: Bool) -> some View {
         let adapter = SessionCommandRegistry.shared.adapter(for: session.source)
         let registry = AgentRegistry.shared
-        let installReady = !registry.hasDetectedInstalls || registry.isInstalled(for: session.source)
-        let supported = adapter != nil && installReady
-        let yolo = SessionYoloStore.shared.args(for: session.source) != nil
+        let context = viewModel.launchContexts[session.id] ?? SessionLaunchContext()
+        let desktop = context.usesDesktop(for: session, preferOriginal: preferOriginalApplication)
+        let installReady = desktop
+            ? NSWorkspace.shared.urlForApplication(withBundleIdentifier: SessionLaunchService.desktopBundleIdentifier) != nil
+            : (!registry.hasDetectedInstalls || registry.isInstalled(for: session.source))
+        let supported = (desktop || adapter != nil) && installReady
+        let yolo = !desktop && SessionYoloStore.shared.args(for: session.source) != nil
+        let label = context.isSubagent ? l10n.sessionOpenParent
+            : (desktop ? l10n.sessionOpenDesktop : (yolo ? l10n.sessionLaunchYolo : l10n.sessionLaunch))
+        let wide = desktop || context.isSubagent || yolo
 
         VStack(alignment: .trailing, spacing: 4) {
             Button { launch(session) } label: {
-                Label(yolo ? l10n.sessionLaunchYolo : l10n.sessionLaunch, systemImage: "play.fill")
+                Label(label, systemImage: desktop ? "arrow.up.forward.app" : "play.fill")
                     .lineLimit(1)
-                    .frame(minWidth: yolo ? 138 : 84)
+                    .frame(minWidth: wide ? 138 : 84)
             }
             .tvActionButton(yolo ? .warning : .primary)
             .disabled(!supported)
-            .help(launchHelp(session, adapter: adapter, installed: installReady, cwdUsable: cwdUsable))
+            .help(launchHelp(session, adapter: adapter, installed: installReady, cwdUsable: cwdUsable,
+                             desktop: desktop, isSubagent: context.isSubagent))
         }
-        .frame(width: yolo ? 176 : 116, alignment: .trailing)
+        .frame(width: wide ? 176 : 116, alignment: .trailing)
     }
 
     private func launchHelp(
         _ session: SessionEntry,
         adapter: SessionCommandAdapter?,
         installed: Bool,
-        cwdUsable: Bool
+        cwdUsable: Bool,
+        desktop: Bool,
+        isSubagent: Bool
     ) -> String {
         let name = AgentRegistry.shared.displayName(for: session.source)
-        if adapter == nil { return l10n.sessionUnsupportedAgent(name) }
-        if !installed { return l10n.sessionAgentNotInstalled(name) }
+        if !desktop && adapter == nil { return l10n.sessionUnsupportedAgent(name) }
+        if !installed { return l10n.sessionAgentNotInstalled(desktop ? "ChatGPT" : name) }
+        if isSubagent { return l10n.sessionOpenParentHelp }
+        if desktop { return l10n.sessionOpenDesktopHelp }
         if !cwdUsable { return l10n.sessionCWDMissingDetail(session.cwd) }
         return l10n.sessionLaunchHelp
     }
@@ -365,7 +381,7 @@ struct SessionsView: View {
         Task {
             let errorMessage = await Task.detached { () -> String? in
                 do {
-                    try SessionLaunchService.shared.launch(session)
+                    try await SessionLaunchService.shared.launch(session)
                     return nil
                 } catch {
                     return error.localizedDescription

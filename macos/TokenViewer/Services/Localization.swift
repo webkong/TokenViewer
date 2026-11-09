@@ -117,6 +117,11 @@ final class L10n: ObservableObject {
     var sessionLaunch: String { isZh ? "启动会话" : "Launch Session" }
     var sessionLaunchYolo: String { isZh ? "启动会话 (YOLO)" : "Launch Session (YOLO)" }
     var sessionLaunchHelp: String { isZh ? "在外部终端恢复此会话" : "Resume this session in a terminal" }
+    var sessionOpenDesktop: String { isZh ? "在 ChatGPT 中打开" : "Open in ChatGPT" }
+    var sessionOpenDesktopHelp: String { isZh ? "在创建此会话的 ChatGPT 桌面应用中打开" : "Open in the ChatGPT desktop app that created this session" }
+    var sessionOpenParent: String { isZh ? "打开父会话" : "Open Parent Session" }
+    var sessionOpenParentHelp: String { isZh ? "此会话是子 Agent，无法单独恢复；将打开所属父会话" : "This is a subagent session and cannot resume independently; open its parent session" }
+    var sessionParentUnavailable: String { isZh ? "无法找到有效的父会话，请先在原应用中打开父会话" : "A valid parent session was not found. Open the parent in the original app first." }
     var sessionRename: String { isZh ? "重命名" : "Rename" }
     var sessionRenameTitle: String { isZh ? "重命名会话" : "Rename Session" }
     var sessionRenamePlaceholder: String { isZh ? "输入新标题" : "Enter a new title" }
@@ -144,7 +149,9 @@ final class L10n: ObservableObject {
     func sessionTerminalLaunchFailed(_ detail: String) -> String { isZh ? "启动应用失败：\(detail)" : "Failed to launch terminal: \(detail)" }
     // Session launch permission mode (per-agent YOLO)
     var sessionLaunchApplication: String { isZh ? "默认启动应用" : "Default Terminal" }
-    var sessionLaunchApplicationDesc: String { isZh ? "启动 Session 时使用的终端或工作台" : "Terminal or workspace used to launch sessions" }
+    var sessionLaunchApplicationDesc: String { isZh ? "CLI 会话或关闭原应用跳转时使用的终端或工作台" : "Terminal or workspace for CLI sessions or when original-app routing is off" }
+    var sessionPreferOriginalApplication: String { isZh ? "优先使用原应用打开" : "Prefer Original Application" }
+    var sessionPreferOriginalApplicationDesc: String { isZh ? "识别到 ChatGPT 桌面会话时直接跳转；其他会话使用下方终端。隔离账号仍使用原 CODEX_HOME。" : "Open recognized ChatGPT desktop sessions directly; other sessions use the terminal below. Isolated accounts retain their original CODEX_HOME." }
     var sessionLaunchApplicationNotInstalled: String { isZh ? "未安装" : "Not installed" }
     var sessionCmuxAccessRequired: String { isZh ? "cmux 阻止了外部进程访问。请在 cmux 设置中允许本机进程使用 Socket API。" : "cmux blocked external access. Allow local processes to use the Socket API in cmux settings." }
     var sessionYoloListTitle: String { isZh ? "YOLO 启动参数" : "YOLO Launch Arguments" }

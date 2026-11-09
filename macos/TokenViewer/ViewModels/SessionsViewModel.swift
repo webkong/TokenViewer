@@ -44,6 +44,7 @@ final class SessionsViewModel: ObservableObject {
     /// Session id → whether its recorded cwd still resolves to an existing
     /// directory (empty cwd counts as usable: launch falls back to home).
     @Published var cwdValidity: [String: Bool] = [:]
+    @Published var launchContexts: [String: SessionLaunchContext] = [:]
 
     private let pageSize: Int32 = 500
     private var hasStarted = false
@@ -188,6 +189,7 @@ final class SessionsViewModel: ObservableObject {
                 self.totalCount = count
                 self.sessions = rows
                 self.cwdValidity = [:]
+                self.launchContexts = [:]
                 self.scheduleCWDValidation(for: rows, loadGeneration: generation)
             }
         }
@@ -207,15 +209,20 @@ final class SessionsViewModel: ObservableObject {
         let validationGeneration = cwdValidationGeneration
         Task.detached { [weak self] in
             var validity: [String: Bool] = [:]
+            var contexts: [String: SessionLaunchContext] = [:]
             validity.reserveCapacity(rows.count)
             for row in rows {
                 validity[row.id] = SessionLaunchService.isCWDUsable(row.cwd)
+                if row.source == "codex" {
+                    contexts[row.id] = SessionLaunchService.launchContext(for: row)
+                }
             }
             await MainActor.run { [weak self] in
                 guard let self,
                       loadGeneration == self.loadGeneration,
                       validationGeneration == self.cwdValidationGeneration else { return }
                 self.cwdValidity = validity
+                self.launchContexts = contexts
             }
         }
     }
