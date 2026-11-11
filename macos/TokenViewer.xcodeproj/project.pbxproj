@@ -37,6 +37,7 @@
 		3C56BC840FC8DC7AD4E2F6D4 /* omp.svg in Resources */ = {isa = PBXBuildFile; fileRef = 00745BEC8843B9BCDCCE2F4E /* omp.svg */; };
 		3EF25D46F78D239BDC966015 /* DeviceSyncApplyCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76E2B5A7D422D396825374C3 /* DeviceSyncApplyCoordinator.swift */; };
 		3F3AA6C6B6C882FEEC1628A5 /* LimitsVisibilityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39EB5D762689CD00096F0785 /* LimitsVisibilityStore.swift */; };
+		4B247E92B77CE1AB2BAC176A /* qwenwork.png in Resources */ = {isa = PBXBuildFile; fileRef = 0156A988B0F4B7691190A4E7 /* qwenwork.png */; };
 		4C8352C3B6296FA992BC28C7 /* workbuddy.png in Resources */ = {isa = PBXBuildFile; fileRef = CBE87DC9C12F91D7599987EC /* workbuddy.png */; };
 		4CF70723DEA7A3454205EA2B /* DeviceSyncCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8A571E50694B34A01B0B6E5 /* DeviceSyncCredentialStore.swift */; };
 		4E548A6B0EDAFEBDFFBF8D3C /* mistral.svg in Resources */ = {isa = PBXBuildFile; fileRef = B1DC7B73A417629A415126E0 /* mistral.svg */; };
@@ -129,6 +130,7 @@
 		0056A95FF834D6CB57B41330 /* hunyuan.svg */ = {isa = PBXFileReference; path = hunyuan.svg; sourceTree = "<group>"; };
 		00745BEC8843B9BCDCCE2F4E /* omp.svg */ = {isa = PBXFileReference; path = omp.svg; sourceTree = "<group>"; };
 		00D9908F8F178F6E1AE27C71 /* DeviceSyncModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSyncModels.swift; sourceTree = "<group>"; };
+		0156A988B0F4B7691190A4E7 /* qwenwork.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = qwenwork.png; sourceTree = "<group>"; };
 		034652C5EE019A959887EFA2 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		0495AEF0E7BB906AC8EACB8E /* llama.svg */ = {isa = PBXFileReference; path = llama.svg; sourceTree = "<group>"; };
 		068F9C35A6FFB2F33320C210 /* SkillGitSyncSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillGitSyncSheet.swift; sourceTree = "<group>"; };
@@ -430,6 +432,7 @@
 				323E56F0838675DD196DFE98 /* pi.svg */,
 				EE91DBFAE4E2670D53307DE2 /* qoder.png */,
 				CA15CD6F8BE5A54F1A3934E4 /* qwen.svg */,
+				0156A988B0F4B7691190A4E7 /* qwenwork.png */,
 				2DCF181483E1101EDA79E26A /* roocode.svg */,
 				E969A0F51397BE3B619E5261 /* rovo.svg */,
 				96C2E0F36F0C00F476584F5E /* stepfun.svg */,
@@ -582,6 +585,7 @@
 				BF993EEABEC5C0ADBDF20A13 /* pi.svg in Resources */,
 				B46E624E79A30F1B0B72E060 /* qoder.png in Resources */,
 				985366007F540D744B1A62FC /* qwen.svg in Resources */,
+				4B247E92B77CE1AB2BAC176A /* qwenwork.png in Resources */,
 				F6209AB5E7CA5F0A3C1A4AF3 /* roocode.svg in Resources */,
 				6BC9B4670E5D8ABACC2F9070 /* rovo.svg in Resources */,
 				690205D12276D15DE3A80C85 /* stepfun.svg in Resources */,
@@ -773,7 +777,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 31500;
+				CURRENT_PROJECT_VERSION = 31600;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -792,7 +796,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.3.15;
+				MARKETING_VERSION = 0.3.16;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -870,7 +874,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 31500;
+				CURRENT_PROJECT_VERSION = 31600;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -883,7 +887,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.3.15;
+				MARKETING_VERSION = 0.3.16;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

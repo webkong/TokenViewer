@@ -30,7 +30,7 @@ fn agent_parser_matrix_matches_reference_shapes() {
     let by_source: HashMap<String, _> =
         results.into_iter().map(|r| (r.source.clone(), r)).collect();
 
-    let cases: [(&str, Expectation); 26] = [
+    let cases: [(&str, Expectation); 27] = [
         (
             "claude",
             Expectation {
@@ -237,6 +237,14 @@ fn agent_parser_matrix_matches_reference_shapes() {
             Expectation {
                 model: "deepseek-v4-pro",
                 total_tokens: 175,
+                conversation_count: 1,
+            },
+        ),
+        (
+            "qwenwork",
+            Expectation {
+                model: "qwen3.8-flash",
+                total_tokens: 159,
                 conversation_count: 1,
             },
         ),
@@ -1148,6 +1156,11 @@ fn seed_agent_fixtures(home: &Path) {
     init_mimocode_db(&home.join(".local/share/mimocode/mimocode.db"));
 
     init_zcode_db(&home.join(".zcode/cli/db/db.sqlite"));
+    init_opencode_db(
+        &home.join(".qwenwork/.harness/flash-cli/qwenwork/qwenwork.db"),
+        "qwenwork-1",
+        r#"{"role":"assistant","modelID":"qwen3.8-flash","time":{"created":1735689600000,"completed":1735689660000},"tokens":{"total":159,"input":100,"output":20,"reasoning":4,"cache":{"read":30,"write":5}}}"#,
+    );
 }
 
 fn seed_workbuddy_fixture(home: &Path) {

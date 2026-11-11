@@ -455,6 +455,10 @@ fn agent_presence_paths(agent: &AgentConfig, home: &Path) -> Vec<PathBuf> {
             paths.push(home.join(".zcode/cli/db/db.sqlite"));
             paths.push(home.join(".zcode/v2/config.json"));
         }
+        "qwenwork" => {
+            paths.push(home.join(".qwenwork/.harness/flash-cli/qwenwork/qwenwork.db"));
+            paths.push(home.join(".qwenwork/app-data/host-content.db"));
+        }
         "dsh" => {
             paths.push(home.join(".dsh/sessions"));
             paths.push(home.join(".dsh/settings.yaml"));
@@ -709,6 +713,7 @@ fn builtin_agents() -> Vec<AgentConfig> {
         "workbuddy",
         "mimocode",
         "zcode",
+        "qwenwork",
     ]);
 
     // Agents with subscription/quota tracking (limits panel).
@@ -797,6 +802,7 @@ fn builtin_agents() -> Vec<AgentConfig> {
             ("zcode", "ZCode", "zcode", None, "#4f5cf5"),
             ("codebuddy", "CodeBuddy", "codebuddy", None, "#d97757"),
             ("workbuddy", "WorkBuddy", "workbuddy", None, "#1d4ed8"),
+            ("qwenwork", "QwenWork", "qwenwork", None, "#615ced"),
             // ── Agent-only (limits card, no parser) ──
             ("trae", "Trae", "trae", Some("traecli"), "#2563eb"),
             ("windsurf", "Windsurf", "windsurf", None, "#0d9488"),

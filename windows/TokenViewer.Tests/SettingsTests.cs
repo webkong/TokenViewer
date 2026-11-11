@@ -190,10 +190,12 @@ public class SettingsTests
     }
 
     [Fact]
-    public void UserFacingSources_are_26_and_unique()
+    public void UserFacingSources_are_27_and_unique()
     {
         var sources = AgentRegistry.UserFacingSources;
-        Assert.Equal(26, sources.Count);
+        Assert.Equal(27, sources.Count);
+        Assert.Contains("qwenwork", sources);
+        Assert.Equal("QwenWork", AgentRegistry.DisplayName("qwenwork"));
         Assert.Equal(sources.Count, sources.Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
 

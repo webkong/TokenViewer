@@ -108,6 +108,10 @@ Swift wraps these in `CoreBridge`; JSON is exchanged across the boundary and dec
 
 ZCode's `input_tokens` already EXCLUDES cache-read hits (it's the non-cached prompt portion), so `total_tokens = input + output + reasoning + cache_creation` — `cache_read` is informational only and must not be added (matches mimocode's no-double-count convention). Rows with zero billable tokens (rate-limited `status='error'` before generation) and `status='running'` (incomplete) are skipped. Incremental via `started_at` (epoch-ms) watermark + `mark_seen` dedup on the text PK `id`. The limits card (`fetchZcode`) is install-detection only: the BigModel/Z.ai subscription quota isn't queryable client-side (`~/.zcode/v2/credentials.json` is AES-encrypted by ZCode, no public quota endpoint), so — like Antigravity — it surfaces the active plan label from `~/.zcode/v2/config.json` with an informational "Quota via BigModel account" note.
 
+### QwenWork
+
+Usage comes from `~/.qwenwork/.harness/flash-cli/qwenwork/qwenwork.db`, using completed assistant rows in the OpenCode-style `message` table. Count input, output, reasoning and cache read/write once; do not also count `part` step-finish tokens or cumulative `session` totals. Read SQLite in read-only mode (including WAL updates), and retain incomplete messages for a later sync. Agent source is `qwenwork`, distinct from `qwen-code`; Skills live in `~/.qwenwork/skills`. No limits card is implemented without a verified quota data source.
+
 ## Agents: usage parsers vs. limits cards
 
 An agent can have **two independent integrations**, and they don't always coexist:

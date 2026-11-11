@@ -11,7 +11,7 @@ public static class AgentRegistry
 
     public const string FallbackColor = "#059669";
 
-    /// <summary>The 26 user-visible agents: 15 canonical (with limits) + 11
+    /// <summary>The 27 user-visible agents: 15 canonical (with limits) + 12
     /// parser-only. <c>everycode</c> is folded into ChatGPT (<c>codex</c>) and is
     /// not listed separately; internal auxiliary sources are excluded.</summary>
     public static IReadOnlyList<string> UserFacingSources { get; } = new[]
@@ -19,9 +19,9 @@ public static class AgentRegistry
         // 15 canonical (limits) agents
         "claude", "codex", "cursor", "kiro", "copilot", "kimi", "antigravity",
         "zed", "trae", "windsurf", "qoder", "codebuddy", "workbuddy", "gemini", "zcode",
-        // 11 parser-only agents
+        // 12 parser-only agents
         "opencode", "openclaw", "hermes", "grok", "roocode", "kilocode", "kilocli",
-        "goose", "ohmypi", "pi", "craft",
+        "goose", "ohmypi", "pi", "craft", "qwenwork",
     };
 
     private static readonly IReadOnlyDictionary<string, AgentInfo> Agents =
@@ -50,6 +50,7 @@ public static class AgentRegistry
             ["craft"] = new("Craft", "#059669", "craft"),
             ["codebuddy"] = new("CodeBuddy", "#4285F4", "codebuddy"),
             ["workbuddy"] = new("WorkBuddy", "#F59E0B", "workbuddy"),
+            ["qwenwork"] = new("QwenWork", "#615CED", "qwenwork"),
             ["mimocode"] = new("MimoCode", "#059669", "mimo"),
             ["zcode"] = new("ZCode", "#10A37F", "zcode"),
             ["trae"] = new("Trae", "#10A37F", "trae"),

@@ -20,6 +20,7 @@ pub mod ohmypi;
 pub mod openclaw;
 pub mod opencode;
 pub mod pi;
+pub mod qwenwork;
 pub mod roocode;
 pub mod utils;
 pub mod workbuddy;
@@ -68,6 +69,7 @@ fn all_parsers() -> Vec<(&'static str, ParserFn)> {
         ("goose", goose::parse),
         ("ohmypi", ohmypi::parse),
         ("pi", pi::parse),
+        ("qwenwork", qwenwork::parse),
         ("craft", craft::parse),
         ("codebuddy", codebuddy::parse),
         ("workbuddy", workbuddy::parse),
