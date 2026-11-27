@@ -215,7 +215,15 @@ mod tests {
         // The full transcript is a duplicate of the shortened transcript.
         fs::write(logs.join("transcript_full.jsonl"), format!("{done}\n")).unwrap();
 
-        let key = transcript.to_string_lossy().to_string();
+        // Legacy cursors stored the paths returned by glob, whose separators
+        // can differ from the fixture path joined above on Windows.
+        let pattern = format!(
+            "{}/.gemini/antigravity/brain/**/transcript.jsonl",
+            home.path().display()
+        );
+        let files = glob_files(&pattern);
+        assert_eq!(files.len(), 1);
+        let key = files[0].to_string_lossy();
         let mut old_cursor = FileCursor::default();
         old_cursor.set_offset(&key, fs::metadata(&transcript).unwrap().len());
         old_cursor.file_changed(&key);
