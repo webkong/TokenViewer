@@ -149,29 +149,45 @@ private let kLimitCardMinHeight: CGFloat = 124
 private struct LimitWindowRow: View {
     let window: LimitWindow
     let tint: Color
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         VStack(spacing: 5) {
             HStack {
-                Text(window.label).font(.system(size: 12, weight: .medium))
+                Text(window.label)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                    .help(window.label)
                 Spacer()
                 if let reset = window.resetAt {
                     ResetInlineText(date: reset)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
-                Text(String(format: "%.0f%%", window.usedPercent))
+                Text(percentLabel)
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .foregroundStyle(barColor)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(.quaternary).frame(height: 6)
                     Capsule().fill(barColor)
-                        .frame(width: max(2, geo.size.width * min(window.usedPercent, 100) / 100.0), height: 6)
+                        .frame(width: max(2, geo.size.width * min(displayedPercent, 100) / 100.0), height: 6)
                 }
             }
             .frame(height: 6)
         }
         .frame(height: kLimitRowHeight)
+    }
+
+    private var displayedPercent: Double {
+        window.showsRemaining == true ? min(max(100 - window.usedPercent, 0), 100) : window.usedPercent
+    }
+
+    private var percentLabel: String {
+        window.showsRemaining == true
+            ? l10n.quotaRemainingPercent(displayedPercent)
+            : String(format: "%.0f%%", displayedPercent)
     }
 
     private var barColor: Color {

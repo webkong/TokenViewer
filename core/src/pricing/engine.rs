@@ -425,6 +425,9 @@ fn normalize_antigravity_model(model: &str) -> String {
     m = filtered.join("-");
     m = strip_reasoning_suffix(&m);
 
+    if m.starts_with("gemini-4-") {
+        return m;
+    }
     if let Some(stripped) = m.strip_prefix("gemini-") {
         m = stripped.to_string();
     }
@@ -906,6 +909,8 @@ mod tests {
             normalize_antigravity_model("gemini-gpt-oss-120b-medium"),
             "antigravity-gpt-oss-120b"
         );
+        let neon = lookup_model_pricing("gemini-4-neon-high", "antigravity").unwrap();
+        assert_eq!((neon.input, neon.cache_read, neon.output), (3.0, 0.15, 15.0));
     }
 
     #[test]

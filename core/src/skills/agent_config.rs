@@ -193,6 +193,13 @@ impl AgentRegistry {
         self.persist_overrides()
     }
 
+    pub(super) fn uses_default_skills_path(&self, source: &str) -> bool {
+        self.overrides
+            .get(source)
+            .and_then(|override_config| override_config.skills_path.as_ref())
+            .is_none()
+    }
+
     /// Link a skill to an agent.
     pub fn link_skill(&mut self, source: &str, skill_id: &str) -> Result<(), String> {
         let canonical = canonical_source(source);
@@ -433,6 +440,11 @@ fn agent_presence_paths(agent: &AgentConfig, home: &Path) -> Vec<PathBuf> {
             paths.push(home.join(".codex/archived_sessions"));
             paths.push(home.join(".codex/config.toml"));
         }
+        "antigravity" => {
+            paths.push(home.join(".gemini/antigravity/installation_id"));
+            paths.push(home.join(".gemini/antigravity/conversations"));
+            paths.push(home.join("Library/Application Support/Antigravity"));
+        }
         "codebuddy" => {
             if let Ok(custom_home) = std::env::var("CODEBUDDY_HOME") {
                 paths.push(PathBuf::from(custom_home));
@@ -588,7 +600,7 @@ fn is_executable_file(path: &Path) -> bool {
 
 /// Cache TTL in seconds (1 hour).
 const INSTALL_CACHE_TTL_SECS: u64 = 3600;
-const INSTALL_CACHE_VERSION: u32 = 5;
+const INSTALL_CACHE_VERSION: u32 = 6;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct InstallStatusCache {
@@ -880,10 +892,8 @@ fn builtin_agents() -> Vec<AgentConfig> {
             |(source, display_name, logo_file, detect_cmd, brand_color)| {
                 let has_parser = parser_sources.contains(source);
                 let has_limits = limits_sources.contains(source);
-                // Skills path: ~/.{source}/skills
-                // For claude, the agent id is "claude-code" but we use "claude" as canonical
-                let skills_dir = if source == "claude" {
-                    ".claude".to_string()
+                let skills_dir = if source == "antigravity" {
+                    ".gemini/config".to_string()
                 } else {
                     format!(".{}", source)
                 };

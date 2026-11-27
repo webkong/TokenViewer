@@ -272,6 +272,12 @@
       "output": 3,
       "cache_read": 0.05
     },
+    "gemini-4-neon": {
+      "input": 3,
+      "output": 15,
+      "cache_read": 0.15,
+      "note": "Google Gemini API list pricing."
+    },
     "antigravity-gpt-oss-120b": {
       "input": 2.5,
       "output": 10,

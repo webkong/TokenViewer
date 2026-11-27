@@ -377,27 +377,40 @@ private struct CompactLimitWindowRow: View {
                 Text(window.label)
                     .font(.system(size: 10, weight: .medium))
                     .lineLimit(1)
+                    .help(window.label)
                 Spacer(minLength: 4)
                 if let reset = window.resetAt {
                     Text(l10n.resetsIn(l10n.countdownText(until: reset)))
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
-                Text(String(format: "%.0f%%", window.usedPercent))
+                Text(percentLabel)
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .foregroundStyle(barColor)
-                    .frame(width: 34, alignment: .trailing)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(minWidth: 34, alignment: .trailing)
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(.quaternary).frame(height: 5)
                     Capsule().fill(barColor)
-                        .frame(width: max(2, geo.size.width * min(window.usedPercent, 100) / 100.0), height: 5)
+                        .frame(width: max(2, geo.size.width * min(displayedPercent, 100) / 100.0), height: 5)
                 }
             }
             .frame(height: 5)
         }
+    }
+
+    private var displayedPercent: Double {
+        window.showsRemaining == true ? min(max(100 - window.usedPercent, 0), 100) : window.usedPercent
+    }
+
+    private var percentLabel: String {
+        window.showsRemaining == true
+            ? l10n.quotaRemainingPercent(displayedPercent)
+            : String(format: "%.0f%%", displayedPercent)
     }
 
     private var barColor: Color {

@@ -52,6 +52,44 @@ impl SymlinkManager {
         }
     }
 
+    /// Move a tracked Antigravity link from the former default directory.
+    pub(super) fn migrate_antigravity_link(
+        &self,
+        old_root: &Path,
+        new_root: &Path,
+        skill_id: &str,
+    ) -> Result<(), String> {
+        let id = Path::new(skill_id);
+        if !matches!(
+            (id.components().next(), id.components().nth(1)),
+            (Some(Component::Normal(_)), None)
+        ) {
+            return Err(format!("Invalid Skill ID: {skill_id}"));
+        }
+        let source = normalize_path(&self.source_root.join(id));
+        let old_link = old_root.join(id);
+        if !source.join("SKILL.md").is_file()
+            || resolve_link_target(&old_link).ok().as_ref() != Some(&source)
+        {
+            return Ok(());
+        }
+
+        let new_link = new_root.join(id);
+        fs::create_dir_all(new_root)
+            .map_err(|error| format!("Failed to create {}: {error}", new_root.display()))?;
+        match create_symlink(&source, &new_link) {
+            Ok(()) => {}
+            Err(error)
+                if error.kind() == std::io::ErrorKind::AlreadyExists
+                    && resolve_link_target(&new_link).ok().as_ref() == Some(&source) => {}
+            Err(error) => {
+                return Err(format!("Failed to create {}: {error}", new_link.display()));
+            }
+        }
+        remove_symlink(&old_link)
+            .map_err(|error| format!("Failed to remove {}: {error}", old_link.display()))
+    }
+
     /// Check whether Device Sync may recreate a link without taking over a
     /// user-owned path. Existing links are allowed only when they already
     /// resolve to this Skill's source directory; real files and directories

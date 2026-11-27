@@ -256,6 +256,22 @@ impl SkillsCore {
         let registry = AgentRegistry::new(&config_dir).map_err(|e| e.to_string())?;
         let scanner = Scanner::new(source_root.clone());
         let symlink = SymlinkManager::new(source_root.clone());
+        if let Some(agent) = registry.find("antigravity").filter(|agent| {
+            agent.link_type == self::models::LinkType::Directory
+                && registry.uses_default_skills_path(&agent.source)
+        }) {
+            if let (Ok(old_root), Ok(new_root)) = (
+                self::agent_config::expand_path("~/.antigravity/skills"),
+                self::agent_config::expand_path(&agent.skills_path),
+            ) {
+                for skill_id in &agent.linked_skills {
+                    if let Err(error) = symlink.migrate_antigravity_link(&old_root, &new_root, skill_id)
+                    {
+                        eprintln!("Failed to migrate Antigravity Skill link: {error}");
+                    }
+                }
+            }
+        }
         let git = GitEngine::open(&source_root).ok();
 
         let known_skill_ids = scanner

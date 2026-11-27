@@ -7,6 +7,7 @@ struct LimitWindow: Identifiable, Codable {
     let label: String
     let usedPercent: Double   // 0-100
     let resetAt: Date?
+    var showsRemaining: Bool? = nil
 }
 
 struct AgentLimit: Identifiable, Codable {
@@ -24,6 +25,7 @@ struct AgentLimit: Identifiable, Codable {
 extension AgentLimit {
     var hasLimitDisplay: Bool {
         !windows.isEmpty || subscriptionExpiresAt != nil || subscriptionResetAt != nil || quotaResetAt != nil
+            || (name == "antigravity" && planLabel != nil)
     }
 
     var nextResetAt: Date? {
@@ -478,20 +480,138 @@ enum LimitsService {
         return AgentLimit(name: name, planLabel: plan, configured: true, error: windows.isEmpty ? "No usage data" : nil, windows: windows)
     }
 
-    // MARK: Antigravity (Gemini IDE extension — check install via data dir)
+    // MARK: Antigravity
 
     static func fetchAntigravity() async -> AgentLimit {
         let name = "antigravity"
-        // Antigravity writes to ~/.gemini/antigravity* directories
-        let geminiDir = "\(NSHomeDirectory())/.gemini"
+        let home = NSHomeDirectory()
+        let geminiDir = "\(home)/.gemini"
+        if let limit = await antigravityDesktopLimit(daemonDirectory: URL(
+            fileURLWithPath: "\(geminiDir)/antigravity/daemon", isDirectory: true
+        )) {
+            return limit
+        }
+
         let hasAntigravity = ["antigravity", "antigravity-ide", "antigravity-cli"].contains {
             FileManager.default.fileExists(atPath: "\(geminiDir)/\($0)")
         }
-        guard hasAntigravity else {
-            return AgentLimit(name: name, planLabel: nil, configured: false, error: nil, windows: [])
+        let message = hasAntigravity ? await MainActor.run { L10n.shared.antigravityPlanUnavailable } : nil
+        return AgentLimit(name: name, planLabel: nil, configured: hasAntigravity, error: message, windows: [])
+    }
+
+    private struct AntigravityHub: Decodable {
+        let pid: Int32
+        let httpPort: UInt16
+        let csrfToken: String
+    }
+
+    private struct AntigravityQuotaSummary: Decodable {
+        struct Group: Decodable {
+            struct Bucket: Decodable {
+                let bucketId: String
+                let displayName: String?
+                let window: String
+                let remainingFraction: Double?
+                let resetTime: String?
+            }
+            let displayName: String
+            let buckets: [Bucket]
         }
-        // Antigravity quota is shared with Gemini — no separate API available
-        return AgentLimit(name: name, planLabel: nil, configured: true, error: "Uses Gemini quota", windows: [])
+        struct Response: Decodable {
+            let groups: [Group]?
+        }
+        let response: Response
+    }
+
+    private final class AntigravityLoopbackDelegate: NSObject, URLSessionTaskDelegate {
+        func urlSession(
+            _ session: URLSession, task: URLSessionTask,
+            willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest
+        ) async -> URLRequest? {
+            nil
+        }
+    }
+
+    private static func antigravityDesktopLimit(daemonDirectory: URL) async -> AgentLimit? {
+        let keys: Set<URLResourceKey> = [.contentModificationDateKey, .isRegularFileKey, .isSymbolicLinkKey]
+        guard let descriptors = try? FileManager.default.contentsOfDirectory(
+            at: daemonDirectory, includingPropertiesForKeys: Array(keys), options: .skipsHiddenFiles
+        ) else { return nil }
+        let candidates = descriptors.compactMap { url -> (hub: AntigravityHub, modified: Date)? in
+            guard url.lastPathComponent.hasPrefix("hub_"), url.pathExtension == "json",
+                  let values = try? url.resourceValues(forKeys: keys),
+                  values.isRegularFile == true, values.isSymbolicLink == false,
+                  let data = try? Data(contentsOf: url),
+                  let hub = try? JSONDecoder().decode(AntigravityHub.self, from: data),
+                  hub.pid > 0, kill(hub.pid, 0) == 0, hub.httpPort > 0, !hub.csrfToken.isEmpty else { return nil }
+            return (hub, values.contentModificationDate ?? .distantPast)
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.connectionProxyDictionary = [:]
+        configuration.timeoutIntervalForRequest = 2
+        configuration.timeoutIntervalForResource = 2
+        let session = URLSession(configuration: configuration, delegate: AntigravityLoopbackDelegate(), delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
+
+        for (hub, _) in candidates.sorted(by: { $0.modified > $1.modified }) {
+            guard let status = await requestAntigravityHub(session, hub: hub, method: "GetUserStatus"),
+                  let payload = (try? JSONSerialization.jsonObject(with: status)) as? [String: Any],
+                  let userStatus = payload["userStatus"] as? [String: Any], !userStatus.isEmpty else { continue }
+            let plan = nestedString(userStatus, paths: [
+                ["userTier", "name"],
+                ["planStatus", "planInfo", "planName"]
+            ])
+            let quota = await requestAntigravityHub(session, hub: hub, method: "RetrieveUserQuotaSummary")
+            let groups = quota.flatMap { try? JSONDecoder().decode(AntigravityQuotaSummary.self, from: $0) }?
+                .response.groups ?? []
+            let windows = await MainActor.run { antigravityQuotaWindows(groups) }
+            guard plan != nil || !windows.isEmpty else { continue }
+            return AgentLimit(name: "antigravity", planLabel: plan, configured: true, error: nil, windows: windows)
+        }
+        return nil
+    }
+
+    private static func requestAntigravityHub(_ session: URLSession, hub: AntigravityHub, method: String) async -> Data? {
+        guard let url = URL(string: "http://127.0.0.1:\(hub.httpPort)/exa.language_server_pb.LanguageServerService/\(method)")
+        else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = Data("{}".utf8)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("1", forHTTPHeaderField: "Connect-Protocol-Version")
+        request.setValue(hub.csrfToken, forHTTPHeaderField: "x-codeium-csrf-token")
+        guard let (data, response) = try? await session.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return data
+    }
+
+    @MainActor
+    private static func antigravityQuotaWindows(_ groups: [AntigravityQuotaSummary.Group]) -> [LimitWindow] {
+        let l10n = L10n.shared
+        return groups.flatMap { group in
+            group.buckets.compactMap { bucket in
+                guard let fraction = bucket.remainingFraction, (0...1).contains(fraction) else { return nil }
+                let modelGroup: String
+                if bucket.bucketId.hasPrefix("gemini-") {
+                    modelGroup = "Gemini"
+                } else if bucket.bucketId.hasPrefix("3p-") {
+                    modelGroup = l10n.antigravityClaudeAndGPT
+                } else {
+                    modelGroup = group.displayName
+                }
+                let period: String
+                switch bucket.window {
+                case "weekly": period = l10n.quotaWeeklyWindow
+                case "5h": period = l10n.quotaFiveHourWindow
+                default: period = bucket.displayName ?? bucket.window
+                }
+                return LimitWindow(
+                    label: "\(modelGroup) · \(period)", usedPercent: 100 * (1 - fraction),
+                    resetAt: AgentDateParser.parse(bucket.resetTime), showsRemaining: true
+                )
+            }
+        }
     }
 
     // MARK: Zed / Trae (cockpit-tools account cache)

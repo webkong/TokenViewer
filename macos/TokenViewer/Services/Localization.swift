@@ -88,6 +88,14 @@ final class L10n: ObservableObject {
     var limitsSubtitle: String { isZh ? "各工具配额窗口及重置倒计时" : "Per-agent quota windows with reset countdowns" }
     var limitsVisibilityDesc: String { isZh ? "选择哪些 Agent 显示在菜单栏弹窗的限额卡片里。" : "Choose which agents appear in the menu-bar limits card." }
     var noUsageData: String { isZh ? "暂无数据" : "No usage data" }
+    var antigravityPlanUnavailable: String { isZh ? "暂无法读取套餐，请打开 Antigravity 并登录" : "Open Antigravity and sign in to read your plan" }
+    var antigravityClaudeAndGPT: String { isZh ? "Claude 与 GPT" : "Claude & GPT" }
+    var quotaWeeklyWindow: String { isZh ? "每周" : "Weekly" }
+    var quotaFiveHourWindow: String { isZh ? "5 小时" : "5h" }
+    func quotaRemainingPercent(_ percent: Double) -> String {
+        let value = String(format: "%.0f%%", percent)
+        return isZh ? "剩余 \(value)" : "\(value) left"
+    }
     var noLimitsData: String { isZh ? "当前没有限额数据。" : "No limits data yet." }
     var limitsNoDataDesc: String { isZh ? "使用任意支持的 Agent 后，再点击同步查看。或者前往设置勾选要显示的 Agent。" : "Use any supported agent, then sync to view data. You can also open Settings to choose which agents appear." }
     var reset: String { isZh ? "重置" : "Reset" }
